@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "help-brand-changeloop",
+      "scenario": "Every CLI --help snapshot presents the product as changeloop; the word opencode appears only in allowlisted functional literals",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "core-bin-dual",
+      "scenario": "packages/core/package.json bin map contains both changeloop and opencode entries pointing at the same launcher",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "global-config-shim",
+      "scenario": "With both changeloop.json and opencode.json in the global config dir, changeloop values win; with only opencode.json it loads unchanged",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "test-home-alias",
+      "scenario": "CHANGELOOP_TEST_HOME overrides the home path; when unset, OPENCODE_TEST_HOME still works",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "project-dir-fallback",
+      "scenario": "A project with only .changeloop config dirs is discovered; a project with only .opencode keeps working; with both, .changeloop wins",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ]
+}

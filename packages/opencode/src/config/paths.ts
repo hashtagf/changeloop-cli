@@ -24,15 +24,17 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
   const afs = yield* FSUtil.Service
   return unique([
     Global.Path.config,
+    // .opencode listed first so a same-level .changeloop merges later and
+    // wins, while .opencode keeps working as a fallback.
     ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
       ? yield* afs.up({
-          targets: [".opencode"],
+          targets: [".opencode", ".changeloop"],
           start: directory,
           stop: worktree,
         })
       : []),
     ...(yield* afs.up({
-      targets: [".opencode"],
+      targets: [".opencode", ".changeloop"],
       start: Global.Path.home,
       stop: Global.Path.home,
     })),

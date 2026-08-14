@@ -56,6 +56,23 @@ A branding edit may touch only these paths without extra review:
   discovery `names` list.
 - `packages/opencode/package.json` — the `bin` map (adding the `changeloop`
   entry; the package `name` itself is out of scope until roadmap Phase 3).
+- `packages/core/package.json` — the `bin` map (dual `changeloop`/`opencode`
+  entries; same Phase 3 boundary for the package `name`).
+- `packages/opencode/src/config/config.ts` and
+  `packages/opencode/src/config/paths.ts` — the v1 CLI's
+  `changeloop.json(c)`/`.changeloop` discovery with the legacy
+  `opencode.json(c)`/`.opencode` fallback.
+- `packages/core/src/plugin/agent.ts` — the `.changeloop/plans` plan-mode
+  edit permission next to the kept `.opencode/plans` one.
+- **User-visible strings** in `packages/opencode/src` — command `describe:`
+  text, printed runtime messages, and command hints say `changeloop`
+  (rebrand-user-visible-cli-strings change). Functional literals stay
+  `opencode`: provider ids, OAuth client names, the default basic-auth
+  username, `opencode.local`, `opencode.internal`, managed paths, URLs, and
+  the GitHub app integration. These are string-level diffs; on upstream sync
+  conflicts, keep the changeloop wording and re-apply it over upstream's
+  surrounding changes. The help snapshots plus
+  `packages/opencode/test/brand.test.ts` pin this surface.
 
 Everything else that changeloop needs ships as a plugin under
 `packages/plugin/` (roadmap principle 1: "สิ่งใดทำเป็น plugin ได้ให้ทำเป็น

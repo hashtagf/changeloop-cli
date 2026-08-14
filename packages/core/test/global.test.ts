@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -12,6 +12,32 @@ describe("global paths", () => {
 
   test("tmp path is created on module load", async () => {
     expect((await fs.stat(Global.Path.tmp)).isDirectory()).toBe(true)
+  })
+})
+
+describe("test-home environment aliasing", () => {
+  const restore = {
+    changeloop: process.env.CHANGELOOP_TEST_HOME,
+    opencode: process.env.OPENCODE_TEST_HOME,
+  }
+
+  afterEach(() => {
+    if (restore.changeloop === undefined) delete process.env.CHANGELOOP_TEST_HOME
+    else process.env.CHANGELOOP_TEST_HOME = restore.changeloop
+    if (restore.opencode === undefined) delete process.env.OPENCODE_TEST_HOME
+    else process.env.OPENCODE_TEST_HOME = restore.opencode
+  })
+
+  test("CHANGELOOP_TEST_HOME wins when both are set", () => {
+    process.env.CHANGELOOP_TEST_HOME = "/homes/changeloop"
+    process.env.OPENCODE_TEST_HOME = "/homes/opencode"
+    expect(Global.Path.home).toBe("/homes/changeloop")
+  })
+
+  test("OPENCODE_TEST_HOME still works when the changeloop variant is unset", () => {
+    delete process.env.CHANGELOOP_TEST_HOME
+    process.env.OPENCODE_TEST_HOME = "/homes/opencode"
+    expect(Global.Path.home).toBe("/homes/opencode")
   })
 })
 

@@ -771,6 +771,95 @@ describe("Config", () => {
     ),
   )
 
+  it.live("discovers .changeloop directories and applies them after .opencode at the same level", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const root = path.join(tmp.path, "repo")
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(path.join(root, ".opencode"), { recursive: true })
+            await fs.mkdir(path.join(root, ".changeloop"), { recursive: true })
+            await Promise.all([
+              fs.writeFile(path.join(root, ".opencode", "opencode.json"), JSON.stringify({ $schema: "legacy-dot" })),
+              fs.writeFile(
+                path.join(root, ".changeloop", "changeloop.json"),
+                JSON.stringify({ $schema: "changeloop-dot" }),
+              ),
+            ])
+          })
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const entries = yield* config.entries()
+
+            expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
+              AbsolutePath.make(global),
+              AbsolutePath.make(path.join(root, ".opencode")),
+              AbsolutePath.make(path.join(root, ".changeloop")),
+            ])
+            // Later entries win, so the .changeloop document outranks the
+            // legacy .opencode document at the same level.
+            const documents = entries.filter((entry) => entry.type === "document")
+            expect(documents.map((document) => document.info.$schema)).toEqual(["legacy-dot", "changeloop-dot"])
+          }).pipe(
+            Effect.provide(
+              testLayer(root, global, root, {
+                type: "git",
+                store: AbsolutePath.make(path.join(root, ".git")),
+              }),
+            ),
+          )
+        })
+      }),
+    ),
+  )
+
+  it.live("discovers a lone .changeloop directory", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const root = path.join(tmp.path, "repo")
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(path.join(root, ".changeloop"), { recursive: true })
+            await fs.writeFile(
+              path.join(root, ".changeloop", "changeloop.json"),
+              JSON.stringify({ $schema: "changeloop-only" }),
+            )
+          })
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const entries = yield* config.entries()
+
+            expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
+              AbsolutePath.make(global),
+              AbsolutePath.make(path.join(root, ".changeloop")),
+            ])
+            const documents = entries.filter((entry) => entry.type === "document")
+            expect(documents.map((document) => document.info.$schema)).toEqual(["changeloop-only"])
+          }).pipe(
+            Effect.provide(
+              testLayer(root, global, root, {
+                type: "git",
+                store: AbsolutePath.make(path.join(root, ".git")),
+              }),
+            ),
+          )
+        })
+      }),
+    ),
+  )
+
   it.live("loads global, ancestor, and .opencode configuration up to the project boundary", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

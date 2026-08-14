@@ -1,6 +1,6 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode acp --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop acp --help 1`] = `
 "changeloop acp
 
 start ACP (Agent Client Protocol) server
@@ -21,7 +21,7 @@ Options:
       --cwd          working directory [string] [default: "<HOME>"]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop mcp --help 1`] = `
 "changeloop mcp
 
 manage MCP (Model Context Protocol) servers
@@ -41,10 +41,10 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode attach --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop attach --help 1`] = `
 "changeloop attach <url>
 
-attach to a running opencode server
+attach to a running changeloop server
 
 Positionals:
   url  http://localhost:4096                                                     [string] [required]
@@ -59,18 +59,18 @@ Options:
   -c, --continue      continue the last session                                            [boolean]
   -s, --session       session id to continue                                                [string]
       --fork          fork the session when continuing (use with --continue or --session)  [boolean]
-  -p, --password      basic auth password (defaults to OPENCODE_SERVER_PASSWORD)            [string]
-  -u, --username      basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')
+  -p, --password      basic auth password (defaults to CHANGELOOP_SERVER_PASSWORD)          [string]
+  -u, --username      basic auth username (defaults to CHANGELOOP_SERVER_USERNAME or 'opencode')
                                                                                             [string]
       --mini          start the minimal interactive interface             [boolean] [default: false]
       --no-replay     disable mini session history replay on resume and after resize       [boolean]
       --replay-limit  cap visible mini replay to the newest N messages                      [number]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode run --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop run --help 1`] = `
 "changeloop run [message..]
 
-run opencode with a message
+run changeloop with a message
 
 Positionals:
   message  message to send                                                     [array] [default: []]
@@ -92,9 +92,9 @@ Options:
                                           [string] [choices: "default", "json"] [default: "default"]
   -f, --file         file(s) to attach to message                                            [array]
       --title        title for the session (uses truncated prompt if no value provided)     [string]
-      --attach       attach to a running opencode server (e.g., http://localhost:4096)      [string]
-  -p, --password     basic auth password (defaults to OPENCODE_SERVER_PASSWORD)             [string]
-  -u, --username     basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')
+      --attach       attach to a running changeloop server (e.g., http://localhost:4096)    [string]
+  -p, --password     basic auth password (defaults to CHANGELOOP_SERVER_PASSWORD)           [string]
+  -u, --username     basic auth username (defaults to CHANGELOOP_SERVER_USERNAME or 'opencode')
                                                                                             [string]
       --dir          directory to run in, path on remote server if attaching                [string]
       --port         port for the local server (defaults to random port if no value provided)
@@ -107,7 +107,7 @@ Options:
                                                                           [boolean] [default: false]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode debug --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop debug --help 1`] = `
 "changeloop debug
 
 debugging and troubleshooting tools
@@ -135,7 +135,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop providers --help 1`] = `
 "changeloop providers
 
 manage AI providers and credentials
@@ -153,7 +153,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode agent --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop agent --help 1`] = `
 "changeloop agent
 
 manage agents
@@ -170,10 +170,10 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode upgrade --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop upgrade --help 1`] = `
 "changeloop upgrade [target]
 
-upgrade opencode to the latest or a specific version
+upgrade changeloop to the latest or a specific version
 
 Positionals:
   target  version to upgrade to, for ex '0.1.48' or 'v0.1.48'                               [string]
@@ -188,10 +188,10 @@ Options:
                           [string] [choices: "curl", "npm", "pnpm", "bun", "brew", "choco", "scoop"]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode uninstall --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop uninstall --help 1`] = `
 "changeloop uninstall
 
-uninstall opencode and remove all related files
+uninstall changeloop and remove all related files
 
 Options:
   -h, --help         show help                                                             [boolean]
@@ -205,10 +205,10 @@ Options:
   -f, --force        skip confirmation prompts                            [boolean] [default: false]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode serve --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop serve --help 1`] = `
 "changeloop serve
 
-starts a headless opencode server
+starts a headless changeloop server
 
 Options:
   -h, --help         show help                                                             [boolean]
@@ -225,10 +225,10 @@ Options:
       --cors         additional domains to allow for CORS                      [array] [default: []]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode web --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop web --help 1`] = `
 "changeloop web
 
-start opencode server and open web interface
+start changeloop server and open web interface
 
 Options:
   -h, --help         show help                                                             [boolean]
@@ -245,7 +245,7 @@ Options:
       --cors         additional domains to allow for CORS                      [array] [default: []]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode models --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop models --help 1`] = `
 "changeloop models [provider]
 
 list all available models
@@ -263,7 +263,7 @@ Options:
       --refresh     refresh the models cache from models.dev                               [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode stats --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop stats --help 1`] = `
 "changeloop stats
 
 show token usage and cost statistics
@@ -281,7 +281,7 @@ Options:
       --project     filter by project (default: all projects, empty string: current project)[string]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode export --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop export --help 1`] = `
 "changeloop export [sessionID]
 
 export session data as JSON
@@ -298,7 +298,7 @@ Options:
       --sanitize    redact sensitive transcript and file data                              [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode import --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop import --help 1`] = `
 "changeloop import <file>
 
 import session data from JSON file or URL
@@ -314,7 +314,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode github --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop github --help 1`] = `
 "changeloop github
 
 manage GitHub agent
@@ -331,10 +331,10 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode pr --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop pr --help 1`] = `
 "changeloop pr <number>
 
-fetch and checkout a GitHub PR branch, then run opencode
+fetch and checkout a GitHub PR branch, then run changeloop
 
 Positionals:
   number  PR number to checkout                                                  [number] [required]
@@ -347,7 +347,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop session --help 1`] = `
 "changeloop session
 
 manage sessions
@@ -364,7 +364,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode plugin --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop plugin --help 1`] = `
 "changeloop plugin <module>
 
 install plugin and update config
@@ -382,7 +382,7 @@ Options:
   -f, --force       replace existing plugin version                       [boolean] [default: false]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode db --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop db --help 1`] = `
 "changeloop db
 
 database tools
@@ -403,7 +403,7 @@ Options:
       --format      Output format                 [string] [choices: "json", "tsv"] [default: "tsv"]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp list --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop mcp list --help 1`] = `
 "changeloop mcp list
 
 list MCP servers and their status
@@ -416,7 +416,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp add --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop mcp add --help 1`] = `
 "changeloop mcp add [name]
 
 add an MCP server
@@ -435,7 +435,7 @@ Options:
       --header      HTTP header for a remote MCP server (KEY=VALUE)                          [array]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp auth --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop mcp auth --help 1`] = `
 "changeloop mcp auth [name]
 
 authenticate with an OAuth-enabled MCP server
@@ -454,7 +454,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp logout --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop mcp logout --help 1`] = `
 "changeloop mcp logout [name]
 
 remove OAuth credentials for an MCP server
@@ -470,7 +470,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers list --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop providers list --help 1`] = `
 "changeloop providers list
 
 list providers and credentials
@@ -483,13 +483,13 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers login --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop providers login --help 1`] = `
 "changeloop providers login [url]
 
 log in to a provider
 
 Positionals:
-  url  opencode auth provider                                                               [string]
+  url  changeloop auth provider                                                             [string]
 
 Options:
   -h, --help        show help                                                              [boolean]
@@ -501,7 +501,7 @@ Options:
   -m, --method      login method label (skips method selection)                             [string]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode providers logout --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop providers logout --help 1`] = `
 "changeloop providers logout [provider]
 
 log out from a configured provider
@@ -517,7 +517,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode agent create --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop agent create --help 1`] = `
 "changeloop agent create
 
 create a new agent
@@ -537,7 +537,7 @@ Options:
   -m, --model                 model to use in the format of provider/model                  [string]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode agent list --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop agent list --help 1`] = `
 "changeloop agent list
 
 list all available agents
@@ -550,7 +550,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session list --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop session list --help 1`] = `
 "changeloop session list
 
 list sessions
@@ -565,7 +565,7 @@ Options:
       --format      output format             [string] [choices: "table", "json"] [default: "table"]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session delete --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop session delete --help 1`] = `
 "changeloop session delete <sessionID>
 
 delete a session
@@ -581,7 +581,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode github install --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop github install --help 1`] = `
 "changeloop github install
 
 install the GitHub agent
@@ -594,7 +594,7 @@ Options:
       --pure        run without external plugins                                           [boolean]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode github run --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop github run --help 1`] = `
 "changeloop github run
 
 run the GitHub agent
@@ -609,7 +609,7 @@ Options:
       --token       GitHub personal access token (github_pat_********)                      [string]"
 `;
 
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode db path --help 1`] = `
+exports[`changeloop CLI help-text snapshots every documented command emits stable help text: changeloop db path --help 1`] = `
 "changeloop db path
 
 print the database path

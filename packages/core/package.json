@@ -13,6 +13,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "bin": {
+    "changeloop": "./bin/opencode",
     "opencode": "./bin/opencode"
   },
   "exports": {
