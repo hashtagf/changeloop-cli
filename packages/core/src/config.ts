@@ -139,7 +139,11 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
-    const names = ["opencode.json", "opencode.jsonc"]
+    // Priority low to high: within a directory, the last-listed name wins
+    // (see the reversal below), so changeloop.jsonc beats changeloop.json
+    // beats opencode.jsonc beats opencode.json — changeloop config takes
+    // precedence while opencode.json(c) keeps working as a fallback.
+    const names = ["opencode.json", "opencode.jsonc", "changeloop.json", "changeloop.jsonc"]
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
     const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)

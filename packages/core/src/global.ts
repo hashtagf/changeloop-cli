@@ -1,5 +1,6 @@
 import path from "path"
 import fs from "fs/promises"
+import { existsSync } from "fs"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import os from "os"
 import { Context, Effect, Layer } from "effect"
@@ -7,11 +8,24 @@ import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
-const app = "opencode"
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
+const app = "changeloop"
+const legacyApp = "opencode"
+
+// A base directory keeps using its legacy `opencode` path when no
+// `changeloop` path exists yet there, so existing installs keep their
+// sessions, auth, and cache without a migration step.
+export function resolveAppPath(base: string, exists: (candidate: string) => boolean = existsSync): string {
+  const preferred = path.join(base, app)
+  if (exists(preferred)) return preferred
+  const legacy = path.join(base, legacyApp)
+  if (exists(legacy)) return legacy
+  return preferred
+}
+
+const data = resolveAppPath(xdgData!)
+const cache = resolveAppPath(xdgCache!)
+const config = resolveAppPath(xdgConfig!)
+const state = resolveAppPath(xdgState!)
 const tmp = path.join(os.tmpdir(), app)
 
 const paths = {

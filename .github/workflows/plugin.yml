@@ -1,0 +1,45 @@
+name: plugin
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - "packages/plugin/**"
+      - "packages/core/test/plugin/**"
+      - ".github/workflows/plugin.yml"
+  pull_request:
+    paths:
+      - "packages/plugin/**"
+      - "packages/core/test/plugin/**"
+      - ".github/workflows/plugin.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scaffold:
+    name: build and load
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Build plugin package
+        working-directory: packages/plugin
+        run: bun run build
+
+      - name: Load the template plugin in an example workspace
+        working-directory: packages/core
+        run: bun test plugin/template.test.ts

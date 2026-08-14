@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "rebrand-cli",
+      "scenario": "A changeloop bin entry is added alongside the kept opencode bin and package name, the entrypoint runs, and the lockfile stays consistent",
+      "impact": "medium",
+      "capabilities": ["test", "dependency-supply-chain"]
+    },
+    {
+      "id": "config-fallback",
+      "scenario": "changeloop.json and CHANGELOOP_* take precedence while opencode.json and OPENCODE_* still work as fallbacks",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "plugin-scaffold",
+      "scenario": "The template plugin on the v2 draft-transform API builds and loads in an example workspace",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "app-dir-fallback",
+      "scenario": "When the changeloop data/config directory does not exist and a legacy opencode directory does, the CLI keeps using the legacy directory",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "env-fallback",
+      "scenario": "CHANGELOOP_* environment variables are honored and OPENCODE_* variables still work when the changeloop variant is unset",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "plugin-ci",
+      "scenario": "The plugin CI workflow parses and builds and tests the template plugin",
+      "impact": "low",
+      "capabilities": ["deployment"]
+    },
+    {
+      "id": "sync-policy",
+      "scenario": "The upstream sync policy documents remote, branch layout, cadence, and the branding-file allowlist",
+      "impact": "low",
+      "capabilities": ["static-analysis"]
+    }
+  ]
+}

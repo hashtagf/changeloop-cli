@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "providers": {
+    "test": {
+      "capability": "test",
+      "adapter": "test-discovery",
+      "command": ["bun", "run", "script/evidence-test.ts"],
+      "report": "test-results/evidence-test.json",
+      "reportFormat": "json",
+      "minimum": 5,
+      "timeoutMs": 300000
+    },
+    "static-analysis": {
+      "capability": "static-analysis",
+      "adapter": "command",
+      "command": ["bun", "run", "script/check-sync-doc.ts"],
+      "timeoutMs": 30000
+    },
+    "dependency-supply-chain": {
+      "capability": "dependency-supply-chain",
+      "adapter": "command",
+      "command": ["bun", "install", "--dry-run", "--frozen-lockfile"],
+      "timeoutMs": 120000
+    },
+    "deployment": {
+      "capability": "deployment",
+      "adapter": "command",
+      "command": ["bun", "run", "script/check-workflows.ts"],
+      "timeoutMs": 30000
+    }
+  },
+  "services": {}
+}
