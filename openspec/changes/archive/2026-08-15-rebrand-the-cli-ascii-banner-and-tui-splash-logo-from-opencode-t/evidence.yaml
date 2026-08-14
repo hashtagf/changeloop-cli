@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "banner-brand-changeloop",
+      "scenario": "The CLI banner's non-TTY wordmark output spells changeloop and the glyph tables are internally consistent (equal row widths, aligned halves)",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ]
+}
