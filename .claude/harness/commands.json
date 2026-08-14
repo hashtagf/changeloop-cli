@@ -1,0 +1,603 @@
+{
+  "version": 1,
+  "commands": [
+    {
+      "name": "changes",
+      "usage": "changes",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "List active changes, lifecycle status, and their next useful action."
+    },
+    {
+      "name": "doctor",
+      "usage": "doctor [--stage change|build|prove] [--change <id>] [--require-archive] [--unattended --attestation <file>] [--json]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Diagnose project, provider, and lifecycle readiness."
+    },
+    {
+      "name": "packet",
+      "usage": "packet <change> [--phase change|build|prove|review|land] [--repo <id>] [--task <id>] [--pretty]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Read the bounded machine handoff for the current operation."
+    },
+    {
+      "name": "metrics",
+      "usage": "metrics <change>",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Inspect measured usage, active budget, cost, and execution timing."
+    },
+    {
+      "name": "exec",
+      "usage": "exec <change> [--phase change|build|prove|land] -- <command...>",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Run and time an external command (build, container, tests), recording its duration for metrics."
+    },
+    {
+      "name": "describe",
+      "usage": "describe [command] [--json]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Describe both surfaces — the change-loop host commands and the CLI commands; every command also answers --help."
+    },
+    {
+      "name": "change new",
+      "usage": "change new <intent> [--rapid]",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Create a change agreement when atomic draft start does not apply."
+    },
+    {
+      "name": "change start",
+      "usage": "change start --template | <draft.json>",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Create and start an isolated change from one validated draft."
+    },
+    {
+      "name": "change resolve",
+      "usage": "change resolve <change> --impact low|medium|high --coupling isolated|coupled [--ambiguity clear|unclear] [--surface <glob,glob>] [--security <terms>] [--review] [--size xs|s|m|l] (--acceptance-not-required | --acceptance-required --acceptance-reason <why> [--acceptance-claims <ids>])",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Persist ambiguity, impact, coupling, size, security, expected surface, review, and acceptance decisions."
+    },
+    {
+      "name": "change validate",
+      "usage": "change validate <change>",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Validate the change and executable evidence contract."
+    },
+    {
+      "name": "change audit",
+      "usage": "change audit <change> [--json]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Audit scenario, claim, task, and provider traceability."
+    },
+    {
+      "name": "sandbox create",
+      "usage": "sandbox create <change> [--all] [--unattended --attestation <file>]",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Create the isolated Build workspace."
+    },
+    {
+      "name": "sandbox sync",
+      "usage": "sandbox sync <change> [--resolve <path,path>]",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Synchronize an intentional contract revision into Build and reconcile a moved target: a worktree replays onto the new commit, an isolated copy fast-forwards the files it left alone."
+    },
+    {
+      "name": "proof readiness",
+      "usage": "proof readiness <change>",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Return typed blockers and canonical next commands."
+    },
+    {
+      "name": "proof collect",
+      "usage": "proof collect <change>",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Collect executable evidence before an external boundary."
+    },
+    {
+      "name": "proof run",
+      "usage": "proof run <change>",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Run readiness, providers, finalization, and audit atomically."
+    },
+    {
+      "name": "land check",
+      "usage": "land check <change>",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Validate that the proven projection remains landable."
+    },
+    {
+      "name": "land recover",
+      "usage": "land recover <change> --decision-ref <ref>",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Settle an interrupted apply transaction after an explicit host-recorded user decision."
+    },
+    {
+      "name": "land archive",
+      "usage": "land archive <change>",
+      "audience": "agent",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Apply, synchronize, audit, archive, and clean up explicitly."
+    },
+    {
+      "name": "agents plan",
+      "usage": "agents plan <change> [--group <n>] [--full] [--pretty]",
+      "audience": "conditional",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Plan dispatch only for independently verifiable parallel work."
+    },
+    {
+      "name": "evidence detect",
+      "usage": "evidence detect <change>",
+      "audience": "conditional",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Detect safe project-owned provider candidates without executing them."
+    },
+    {
+      "name": "evidence init",
+      "usage": "evidence init <change> [--write]",
+      "audience": "conditional",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Preview or explicitly write high-confidence provider wiring."
+    },
+    {
+      "name": "evidence doctor",
+      "usage": "evidence doctor <change>",
+      "audience": "conditional",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Explain configured, detectable, and unresolved evidence wiring."
+    },
+    {
+      "name": "evidence verify-ci",
+      "usage": "evidence verify-ci <change> <provider> <signed.json>",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Verify signed CI provenance bound to the provider workspace."
+    },
+    {
+      "name": "hash",
+      "usage": "hash <change> [provider]",
+      "audience": "conditional",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Print the workspace hash a signed CI envelope must bind: the provider's receipt hash, or without a provider the change's workspace hash."
+    },
+    {
+      "name": "authority request",
+      "usage": "authority request <change> --type review|acceptance [--repo <id>]",
+      "audience": "conditional",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Create a resumable external review or acceptance request."
+    },
+    {
+      "name": "authority status",
+      "usage": "authority status <change> [--request <id>] [--template]",
+      "audience": "conditional",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Inspect external authority; --template emits the response file to fill in."
+    },
+    {
+      "name": "authority record",
+      "usage": "authority record <change> --request <id> --response <file>",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Validate a bound host response and record its evidence."
+    },
+    {
+      "name": "evidence record",
+      "usage": "evidence record <change> <provider> <status> [options]",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Record externally observed evidence requested by readiness."
+    },
+    {
+      "name": "land record",
+      "usage": "land record <change> --repo <id> --commit <sha> --decision-ref <ref> [--ci pass|fail|pending] [--ci-attestation <signed.json>] [--ci-required]",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Bind a child repository commit after an explicit host-recorded user decision."
+    },
+    {
+      "name": "land resume",
+      "usage": "land resume <change>",
+      "audience": "conditional",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Resume an interrupted or multi-repository Land saga."
+    },
+    {
+      "name": "budget continue",
+      "usage": "budget continue <change> --reason <reason> --decision-ref <ref> [--run <id>]",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Open one policy-gated completion window after an explicit host-recorded user decision."
+    },
+    {
+      "name": "change abandon",
+      "usage": "change abandon <change> --reason <reason> --decision-ref <ref> [--applied keep|revert]",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Retire a change that cannot be proven, quarantining its record after an explicit host-recorded user decision."
+    },
+    {
+      "name": "change waive",
+      "usage": "change waive <change> --capability <capability> --reason <why> --decision-ref <ref> [--revoke]",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Withdraw one failing capability gate after an explicit host-recorded user decision; recorded in proof advisories and at Land, never a force-land. Review and acceptance keep their own routes."
+    },
+    {
+      "name": "init",
+      "usage": "init [target-path] [--host claude|cursor|opencode|codex] [options]",
+      "audience": "admin",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Install or upgrade Foundation in a project; --host adds that host's adapter."
+    },
+    {
+      "name": "providers",
+      "usage": "providers",
+      "audience": "conditional",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Inspect evidence wiring only while defining a change contract."
+    },
+    {
+      "name": "repos",
+      "usage": "repos [change]",
+      "audience": "admin",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Inspect repository topology and selection."
+    },
+    {
+      "name": "models",
+      "usage": "models",
+      "audience": "admin",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Inspect model-tier policy."
+    },
+    {
+      "name": "migrate",
+      "usage": "migrate [legacy-id] [--apply]",
+      "audience": "admin",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Migrate corroborated legacy workflow records."
+    },
+    {
+      "name": "version",
+      "usage": "version",
+      "audience": "admin",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Print the installed package version."
+    },
+    {
+      "name": "help",
+      "usage": "help [--all]",
+      "audience": "admin",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Show canonical commands; --all includes compatibility routes."
+    },
+    {
+      "name": "dashboard",
+      "usage": "dashboard[-up|-status|-down]",
+      "audience": "admin",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Manage the optional team-presence client."
+    },
+    {
+      "name": "dashboard snapshot",
+      "usage": "dashboard snapshot --json",
+      "audience": "admin",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Inspect the versioned, read-only dashboard projection for this project."
+    },
+    {
+      "name": "evidence upgrade",
+      "usage": "evidence upgrade <change>",
+      "audience": "admin",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Upgrade legacy evidence wiring explicitly."
+    },
+    {
+      "name": "runtime",
+      "usage": "runtime <internal-command>",
+      "audience": "internal",
+      "kind": "write",
+      "idempotent": false,
+      "deprecated": true,
+      "description": "Compatibility pass-through for installed workflow internals."
+    },
+    {
+      "name": "validate",
+      "usage": "validate <change>",
+      "audience": "internal",
+      "kind": "write",
+      "idempotent": true,
+      "deprecated": true,
+      "description": "Compatibility alias for change validate."
+    },
+    {
+      "name": "agents task",
+      "usage": "agents task <change> <task>",
+      "audience": "internal",
+      "kind": "read",
+      "idempotent": true,
+      "deprecated": true,
+      "description": "Compatibility alias for packet --task."
+    },
+    {
+      "name": "agents acquire",
+      "usage": "agents acquire <change> <task> --owner <id>",
+      "audience": "host",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Acquire a host-managed resource lease."
+    },
+    {
+      "name": "agents release",
+      "usage": "agents release <change> <task> --owner <id> [--force] [--decision-ref <ref>]",
+      "audience": "host",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Release a host-managed resource lease; --force takes over another owner's lease, and one that has not expired also needs --decision-ref because a worker may still be running it."
+    },
+    {
+      "name": "telemetry sync",
+      "usage": "telemetry sync <change> [transcript.jsonl]",
+      "audience": "host",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Synchronize native host request usage."
+    },
+    {
+      "name": "telemetry import",
+      "usage": "telemetry import <change> <file> [--format <format>]",
+      "audience": "host",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Import authoritative host usage."
+    },
+    {
+      "name": "telemetry host-import",
+      "usage": "telemetry host-import <change> <result.json>",
+      "audience": "host",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Import a validated host execution result with attempts, actual model, fallback, and instruction provenance."
+    },
+    {
+      "name": "sandbox challenge",
+      "usage": "sandbox challenge <change>",
+      "audience": "host",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Create a short-lived challenge for signed unattended authority."
+    },
+    {
+      "name": "evidence run",
+      "usage": "evidence run <change> <provider> --claims <scope> -- <command>",
+      "audience": "internal",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Execute one low-level evidence adapter."
+    },
+    {
+      "name": "sandbox inspect",
+      "usage": "sandbox inspect <change> [--unattended --attestation <file>] [--json]",
+      "audience": "internal",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Inspect isolation diagnostics; with --unattended it also gates, failing when the security boundary is unsafe."
+    },
+    {
+      "name": "sandbox apply",
+      "usage": "sandbox apply <change>",
+      "audience": "internal",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Apply a proven projection through the Land journal."
+    },
+    {
+      "name": "proof plan",
+      "usage": "proof plan <change>",
+      "audience": "internal",
+      "kind": "read",
+      "idempotent": true,
+      "deprecated": true,
+      "description": "Compatibility alias for proof readiness."
+    },
+    {
+      "name": "proof finish",
+      "usage": "proof finish <change>",
+      "audience": "internal",
+      "kind": "write",
+      "idempotent": true,
+      "deprecated": true,
+      "description": "Compatibility alias for proof run."
+    },
+    {
+      "name": "proof preflight",
+      "usage": "proof preflight <change>",
+      "audience": "internal",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Low-level proof topology check."
+    },
+    {
+      "name": "proof execute",
+      "usage": "proof execute <change>",
+      "audience": "internal",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Low-level provider execution and finalization."
+    },
+    {
+      "name": "proof finalize",
+      "usage": "proof finalize <change>",
+      "audience": "internal",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Low-level finalization from valid receipts."
+    },
+    {
+      "name": "proof audit",
+      "usage": "proof audit <change>",
+      "audience": "internal",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Low-level proof artifact audit."
+    },
+    {
+      "name": "land plan",
+      "usage": "land plan <change>",
+      "audience": "internal",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Persist the multi-repository Land saga plan."
+    },
+    {
+      "name": "runtime hash",
+      "usage": "runtime hash <change> [provider]",
+      "audience": "internal",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Print the change's current relevant workspace hash."
+    },
+    {
+      "name": "runtime event",
+      "usage": "runtime event <change> [--request <id>] [--run <id>]",
+      "audience": "internal",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Record one host request event against the change's budget window."
+    },
+    {
+      "name": "runtime api-version",
+      "usage": "runtime api-version",
+      "audience": "internal",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Print the installed runtime API version the CLI checks compatibility against."
+    },
+    {
+      "name": "land pointers",
+      "usage": "land pointers <change>",
+      "audience": "internal",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Stage proven submodule pointers."
+    }
+  ],
+  "runtimeCommands": [
+    "describe",
+    "new",
+    "start",
+    "resolve",
+    "abandon",
+    "waive",
+    "audit-change",
+    "changes",
+    "providers",
+    "repos",
+    "models",
+    "agent-plan",
+    "agent-task",
+    "agent-acquire",
+    "agent-release",
+    "packet",
+    "metrics",
+    "budget-continue",
+    "doctor",
+    "validate",
+    "hash",
+    "proof-plan",
+    "proof-readiness",
+    "proof-run",
+    "proof-collect",
+    "proof-preflight",
+    "proof-execute",
+    "proof-audit",
+    "evidence-detect",
+    "evidence-init",
+    "evidence-doctor",
+    "evidence-verify-ci",
+    "evidence-upgrade",
+    "authority-request",
+    "authority-status",
+    "authority-record",
+    "receipt",
+    "run-provider",
+    "prove",
+    "land-check",
+    "land-recover",
+    "land-plan",
+    "land-record",
+    "land-pointers",
+    "land-resume",
+    "sandbox",
+    "archive",
+    "event",
+    "exec",
+    "telemetry-sync",
+    "telemetry-import",
+    "host-execution-import",
+    "migrate",
+    "api-version",
+    "version"
+  ]
+}

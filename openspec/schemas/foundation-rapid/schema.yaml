@@ -1,0 +1,39 @@
+name: foundation-rapid
+version: 1
+description: Low-impact isolated change with minimal artifacts
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Brief intent, scope, and rapid-lane eligibility
+    template: proposal.md
+    instruction: Explain what changes, why, and why this is low-risk and isolated.
+    requires: []
+  - id: tasks
+    generates: tasks.md
+    description: Single implementation ledger
+    template: tasks.md
+    instruction: Write a short list of independently verifiable implementation tasks.
+    requires: [proposal]
+  - id: evidence
+    generates: evidence.yaml
+    description: Stable unit or static evidence claims
+    template: evidence.yaml
+    instruction: 'Map the intended outcome to evidence. Discovery is implicit for test claims. A claim that spans repositories must list them in "repositories": ["api", "app"]; omit the field entirely for a single-repository change.'
+    requires: [proposal]
+  - id: repositories
+    generates: repositories.yaml
+    description: Repositories this change may touch, and their write scope
+    template: repositories.yaml
+    instruction: Select every repository the change writes plus their dependency closure. A single-repository change keeps the default root entry.
+    requires: [proposal]
+  - id: execution
+    generates: execution.yaml
+    description: Executable provider, report, service, and readiness wiring
+    template: execution.yaml
+    instruction: Configure project-owned adapters separately from the behavioral contract.
+    requires: [evidence]
+
+apply:
+  requires: [tasks, evidence, execution, repositories]
+  tracks: tasks.md

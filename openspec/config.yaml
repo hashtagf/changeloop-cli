@@ -1,0 +1,34 @@
+schema: foundation-standard
+
+context: |
+  Foundation uses a change-oriented brownfield workflow.
+  OpenSpec stores durable intent; code and tests store implementation truth.
+  Runtime status and evidence receipts live under .foundation/ and must not be
+  duplicated in Markdown. Rigor scales with impact and evidence, not task size.
+
+rules:
+  proposal:
+    - State the user-visible outcome and why the change is needed.
+    - Identify affected behavior and explicit non-goals.
+  specs:
+    - Use stable requirement and scenario names.
+    - Express observable behavior with WHEN and THEN.
+    - Preserve existing public behavior unless a delta explicitly changes it.
+  design:
+    - Record only decisions that constrain implementation or rollback.
+    - Identify compatibility, migration, security, and cross-repository effects.
+  tasks:
+    - Keep one implementation ledger with independently verifiable work items.
+    - Do not reproduce lifecycle phases or agent-role handoffs.
+    - For multi-repository changes, annotate each task with repo, kind, paths,
+      dependencies, and exceptional shared resources so packets and authority
+      stay bounded.
+
+operations:
+  apply:
+    guidance:
+      - Use focused checks while converging and update tasks.md in place.
+      - Produce deterministic Foundation receipts before landing.
+  archive:
+    guidance:
+      - Run the Foundation land guard before spec sync or archive.

@@ -1,0 +1,18 @@
+{
+  "runtime": "2.8.0",
+  "runtimeApi": "19",
+  "evidenceSchema": ["1", "2"],
+  "executionSchema": "1",
+  "providerProtocol": "8",
+  "adapterProtocol": "4",
+  "proofProtocol": "4",
+  "packetSchema": "5",
+  "agentPlanSchema": "3",
+  "contextEventSchema": "2",
+  "reviewProtocol": "2",
+  "acceptanceProtocol": "2",
+  "reviewPacketSchema": "3",
+  "attestationProtocol": "1",
+  "authorityProtocol": "1",
+  "ciEvidenceProtocol": "1"
+}

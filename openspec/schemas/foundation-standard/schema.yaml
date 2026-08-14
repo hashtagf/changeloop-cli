@@ -1,0 +1,51 @@
+name: foundation-standard
+version: 1
+description: Risk-scaled brownfield change with deterministic evidence
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Intent, scope, impact, and non-goals
+    template: proposal.md
+    instruction: Explain why the change exists and what observable behavior changes.
+    requires: []
+  - id: specs
+    generates: specs/**/*.md
+    description: Delta requirements and scenarios
+    template: spec.md
+    instruction: Write ADDED, MODIFIED, or REMOVED requirements with observable scenarios.
+    requires: [proposal]
+  - id: design
+    generates: design.md
+    description: Load-bearing technical decisions and rollback
+    template: design.md
+    instruction: Record only decisions needed to implement safely in the existing system.
+    requires: [proposal, specs]
+  - id: tasks
+    generates: tasks.md
+    description: Single implementation ledger
+    template: tasks.md
+    instruction: Create coherent, verifiable implementation work items without lifecycle phases.
+    requires: [proposal, specs, design]
+  - id: evidence
+    generates: evidence.yaml
+    description: Stable behavioral claims and required evidence capabilities
+    template: evidence.yaml
+    instruction: Map every observable scenario to stable claims. Discovery is implicit for test claims.
+    requires: [proposal, specs]
+  - id: repositories
+    generates: repositories.yaml
+    description: Repositories this change may touch, and their write scope
+    template: repositories.yaml
+    instruction: Select every repository the change writes plus their dependency closure. A single-repository change keeps the default root entry.
+    requires: [proposal]
+  - id: execution
+    generates: execution.yaml
+    description: Executable provider, report, service, and readiness wiring
+    template: execution.yaml
+    instruction: Configure project-owned adapters separately from the behavioral contract.
+    requires: [evidence]
+
+apply:
+  requires: [tasks, evidence, execution, repositories]
+  tracks: tasks.md

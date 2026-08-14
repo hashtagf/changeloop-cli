@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "execution": {
+    "maxParallelAgents": 3,
+    "packetBytes": {
+      "task": 8192,
+      "review": 8192,
+      "repository": 12288,
+      "global": 16384
+    },
+    "tokenBudgets": {
+      "rapid": 800000,
+      "standard": 1600000
+    },
+    "requestBudgets": {
+      "rapid": 100,
+      "standard": 200
+    },
+    "planSummaryBytes": 4096,
+    "leaseMinutes": 45
+  },
+  "models": {
+    "fast": {
+      "family": "haiku",
+      "fallbackTier": "standard",
+      "purposes": ["inventory", "logs", "mechanical-docs"]
+    },
+    "standard": {
+      "family": "sonnet",
+      "fallbackTier": "deep",
+      "purposes": ["implementation", "tests", "focused-investigation"]
+    },
+    "deep": {
+      "family": "opus",
+      "fallbackTier": null,
+      "purposes": ["architecture", "security", "migration", "independent-review"]
+    }
+  },
+  "escalation": [
+    "ambiguous-contract",
+    "auth-or-sensitive-data",
+    "migration",
+    "concurrency",
+    "public-compatibility",
+    "cross-repository-conflict",
+    "evidence-anomaly",
+    "two-failed-attempts"
+  ],
+  "review": {
+    "independence": "self",
+    "diversity": "single-model"
+  }
+}

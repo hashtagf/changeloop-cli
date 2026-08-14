@@ -1,0 +1,14 @@
+# Everything under .foundation/ is machine state: runtime records, evidence,
+# receipts, sandboxes, authority requests, attestations, logs, and the install
+# manifest. Only the two files the installer manages belong in history.
+#
+# This is an allow-list on purpose. It used to name each machine-state directory
+# instead, and every directory added since had to be remembered — `authority/`
+# and `attestations/` were not, so external-review records and host attestations
+# surfaced as untracked files in every consumer project that used them, and
+# `install-manifest.txt` did the same in every project that ran the installer.
+# Ignoring by default means a new kind of machine state is ignored the day it is
+# written rather than the day someone notices it in `git status`.
+*
+!.gitignore
+!README.md
