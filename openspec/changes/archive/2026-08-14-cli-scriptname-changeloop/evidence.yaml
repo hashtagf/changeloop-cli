@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "scriptname-changeloop",
+      "scenario": "The CLI's --help/usage output for every documented command starts with 'changeloop', not 'opencode'",
+      "impact": "low",
+      "capabilities": ["test"]
+    }
+  ]
+}

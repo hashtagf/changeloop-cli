@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "providers": {
+    "test": {
+      "capability": "test",
+      "adapter": "test-discovery",
+      "command": ["bun", "run", "script/check-cli-help-snapshots.ts"],
+      "report": "test-results/cli-help-snapshots.json",
+      "reportFormat": "json",
+      "minimum": 1,
+      "timeoutMs": 180000
+    }
+  },
+  "services": {}
+}
