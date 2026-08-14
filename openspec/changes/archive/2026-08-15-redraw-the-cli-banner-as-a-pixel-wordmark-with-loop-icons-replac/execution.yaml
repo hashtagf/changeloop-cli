@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "providers": {
+    "test": {
+      "capability": "test",
+      "adapter": "test-discovery",
+      "command": [
+        "bun",
+        "run",
+        "script/evidence-logo-test.ts"
+      ],
+      "report": "test-results/evidence-logo-test.json",
+      "reportFormat": "json",
+      "minimum": 3,
+      "timeoutMs": 180000
+    }
+  },
+  "services": {}
+}

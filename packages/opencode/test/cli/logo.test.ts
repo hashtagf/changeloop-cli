@@ -4,17 +4,18 @@ import { logo } from "../../src/cli/ui"
 // Not an exported subpath of @opencode-ai/tui — reach the source file directly.
 import { sessionEpilogue } from "../../../tui/src/util/presentation"
 
-// The banner spells "changeloop": left half "change" (6 letters), right half
-// "loop" (4 letters). Row 1 has no _/^/~ marks, so it renders identically in
-// the plain and TTY branches — that makes it the stable brand assertion.
-const CHANGE_ROW = "█▀▀▀ █▀▀▄ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█"
-const LOOP_ROW = "█    █▀▀█ █▀▀█ █▀▀█"
-const OLD_OPEN_ROW = "█▀▀█ █▀▀█ █▀▀█ █▀▀▄"
+// The banner is a 5-row pixel wordmark: left half CHANGE, right half LOOP
+// with a circular-arrow loop icon standing in for both O letters. The rows
+// contain only pixels (█) and spaces, so they render identically in the
+// plain and TTY branches.
+const CHANGE_ROW = " ████ █   █  ███  █   █  ████ █████"
+const LOOP_ROW = "█      ███ █  ███ █ ████ "
+const LOOP_ICON_TOP = " ███ █"
 
 const stripAnsi = (text: string) => text.replaceAll(/\x1b\[[0-9;]*m/g, "")
-const resolveMarks = (row: string) => row.replaceAll("_", " ").replaceAll(/[\^~]/g, "▀")
+const count = (haystack: string, needle: string) => haystack.split(needle).length - 1
 
-describe("changeloop banner", () => {
+describe("changeloop pixel banner", () => {
   test("glyph tables are internally consistent", () => {
     expect(glyphs.left.length).toBe(glyphs.right.length)
     for (const half of [glyphs.left, glyphs.right]) {
@@ -23,25 +24,24 @@ describe("changeloop banner", () => {
     }
   })
 
-  test("glyph rows spell changeloop, not opencode", () => {
-    expect(resolveMarks(glyphs.left[1])).toBe(CHANGE_ROW)
-    expect(resolveMarks(glyphs.right[1])).toBe(LOOP_ROW)
-    for (const row of [...glyphs.left, ...glyphs.right]) {
-      expect(resolveMarks(row)).not.toContain(OLD_OPEN_ROW)
-    }
+  test("rows spell pixel CHANGELOOP with a loop icon as both O letters", () => {
+    expect(glyphs.left[0]).toBe(CHANGE_ROW)
+    expect(glyphs.right[0]).toBe(LOOP_ROW)
+    expect(count(glyphs.right[0], LOOP_ICON_TOP)).toBe(2)
   })
 
-  test("UI.logo output carries the changeloop wordmark in both render branches", () => {
+  test("UI.logo output carries the pixel wordmark in both render branches", () => {
     const rendered = stripAnsi(logo())
-    expect(rendered).toContain(CHANGE_ROW)
-    expect(rendered).toContain(LOOP_ROW)
-    expect(rendered).not.toContain(OLD_OPEN_ROW)
+    expect(rendered).toContain(CHANGE_ROW.trimStart())
+    expect(rendered).toContain(LOOP_ROW.trimEnd())
+    // The old block-glyph font used half-blocks; the pixel wordmark must not.
+    expect(rendered).not.toContain("▀")
   })
 
-  test("session epilogue hints the changeloop command", () => {
+  test("session epilogue hints the changeloop command and shares the wordmark", () => {
     const rendered = stripAnsi(sessionEpilogue({ title: "t", sessionID: "ses_x" }))
     expect(rendered).toContain("changeloop -s ses_x")
-    expect(rendered).toContain(CHANGE_ROW)
+    expect(rendered).toContain(CHANGE_ROW.trimStart())
     expect(rendered).not.toContain("opencode -s")
   })
 })
