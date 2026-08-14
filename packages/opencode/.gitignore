@@ -6,3 +6,6 @@ app.log
 script/build-*.ts
 temporary-*.md
 .artifacts
+
+# Locally installed changeloop binary (target of /opt/homebrew/bin/changeloop symlink)
+bin/.opencode
