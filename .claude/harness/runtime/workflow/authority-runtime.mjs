@@ -204,7 +204,11 @@ export function createAuthorityRuntime({
     const history = assertReviewDispatchAllowed(
       id, reviewerType, maxAiAttempts);
     const deliveredAi = deliveredAiAttempts(id, history);
-    if (deliveredAi.length > completedAi.length)
+    const latestDelivered = deliveredAi.at(-1) || null;
+    const allAttempts = reviewAttempts(id, history);
+    const recordedDigestDispatch = (existsSync(receiptPath(id, request.provider)) ? readJson(receiptPath(id, request.provider), {}) : {}).review?.attemptDigest || null;
+    const recordedAttemptDispatch = allAttempts.find((attempt) => attempt.digest === recordedDigestDispatch) || null;
+    if (latestDelivered && (!recordedAttemptDispatch || Number(recordedAttemptDispatch.attempt) < Number(latestDelivered.attempt)))
       fail("a completed AI response has no matching recorded receipt; repair that authority record or pause instead of dispatching another reviewer");
     if (promotesLow) {
       // A second dispatch means the first review did not close the change and
@@ -467,9 +471,12 @@ export function createAuthorityRuntime({
     };
     const completedAi = recordedCompletedAiReviews(
       id, history, requestEntry.value.provider);
-    const deliveredAi = reviewAttempts(id, history).filter((attempt) =>
-      attempt.reviewerType === "ai" && attempt.status === "completed");
-    if (deliveredAi.length > completedAi.length)
+    const deliveredAi = deliveredAiAttempts(id, history);
+    const latestDelivered = deliveredAi.at(-1) || null;
+    const allAttempts = reviewAttempts(id, history);
+    const recordedDigestRun = (existsSync(receiptPath(id, requestEntry.value.provider)) ? readJson(receiptPath(id, requestEntry.value.provider), {}) : {}).review?.attemptDigest || null;
+    const recordedAttemptRun = allAttempts.find((attempt) => attempt.digest === recordedDigestRun) || null;
+    if (latestDelivered && (!recordedAttemptRun || Number(recordedAttemptRun.attempt) < Number(latestDelivered.attempt)))
       fail("a completed AI response has no matching recorded receipt; repair that authority record or pause instead of starting another configured reviewer");
     const scope = completedAi.length === 0 ? "full" : "delta";
     const dispatched = dispatchAuthorityUnlocked(id, {

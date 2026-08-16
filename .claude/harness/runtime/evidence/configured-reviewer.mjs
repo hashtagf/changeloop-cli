@@ -29,16 +29,16 @@ export const REVIEW_SCHEMA = {
           line: { anyOf: [{ type: "integer", minimum: 1 }, { type: "null" }] },
           message: { type: "string", minLength: 1 },
           claimIds: {
-            type: "array", items: { type: "string", minLength: 1 }, uniqueItems: true
+            type: "array", items: { type: "string", minLength: 1 }
           },
           verificationCaseIds: {
-            type: "array", items: { type: "string", minLength: 1 }, uniqueItems: true
+            type: "array", items: { type: "string", minLength: 1 }
           }
         }
       }
     },
     verifiedFindingIds: {
-      type: "array", items: { type: "string", minLength: 1 }, uniqueItems: true
+      type: "array", items: { type: "string", minLength: 1 }
     }
   }
 };

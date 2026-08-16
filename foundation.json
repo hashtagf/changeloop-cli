@@ -62,7 +62,7 @@
   "review": {
     "independence": "self",
     "diversity": "single-model",
-    "defaultReviewer": "codex-sol",
+    "defaultReviewer": "claude-opus",
     "reviewers": {
       "codex-sol": {
         "adapter": "codex-cli",

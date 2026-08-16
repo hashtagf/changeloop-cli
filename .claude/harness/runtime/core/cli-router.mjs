@@ -344,10 +344,10 @@ export async function routeRuntimeCommand(command, values, api) {
         // Strict, like every other authority command: `controlPlane` is an
         // internal argument that defeats the multi-repository guard, and
         // `refresh` has no caller. Loose parsing handed both to the CLI.
-        const { flags, rest } = parseStrictCommandFlags(values.slice(1), "sandbox apply");
-        if (Object.keys(flags).length || rest.length !== 1)
+        const { flags, rest } = parseStrictCommandFlags(values.slice(1), "sandbox apply", { boolean: ["refresh"] });
+        if (rest.length !== 1)
           die("sandbox apply requires exactly one change");
-        applySandbox(rest[0], flags);
+        applySandbox(rest[0], { refresh: Boolean(flags.refresh) });
       }
       else die("sandbox requires challenge|inspect|create|sync|apply <change>");
       break;
