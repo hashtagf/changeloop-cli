@@ -7,7 +7,9 @@ import { verifySpecSync } from "./spec-sync-verify.mjs";
 import {
   projectionCounts, targetHeadMovedDecision, undeclaredDeletions
 } from "./apply-recovery.mjs";
-import { sandboxCodePathspec } from "../core/workspace-surface.mjs";
+import {
+  nestedRepositoryPathMatcher, sandboxCodePathspec
+} from "../core/workspace-surface.mjs";
 
 export function createApplyRuntime({
   root,
@@ -52,10 +54,24 @@ export function createApplyRuntime({
   blockWithDecision,
   fail
 }) {
+  function nestedRepositoryPaths(id, state) {
+    return selectedRepositories(id, state)
+      .filter((repository) => repository.id !== "root" &&
+        repository.relativePath && repository.relativePath !== "." &&
+        !repository.relativePath.startsWith("../"))
+      .map((repository) => repository.relativePath);
+  }
+
   function applyPathspec(id, state) {
-    return sandboxCodePathspec(id, selectedRepositories(id, state)
-      .filter((repository) => repository.type === "submodule")
-      .map((repository) => repository.relativePath));
+    return sandboxCodePathspec(id, nestedRepositoryPaths(id, state));
+  }
+
+  function copyCodePaths(id, state) {
+    const baseline = state.workspace.baseline || {};
+    const sandbox = workspaceManifest(state.workspace.path, id, true);
+    const nested = nestedRepositoryPathMatcher(nestedRepositoryPaths(id, state));
+    return [...new Set([...Object.keys(baseline), ...Object.keys(sandbox)])]
+      .filter((path) => baseline[path] !== sandbox[path] && !nested(path)).sort();
   }
 
   // Against the base the sandbox branched from, not its HEAD: an agent that
@@ -138,10 +154,8 @@ export function createApplyRuntime({
     let codePaths;
     if (state.workspace.mode === "copy") {
       const baseline = state.workspace.baseline || {};
-      const sandbox = workspaceManifest(sandboxPath, id, true);
       const target = workspaceManifest(root, id, true);
-      codePaths = [...new Set([...Object.keys(baseline), ...Object.keys(sandbox)])]
-        .filter((path) => baseline[path] !== sandbox[path]).sort();
+      codePaths = copyCodePaths(id, state);
       for (const path of codePaths)
         if ((target[path] ?? null) !== (baseline[path] ?? null))
           fail(`isolated-copy conflict at '${path}'`);
@@ -179,10 +193,7 @@ export function createApplyRuntime({
   function reapplyCodePaths(id, state) {
     const sandboxPath = state.workspace.path;
     if (state.workspace.mode === "copy") {
-      const baseline = state.workspace.baseline || {};
-      const sandbox = workspaceManifest(sandboxPath, id, true);
-      return [...new Set([...Object.keys(baseline), ...Object.keys(sandbox)])]
-        .filter((path) => baseline[path] !== sandbox[path]).sort();
+      return copyCodePaths(id, state);
     }
     if (state.workspace.mode !== "worktree") fail("change has no isolated sandbox");
     assertTargetHeadUnmoved(id, state);
@@ -231,6 +242,10 @@ export function createApplyRuntime({
         directoryHash(changePath(id)) !== state.workspace.changeSourceHash)
       fail("active change was edited after the last sandbox sync");
     const entries = prepared || buildApplyEntries(id, state);
+    const nested = nestedRepositoryPathMatcher(nestedRepositoryPaths(id, state));
+    const childEntry = entries.find((entry) => entry.role === "code" && nested(entry.path));
+    if (childEntry)
+      fail(`apply entry '${childEntry.path}' crosses into a child repository`);
     assertDeletionsAreDeclared(id, state, entries);
     const transactionId = `apply-${Date.now()}-${process.pid}`;
     const transactionRoot = applyTransactionRoot(id, transactionId);
@@ -312,6 +327,15 @@ export function createApplyRuntime({
       }
     }
     const journal = prepareApplyTransaction(id, state, prepared);
+    const changed = journal.entries.find((entry) =>
+      pathIdentity(safeRootPath(entry.path)) !== entry.before);
+    if (changed) {
+      journal.status = "aborted";
+      journal.failure = `target changed before apply at '${changed.path}'`;
+      journal.abortedAt = now();
+      saveApplyJournal(journal);
+      fail(journal.failure);
+    }
     journal.status = "applying";
     saveApplyJournal(journal);
     // Before the first path moves, not after the last one. A projection that

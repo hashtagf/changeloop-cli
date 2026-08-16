@@ -354,7 +354,8 @@ export function createDiagnosticsRuntime({
       const unresolved = unresolvedApplyTransactions
         ? unresolvedApplyTransactions(requestedChange) : [];
       const divergent = unresolved.filter((journal) =>
-        ["rolling-back", "manual-recovery"].includes(journal.status));
+      ["rolling-back", "manual-recovery", "recovering-backup", "settling-current"]
+        .includes(journal.status));
       checks.push({
         level: divergent.length ? "error" : unresolved.length ? "warn" : "ok",
         name: "apply-transactions",

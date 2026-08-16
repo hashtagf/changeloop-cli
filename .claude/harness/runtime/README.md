@@ -14,10 +14,23 @@ implementation is grouped by domain:
 
 1. The entrypoint creates stores and runtimes through explicit factory dependencies.
 2. Domain modules should not import `foundation.mjs` or mutate another domain's private state.
-3. Cross-domain behavior is injected as a callback; direct imports are reserved for stable
-   primitives in `core/` or helpers in the same domain.
+3. Dependencies point from `workflow` to `evidence`, then to `core`/`contracts`;
+   reverse edges are forbidden. Direct cross-domain imports are limited to stable pure
+   helpers and contracts along that direction. Stateful behavior is injected as a callback.
 4. Pure validation and normalization stay separate from filesystem/process adapters.
 5. Public CLI compatibility remains in `foundation.mjs` and `core/cli-router.mjs`.
 
 These rules keep subsystem tests bounded and prevent the compatibility entrypoint from
 growing back into a monolith.
+
+The deterministic architecture suite enforces this graph:
+
+```text
+contracts / core / reliability
+            ^
+ evidence / observability
+            ^
+         workflow
+            ^
+       composition root
+```

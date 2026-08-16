@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 // Shared with drift classification: the same kinds that force a deep tier here
 // are the ones a silent downgrade must block at Land.
-import { DRIFT_BLOCKING_TASK_KINDS } from "../observability/model-drift.mjs";
+import { DRIFT_BLOCKING_TASK_KINDS } from "../contracts/model-policy.mjs";
 import { findCyclePath } from "../core/graph.mjs";
 
 export function createModelRouter({ loadRuntime, policy, fail }) {

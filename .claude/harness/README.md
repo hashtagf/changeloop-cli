@@ -18,12 +18,16 @@ Playwright, linters, or security scanners produce evidence.
 | Domain | File | Role |
 |---|---|---|
 | Entrypoint | `foundation.mjs` | Public CLI compatibility and lifecycle orchestration |
+| Composition | `runtime/composition/bootstrap.mjs` | Project-root discovery, runtime paths, and atomic JSON persistence adapters |
+| Contracts | `runtime/contracts/change-artifacts.mjs` | Pure task-ledger and specification-delta parsers shared across domains |
+| Contracts | `runtime/contracts/model-policy.mjs` | Risk-sensitive task kinds shared by planning and drift inspection |
 | Core | `runtime/core/cli-flags.mjs` | Shared permissive and strict command flag parsing |
 | Core | `runtime/core/cli-router.mjs` | Runtime command dispatch over an explicit orchestration API |
 | Core | `runtime/core/diagnostics-runtime.mjs` | Doctor, migration, provider listing, and CLI usage diagnostics |
 | Core | `runtime/core/process-runtime.mjs` | Provider process execution, readiness checks, and managed services |
 | Core | `runtime/core/state-runtime.mjs` | Runtime state, paths, hashing, snapshots, workspace manifests, and Git helpers |
 | Core | `runtime/core/trust.mjs` | Canonical JSON and Ed25519 verification shared by trust protocols |
+| Core | `runtime/core/workspace-policy.mjs` | Canonical workspace and sandbox-copy exclusion policy |
 | Evidence | `runtime/evidence/artifact-store.mjs` | Durable evidence artifacts, containment, digest validation, and prototype rejection |
 | Evidence | `runtime/evidence/attestation.mjs` | Host-boundary inspection and signed unattended authority |
 | Evidence | `runtime/evidence/evidence-bootstrap.mjs` | Safe project-manifest detection and provider candidates |
@@ -34,6 +38,8 @@ Playwright, linters, or security scanners produce evidence.
 | Evidence | `runtime/evidence/receipt-runtime.mjs` | Receipt recording, review/acceptance binding, and reusable evidence |
 | Evidence | `runtime/evidence/adapter-runtime.mjs` | Manual providers, services, logs, and executable evidence adapters |
 | Evidence | `runtime/evidence/proof-execution-runtime.mjs` | Proof collection, execution, and end-to-end run orchestration |
+| Evidence | `runtime/evidence/proof-execution/service-sessions.mjs` | Managed proof-service startup, reverse-order cleanup, and signal reclamation |
+| Evidence | `runtime/evidence/provider-catalog.mjs` | Provider capability, adapter, input-mode, and operator-description catalog |
 | Evidence | `runtime/evidence/provider-scheduler.mjs` | Provider graph construction, dependency scheduling, and resource-safe batching |
 | Evidence | `runtime/evidence/review-attempt-store.mjs` | Durable chained review-attempt history and migration |
 | Evidence | `runtime/evidence/review-protocol.mjs` | Pure review provenance, receipt binding, and attempt validation |
@@ -48,13 +54,16 @@ Playwright, linters, or security scanners produce evidence.
 | Workflow | `runtime/workflow/authority.mjs` | External authority request persistence and response validation |
 | Workflow | `runtime/workflow/budget.mjs` | Run/lifetime usage windows and budget policy transitions |
 | Workflow | `runtime/workflow/change-lifecycle.mjs` | Change creation, draft materialization, resolution, and atomic start |
-| Workflow | `runtime/workflow/change-validation.mjs` | Task/spec parsing, traceability, validation, and provider requirements |
+| Workflow | `runtime/workflow/change-artifacts.mjs` | Compatibility re-export for commands overlapping an installer upgrade |
+| Workflow | `runtime/workflow/change-validation.mjs` | Traceability, change validation, and provider requirements |
 | Workflow | `runtime/workflow/land-journal.mjs` | Atomic apply identity, journal, rollback, verification, and cleanup |
 | Workflow | `runtime/workflow/land-runtime.mjs` | Multi-repository Land readiness, planning, pointers, and resume saga |
 | Workflow | `runtime/workflow/lease-runtime.mjs` | Agent resource lease acquisition, renewal, release, and cleanup |
 | Workflow | `runtime/workflow/packet-runtime.mjs` | Changed-surface calculation and bounded task/review packet generation |
 | Workflow | `runtime/workflow/repository-topology.mjs` | Repository discovery, selection, dependency validation, and workspace views |
 | Workflow | `runtime/workflow/sandbox-runtime.mjs` | Isolation inspection, sandbox creation, and contract synchronization |
+| Workflow | `runtime/workflow/security-policy.mjs` | Trust-boundary phrases that select security-sensitive assurance |
+| Workflow | `runtime/workflow/validation/spec-delta.mjs` | Scenario-drop and new-capability validation for OpenSpec deltas |
 | Docs | `runtime/README.md` | Domain boundaries and dependency rules |
 | Docs | `AGENT.md` | Small portable contract loaded by Claude, Codex, and other agents |
 | Docs | `EVIDENCE.md` | Evidence contract, execution adapter, and proof reference |

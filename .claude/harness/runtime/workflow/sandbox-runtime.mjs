@@ -757,6 +757,7 @@ export function createSandboxRuntime({
       workspace.baseline = baseline;
     }
     state.workspace.changeSourceHash = directoryHash(source);
+    delete state.workspace.recovery;
     state.status = "building";
     state.revision = Number(state.revision || 0) + 1;
     if (priorContract !== nextContract) state.contractRevision = Number(state.contractRevision || 0) + 1;

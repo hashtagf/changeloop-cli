@@ -7,7 +7,8 @@ Land **$ARGUMENTS** explicitly.
 
 Start fresh from `packet <change> --phase land`. Run `land check`; it is
 read-only. Resolve interrupted apply through authorized `land recover
---decision-ref`. For multi-repo work bind authorized child commits/CI with
+--decision-ref`; a manual recovery also needs `--resolution keep-current` or
+`--resolution restore-backup`. For multi-repo work bind authorized child commits/CI with
 `land record`, then `land resume`; re-Prove when requested.
 
 Check `handoff status`. Accepted tracked `post-land` work may remain only when

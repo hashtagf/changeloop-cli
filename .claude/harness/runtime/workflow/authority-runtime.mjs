@@ -44,7 +44,9 @@ export function createAuthorityRuntime({
   assertReviewDispatchAllowed,
   foundationPolicy,
   reviewerConfig,
+  reviewerStatus,
   runConfiguredReview,
+  acknowledgeInfrastructureAttempts,
   writeJson,
   fail
 }) {
@@ -114,12 +116,26 @@ export function createAuthorityRuntime({
     return stableHash(canonical);
   }
 
-  function recordedCompletedAiReviews(id, history, provider) {
+  // The receipt records only the latest attempt digest, so counting delivered
+  // attempts against receipt-matching ones misfires the moment a delta receipt
+  // overwrites the full receipt or a human receipt supersedes the AI one. The
+  // sound question is latest-vs-latest: is the newest delivered AI response
+  // still waiting for its receipt, with nothing recorded after it?
+  function unrecordedDeliveredAiResponse(id, history, provider) {
+    const latest = deliveredAiAttempts(id, history).at(-1);
+    if (!latest) return null;
+    // A migrated attempt was synthesized from the receipt itself, so it is
+    // recorded by construction.
+    if (latest.migrated) return null;
     const path = receiptPath(id, provider);
     const receipt = existsSync(path) ? readJson(path, {}) : {};
     const recordedDigest = receipt.review?.attemptDigest || null;
-    return deliveredAiAttempts(id, history).filter((attempt) =>
+    if (!recordedDigest) return latest;
+    const recorded = reviewAttempts(id, history).find((attempt) =>
       attempt.digest === recordedDigest);
+    if (recorded && Number(recorded.attempt) >= Number(latest.attempt))
+      return null;
+    return latest;
   }
 
   function requestAuthorityUnlocked(id, flags = {}, options = {}) {
@@ -195,20 +211,15 @@ export function createAuthorityRuntime({
       fail("authority dispatch requires --reviewer-type ai|human");
     const routing = reviewPolicy(id);
     const historySnapshot = reviewHistoryState(id);
-    const completedAi = recordedCompletedAiReviews(
-      id, historySnapshot, request.provider);
-    const promotesLow = routing.tier === "low" && completedAi.length >= 1 &&
-      request.workspaceHash !== completedAi.at(-1).workspaceHash;
+    const deliveredSnapshot = deliveredAiAttempts(id, historySnapshot);
+    const promotesLow = routing.tier === "low" && deliveredSnapshot.length >= 1 &&
+      request.workspaceHash !== deliveredSnapshot.at(-1).workspaceHash;
     const maxAiAttempts = promotesLow ? 2 : Number(routing.maxAiAttempts || 2);
     // The route-aware cap still wins over malformed scope/base details.
     const history = assertReviewDispatchAllowed(
       id, reviewerType, maxAiAttempts);
     const deliveredAi = deliveredAiAttempts(id, history);
-    const latestDelivered = deliveredAi.at(-1) || null;
-    const allAttempts = reviewAttempts(id, history);
-    const recordedDigestDispatch = (existsSync(receiptPath(id, request.provider)) ? readJson(receiptPath(id, request.provider), {}) : {}).review?.attemptDigest || null;
-    const recordedAttemptDispatch = allAttempts.find((attempt) => attempt.digest === recordedDigestDispatch) || null;
-    if (latestDelivered && (!recordedAttemptDispatch || Number(recordedAttemptDispatch.attempt) < Number(latestDelivered.attempt)))
+    if (unrecordedDeliveredAiResponse(id, history, request.provider))
       fail("a completed AI response has no matching recorded receipt; repair that authority record or pause instead of dispatching another reviewer");
     if (promotesLow) {
       // A second dispatch means the first review did not close the change and
@@ -234,8 +245,8 @@ export function createAuthorityRuntime({
       fail("AI dispatch requires reviewer provider/model family and model ID");
     if (reviewerType === "ai" && !reviewerSessionId && !sessionDeferred)
       fail("AI dispatch requires reviewer session unless a configured reviewer defers it to the actual thread.started event");
-    if (reviewerType === "ai" && completedAi.length > 0) {
-      const priorAi = completedAi.at(-1);
+    if (reviewerType === "ai" && deliveredAi.length > 0) {
+      const priorAi = deliveredAi.at(-1);
       if (priorAi?.reviewerType === "ai" &&
           priorAi.reviewerSessionId === reviewerSessionId)
         fail("AI delta closure requires a fresh reviewer session");
@@ -296,8 +307,8 @@ export function createAuthorityRuntime({
       paths: scopePaths,
       digest: scopeDigest
     };
-    if (routing.tier === "high" && reviewerType === "human" && completedAi.length) {
-      const baseAttempt = completedAi.at(-1);
+    if (routing.tier === "high" && reviewerType === "human" && deliveredAi.length) {
+      const baseAttempt = deliveredAi.at(-1);
       const closureFindings = (baseAttempt.findings || []).filter((finding) =>
         ["blocker", "major"].includes(finding.severity));
       packet.closureFindings = {
@@ -469,20 +480,17 @@ export function createAuthorityRuntime({
     const history = state.reviewHistory || {
       aiAttempts: 0, totalAttempts: 0, chainHead: null
     };
-    const completedAi = recordedCompletedAiReviews(
-      id, history, requestEntry.value.provider);
+    // Delivered attempts only: a completion whose resultStatus is "error"
+    // never gains a receipt, so counting it here locked the change out of
+    // review forever.
     const deliveredAi = deliveredAiAttempts(id, history);
-    const latestDelivered = deliveredAi.at(-1) || null;
-    const allAttempts = reviewAttempts(id, history);
-    const recordedDigestRun = (existsSync(receiptPath(id, requestEntry.value.provider)) ? readJson(receiptPath(id, requestEntry.value.provider), {}) : {}).review?.attemptDigest || null;
-    const recordedAttemptRun = allAttempts.find((attempt) => attempt.digest === recordedDigestRun) || null;
-    if (latestDelivered && (!recordedAttemptRun || Number(recordedAttemptRun.attempt) < Number(latestDelivered.attempt)))
+    if (unrecordedDeliveredAiResponse(id, history, requestEntry.value.provider))
       fail("a completed AI response has no matching recorded receipt; repair that authority record or pause instead of starting another configured reviewer");
-    const scope = completedAi.length === 0 ? "full" : "delta";
+    const scope = deliveredAi.length === 0 ? "full" : "delta";
     const dispatched = dispatchAuthorityUnlocked(id, {
       request: requestId,
       scope,
-      ...(scope === "delta" ? { "base-attempt": completedAi.at(-1).digest } : {}),
+      ...(scope === "delta" ? { "base-attempt": deliveredAi.at(-1).digest } : {}),
       "reviewer-type": "ai",
       "reviewer-identity": configured.identity,
       "reviewer-provider-family": configured.providerFamily,
@@ -498,7 +506,7 @@ export function createAuthorityRuntime({
       packet: dispatched.packet,
       forbiddenSessionIds: reviewSettings.independence === "self" ? [] : [
         subjectSession,
-        ...(scope === "delta" ? [completedAi.at(-1)?.reviewerSessionId] : [])
+        ...(scope === "delta" ? [deliveredAi.at(-1)?.reviewerSessionId] : [])
       ].filter(Boolean)
     });
     const reviewerSession = String(report.reviewer?.sessionId || "").trim();
@@ -833,6 +841,29 @@ export function createAuthorityRuntime({
     console.log(`CI EVIDENCE ${id}/${provider}: ${status}\n  run: ${payload.runUrl}`);
   }
 
+  // The bounded infrastructure recovery consumed by a failed reviewer run has
+  // no automatic escape: the guard's own message routes the operator through a
+  // provider repair and doctor. This is that route — it re-runs the reviewer
+  // diagnosis in-process and acknowledges the consumed attempts only when the
+  // diagnosis passes and the decision reference is fresh.
+  function resetInfrastructureAuthority(id, flags = {}) {
+    return withAuthorityLock(id, () => {
+      validate(id, "active", { quiet: true });
+      const decisionRef = String(flags["decision-ref"] || "").trim();
+      if (!decisionRef) fail("authority reset-infra requires --decision-ref <ref>");
+      const reviewerName = String(flags.reviewer || "").trim() || null;
+      const status = reviewerStatus(reviewerName);
+      if (!status.ok)
+        fail(`configured reviewer '${status.reviewer}' still fails its ${status.check} diagnosis: ${status.detail}`);
+      const result = acknowledgeInfrastructureAttempts(id, decisionRef);
+      console.log(`AUTHORITY ${id}: infrastructure retries reset\n  reviewer: ${
+        status.reviewer} (${status.check})\n  acknowledged: ${
+        result.digests.length} attempt(s)\n  decision: ${decisionRef
+        }\n  next: request and dispatch the AI review again`);
+      return result;
+    });
+  }
+
   return {
     authorityProvider,
     authorityPacket,
@@ -840,6 +871,8 @@ export function createAuthorityRuntime({
     dispatchAuthority,
     runAuthorityReviewer,
     abortAuthority,
+    resetInfrastructureAuthority,
+    unrecordedDeliveredAiResponse,
     authorityStatusValue,
     showAuthorityStatus,
     recordAuthority,

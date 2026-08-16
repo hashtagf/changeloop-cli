@@ -1,6 +1,6 @@
 # Foundation workflow
 
-**Version 3.2.22**
+**Version 3.2.27**
 
 Foundation is an OpenSpec-native harness for safe, economical software changes
 in brownfield repositories.
@@ -203,14 +203,17 @@ pinned OpenSpec CLI.
 
 ```bash
 claude-foundation land check <change>
-claude-foundation land recover <change> --decision-ref <ref>
+claude-foundation land recover <change> --decision-ref <ref> [--resolution keep-current|restore-backup]
 claude-foundation land archive <change>
 ```
 
 `land check` mutates nothing. An apply is a transaction over the target, and an
 interrupted one stays pending until somebody settles it deliberately: the check
 reports the transaction, its status, and how many paths it would update, create
-and delete, and `land recover` settles it under a recorded decision.
+and delete, and `land recover` settles it under a recorded decision. A manual
+recovery also requires `--resolution`: `restore-backup` restores and verifies
+the recorded pre-apply state, while `keep-current` preserves the target, marks
+the projection unapplied, and requires `sandbox sync` before Land can continue.
 
 The projection itself is confined to the change's surface — what git tracks plus
 what `tasks.md` declares in `[paths:]`. An untracked path no task names is not

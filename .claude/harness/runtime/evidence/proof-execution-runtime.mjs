@@ -1,4 +1,5 @@
 import { acquireProcessLock } from "../core/process-lock.mjs";
+import { createServiceSessions } from "./proof-execution/service-sessions.mjs";
 
 export function createProofExecutionRuntime({
   proofReadinessValue, relevantSnapshot, loadRuntime, saveRuntime, now,
@@ -13,15 +14,9 @@ export function createProofExecutionRuntime({
   authorityStatusValue = () => ({ requests: [] }), requestAuthority = () => null,
   die, markBlocked = () => {}
 }) {
-  // Services outlive the run that started them unless something reclaims
-  // them: die() is process.exit, which runs no finally block, and a signal
-  // runs nothing at all. A server left holding its port answers the next
-  // run's readiness probe, so the leak is not merely untidy — it hands a
-  // different change a green suite.
-  const liveSessions = new Set();
   const memoryAdvance = new Map();
   const activeAdvance = new Set();
-  let reclaimInstalled = false;
+  const { startTrackedServices, stopAll } = createServiceSessions({ startRequiredServices });
 
   // `proof advance` may be invoked by two agents at the same time. The
   // authority store already serializes request mutations, but that is too late
@@ -157,31 +152,6 @@ export function createProofExecutionRuntime({
       recoveryDecisionRef: null
     });
     return null;
-  }
-
-  function stopSession(session) {
-    if (!liveSessions.delete(session)) return null;
-    try { return session.stop(); } catch { return null; }
-  }
-
-  function stopAll(sessions) {
-    return [...sessions].reverse().map(stopSession).filter(Boolean);
-  }
-
-  function installReclaim() {
-    if (reclaimInstalled) return;
-    reclaimInstalled = true;
-    const reclaim = () => [...liveSessions].reverse().forEach(stopSession);
-    process.on("exit", reclaim);
-    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"])
-      process.on(signal, () => { reclaim(); process.exit(130); });
-  }
-
-  async function startTrackedServices(id, nodes, proofRunId) {
-    installReclaim();
-    const sessions = await startRequiredServices(id, nodes, proofRunId);
-    sessions.forEach((session) => liveSessions.add(session));
-    return sessions;
   }
 
   function clearActiveProofRun(id) {

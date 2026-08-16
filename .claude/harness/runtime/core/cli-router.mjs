@@ -11,7 +11,7 @@ export async function routeRuntimeCommand(command, values, api) {
     proofRun, proofCollect,
     proofPreflight, proofExecute, proofAudit, proofFinalize, showEvidenceDetection,
     initializeEvidence, showEvidenceDoctor, recordVerifiedCi, requestAuthority,
-    dispatchAuthority, runAuthorityReviewer, abortAuthority, showAuthorityStatus, recordAuthority,
+    dispatchAuthority, runAuthorityReviewer, abortAuthority, resetInfrastructureAuthority, showAuthorityStatus, recordAuthority,
     upgradeEvidence, recordReceipt,
     runProvider, prove, landCheck, recoverLand, showLandPlan, recordRepositoryLand,
     stageRootPointers, resumeLand, createAttestationChallenge,
@@ -252,6 +252,13 @@ export async function routeRuntimeCommand(command, values, api) {
       if (rest.length !== 1) die("authority status requires exactly one change");
       await showAuthorityStatus(rest[0], flags); break;
     }
+    case "authority-reset-infra": {
+      const { flags, rest } = parseStrictCommandFlags(values, "authority reset-infra", {
+        value: ["decision-ref", "reviewer"]
+      });
+      if (rest.length !== 1) die("authority reset-infra requires exactly one change");
+      await resetInfrastructureAuthority(rest[0], flags); break;
+    }
     case "authority-record": {
       const { flags, rest } = parseStrictCommandFlags(values, "authority record", {
         value: ["request", "response"]
@@ -291,7 +298,7 @@ export async function routeRuntimeCommand(command, values, api) {
     case "land-check": landCheck(values[0]); break;
     case "land-recover": {
       const { flags, rest } = parseStrictCommandFlags(values, "land recover", {
-        value: ["decision-ref"]
+        value: ["decision-ref", "resolution"]
       });
       recoverLand(rest[0], flags); break;
     }
@@ -342,12 +349,14 @@ export async function routeRuntimeCommand(command, values, api) {
       }
       else if (values[0] === "apply") {
         // Strict, like every other authority command: `controlPlane` is an
-        // internal argument that defeats the multi-repository guard, and
-        // `refresh` has no caller. Loose parsing handed both to the CLI.
-        const { flags, rest } = parseStrictCommandFlags(values.slice(1), "sandbox apply", { boolean: ["refresh"] });
+        // internal argument that defeats the multi-repository guard, so it
+        // stays unparseable. `--refresh` is the sanctioned recovery for a
+        // target that legitimately moved after apply.
+        const { flags, rest } = parseStrictCommandFlags(
+          values.slice(1), "sandbox apply", { boolean: ["refresh"] });
         if (rest.length !== 1)
           die("sandbox apply requires exactly one change");
-        applySandbox(rest[0], { refresh: Boolean(flags.refresh) });
+        applySandbox(rest[0], flags);
       }
       else die("sandbox requires challenge|inspect|create|sync|apply <change>");
       break;

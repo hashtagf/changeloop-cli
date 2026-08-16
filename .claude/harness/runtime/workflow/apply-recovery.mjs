@@ -64,12 +64,14 @@ export function targetHeadMovedDecision({
 }
 
 const UNRESOLVED_APPLY_STATUS = [
-  "prepared", "applying", "rolling-back", "manual-recovery"
+  "prepared", "applying", "rolling-back", "manual-recovery", "recovering-backup",
+  "settling-current"
 ];
 
 export function createApplyRecovery({
   transactions, transactionJournalPath, readJson, verifyAppliedProjection,
-  saveApplyJournal, rollbackApplyTransaction, now, blockWithDecision, fail
+  saveApplyJournal, rollbackApplyTransaction, settleApplyTransaction,
+  saveRuntime, clearSnapshotCache, now, blockWithDecision, fail
 }) {
   // Read-only by construction. `land check` needs to say what is pending
   // without touching it: resuming or rolling back an interrupted transaction
@@ -95,7 +97,7 @@ export function createApplyRecovery({
     return pending;
   }
 
-  function recoverPendingApply(id, state) {
+  function recoverPendingApply(id, state, options = {}) {
     const transactionRoot = join(transactions, id);
     if (!existsSync(transactionRoot)) return;
     for (const entry of readdirSync(transactionRoot, { withFileTypes: true })) {
@@ -103,7 +105,32 @@ export function createApplyRecovery({
       const path = transactionJournalPath(id, entry.name);
       if (!existsSync(path)) continue;
       const journal = readJson(path);
-      if (["rolling-back", "manual-recovery"].includes(journal.status))
+      if (["rolling-back", "manual-recovery", "recovering-backup", "settling-current"]
+        .includes(journal.status)) {
+        if (options.resolution) {
+          settleApplyTransaction(journal, options.resolution, options.decisionRef);
+          if (options.resolution === "keep-current") {
+            state.workspace = {
+              ...state.workspace,
+              applied: false,
+              recovery: {
+                status: "settled-current",
+                transactionId: journal.transactionId,
+                decisionRef: options.decisionRef,
+                requiresSync: true,
+                resolvedAt: now()
+              }
+            };
+            delete state.workspace.apply;
+            state.status = "building";
+            clearSnapshotCache(id);
+            saveRuntime(state);
+            journal.status = "settled-current";
+            journal.recovery.settledAt = now();
+            saveApplyJournal(journal);
+          }
+          continue;
+        }
         blockWithDecision(id, "apply-manual-recovery", journal.decision || {
           kind: "manual-recovery",
           summary: "An earlier apply stopped partway through rolling back and left the working tree in a state Foundation did not finish resolving.",
@@ -125,6 +152,7 @@ export function createApplyRecovery({
           recommended: "inspect",
           transactionRoot: join(transactionRoot, entry.name)
         });
+      }
       if (!["prepared", "applying"].includes(journal.status)) continue;
       if (state.workspace?.applied &&
           state.workspace.apply?.transactionId === journal.transactionId) {

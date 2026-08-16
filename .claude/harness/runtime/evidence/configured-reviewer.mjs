@@ -6,6 +6,9 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
+// No `uniqueItems` anywhere in this schema: OpenAI structured output rejects
+// the keyword, failing every dispatch as an infrastructure error. `validReview`
+// enforces uniqueness of all ID lists after parse.
 export const REVIEW_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -56,9 +59,13 @@ function diagnostic(result) {
 }
 
 function validStringList(value) {
-  return Array.isArray(value) && value.every((item) =>
-    typeof item === "string" && item.trim().length > 0) &&
-    new Set(value).size === value.length;
+  // Uniqueness over trimmed values: the attempt store trims IDs before its
+  // own duplicate check, so "F1" and " F1" passing here as distinct would
+  // throw after dispatch and leave the request indeterminate.
+  if (!Array.isArray(value)) return false;
+  const trimmed = value.map((item) => typeof item === "string" ? item.trim() : "");
+  return trimmed.every((item) => item.length > 0) &&
+    new Set(trimmed).size === trimmed.length;
 }
 
 function validReview(review) {
@@ -69,13 +76,13 @@ function validReview(review) {
   const ids = new Set();
   for (const finding of review.findings) {
     if (!finding || typeof finding !== "object" || Array.isArray(finding) ||
-        !text(finding.id) || ids.has(finding.id) ||
+        !text(finding.id) || ids.has(text(finding.id)) ||
         !["blocker", "major", "minor"].includes(finding.severity) ||
         typeof finding.path !== "string" ||
         !(finding.line === null || Number.isInteger(finding.line) && finding.line >= 1) ||
         !text(finding.message) || !validStringList(finding.claimIds) ||
         !validStringList(finding.verificationCaseIds)) return false;
-    ids.add(finding.id);
+    ids.add(text(finding.id));
   }
   return true;
 }

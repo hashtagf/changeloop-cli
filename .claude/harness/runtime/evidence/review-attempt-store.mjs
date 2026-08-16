@@ -114,8 +114,51 @@ export function createReviewAttemptStore({
 
   function infrastructureAiAttempts(id, history = reviewHistoryState(id)) {
     const delivered = new Set(deliveredAiAttempts(id, history).map((attempt) => attempt.digest));
+    // Attempts acknowledged by `authority reset-infra` stay in the immutable
+    // chain but no longer consume the bounded infrastructure recovery.
+    const acknowledged = new Set(history.infraAcknowledged || []);
     return reviewAttempts(id, history).filter((attempt) =>
-      attempt.reviewerType === "ai" && !delivered.has(attempt.digest));
+      attempt.reviewerType === "ai" && !delivered.has(attempt.digest) &&
+      !acknowledged.has(attempt.digest));
+  }
+
+  // The REVIEW_INFRASTRUCTURE_ERROR guard instructs the operator to repair the
+  // provider and re-run doctor, so the reset it implies must exist. The caller
+  // gates on a passing reviewer diagnosis and a host-recorded decision
+  // reference; this only moves the retry accounting, never the attempt chain.
+  function acknowledgeInfrastructureAttempts(id, decisionRef) {
+    const reference = String(decisionRef || "").trim();
+    if (!reference) fail("authority reset-infra requires --decision-ref");
+    const state = loadRuntime(id);
+    const history = reviewHistoryState(id, state);
+    if (history.chainHead && !reviewHistoryChainValid(id, history))
+      fail("authority reset-infra requires a valid review attempt history");
+    if ((history.infraResets || []).some((row) => row.decisionRef === reference))
+      fail("--decision-ref was already used for an infrastructure reset on this change");
+    // No reset while any AI attempt is still dispatched: acknowledging the
+    // completed errors beside a live dispatch would reopen capacity for a
+    // further dispatch and strand the live attempt off the chain head.
+    if (reviewAttempts(id, history).some((attempt) =>
+      attempt.reviewerType === "ai" && attempt.status === "dispatched"))
+      fail("an AI review attempt is still dispatched; complete or abort it before resetting infrastructure retries");
+    // Completed infrastructure errors only. Anything else is not an
+    // infrastructure outcome the bounded recovery circuit consumed.
+    const attempts = infrastructureAiAttempts(id, history).filter((attempt) =>
+      attempt.status === "completed" && attempt.resultStatus === "error");
+    if (!attempts.length)
+      fail("no completed reviewer infrastructure errors to acknowledge");
+    const digests = attempts.map((attempt) => attempt.digest);
+    state.reviewHistory = {
+      ...history,
+      infraAcknowledged: [...new Set([
+        ...(history.infraAcknowledged || []), ...digests
+      ])],
+      infraResets: [...(history.infraResets || []), {
+        decisionRef: reference, digests, at: now()
+      }]
+    };
+    saveRuntime(state);
+    return { changeId: id, decisionRef: reference, digests };
   }
 
   function blockAiExhausted(id, history, maxAiAttempts = 2) {
@@ -164,7 +207,10 @@ export function createReviewAttemptStore({
       timestamp: now()
     };
     attempt.digest = stableHash(attempt);
+    // Spread first: a rebuilt history must not drop the acknowledged
+    // infrastructure bookkeeping recorded by `authority reset-infra`.
     state.reviewHistory = {
+      ...history,
       version: 1,
       aiAttempts: Number(history.aiAttempts || 0) + (normalizedReviewerType === "ai" ? 1 : 0),
       totalAttempts: attempt.attempt,
@@ -256,6 +302,7 @@ export function createReviewAttemptStore({
       `${String(attempt.attempt).padStart(4, "0")}-${attempt.digest.slice(0, 12)}.json`);
     writeJson(path, attempt);
     state.reviewHistory = {
+      ...history,
       version: 1,
       aiAttempts: Number(history.aiAttempts || 0) + (reviewerType === "ai" ? 1 : 0),
       totalAttempts: attempt.attempt,
@@ -415,6 +462,7 @@ export function createReviewAttemptStore({
     recordRepairClosureAttempt,
     reviewAttempts,
     deliveredAiAttempts,
-    infrastructureAiAttempts
+    infrastructureAiAttempts,
+    acknowledgeInfrastructureAttempts
   };
 }

@@ -171,11 +171,11 @@
     },
     {
       "name": "land recover",
-      "usage": "land recover <change> --decision-ref <ref>",
+      "usage": "land recover <change> --decision-ref <ref> [--resolution keep-current|restore-backup]",
       "audience": "conditional",
       "kind": "authority",
       "idempotent": true,
-      "description": "Settle an interrupted apply transaction after an explicit host-recorded user decision."
+      "description": "Settle an interrupted apply transaction after an explicit host-recorded user decision; manual recovery requires an explicit resolution."
     },
     {
       "name": "land archive",
@@ -272,6 +272,14 @@
       "kind": "authority",
       "idempotent": false,
       "description": "Run a configured read-only ephemeral reviewer, preserve its structured report, and record the bound response."
+    },
+    {
+      "name": "authority reset-infra",
+      "usage": "authority reset-infra <change> --decision-ref <ref> [--reviewer <configured-id>]",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Acknowledge consumed reviewer infrastructure retries after the provider diagnosis passes, restoring AI review dispatch under an explicit host-recorded user decision."
     },
     {
       "name": "authority record",
@@ -502,7 +510,7 @@
     },
     {
       "name": "sandbox apply",
-      "usage": "sandbox apply <change>",
+      "usage": "sandbox apply <change> [--refresh]",
       "audience": "internal",
       "kind": "authority",
       "idempotent": true,
@@ -640,6 +648,7 @@
     "authority-abort",
     "authority-status",
     "authority-record",
+    "authority-reset-infra",
     "receipt",
     "run-provider",
     "prove",

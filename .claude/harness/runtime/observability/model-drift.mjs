@@ -1,9 +1,9 @@
+import { DRIFT_BLOCKING_TASK_KINDS } from "../contracts/model-policy.mjs";
+
 const TIER_RANK = { fast: 0, standard: 1, deep: 2 };
 const TOKEN_BOUNDARY = /[^a-z0-9]+/;
 
-export const DRIFT_BLOCKING_TASK_KINDS = new Set([
-  "contract", "architecture", "security", "migration", "review"
-]);
+export { DRIFT_BLOCKING_TASK_KINDS };
 
 function tierFamilies(policy) {
   const models = policy?.models;

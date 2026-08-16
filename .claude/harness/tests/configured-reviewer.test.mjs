@@ -6,7 +6,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createConfiguredReviewerRuntime } from
+import { REVIEW_SCHEMA, createConfiguredReviewerRuntime } from
   "../runtime/evidence/configured-reviewer.mjs";
 import { createRuntimeEnvironment } from
   "../runtime/core/runtime-environment.mjs";
@@ -36,7 +36,14 @@ fs.writeFileSync(path.join(process.cwd(), "claude-capture.json"), JSON.stringify
 }));
 const review = process.env.FAKE_CLAUDE_INVALID === "1"
   ? { status: "pass" }
-  : { status: "pass", summary: "same-family fresh review passed", findings: [], verifiedFindingIds: [] };
+  : process.env.FAKE_CLAUDE_DUPLICATE === "1"
+    ? { status: "pass", summary: "duplicate ids", findings: [], verifiedFindingIds: ["F1", " F1"] }
+    : process.env.FAKE_CLAUDE_DUPLICATE_FINDINGS === "1"
+      ? { status: "fail", summary: "duplicate finding ids", verifiedFindingIds: [], findings: [
+          { id: "F2", severity: "minor", path: "a.mjs", line: 1, message: "one", claimIds: ["c"], verificationCaseIds: ["v"] },
+          { id: " F2", severity: "minor", path: "a.mjs", line: 2, message: "two", claimIds: ["c"], verificationCaseIds: ["v"] }
+        ] }
+      : { status: "pass", summary: "same-family fresh review passed", findings: [], verifiedFindingIds: [] };
 process.stdout.write(JSON.stringify({
   type: "result", subtype: "success", is_error: false,
   session_id: process.env.FAKE_CLAUDE_SESSION || sessionId,
@@ -105,6 +112,28 @@ try {
   assert.equal(invalid.status, "error");
   assert.match(invalid.summary, /outside the required schema/);
 
+  // Portability: OpenAI structured output rejects `uniqueItems`, so its
+  // presence anywhere in the request schema fails every dispatch as an
+  // infrastructure error. Uniqueness stays enforced after parse.
+  assert.ok(!JSON.stringify(REVIEW_SCHEMA).includes("uniqueItems"),
+    "REVIEW_SCHEMA must not contain uniqueItems");
+  process.env.FAKE_CLAUDE_DUPLICATE = "1";
+  const duplicated = runtime.runReview({
+    changeId: "claude-duplicate-ids", workspace, packet: {}
+  });
+  delete process.env.FAKE_CLAUDE_DUPLICATE;
+  assert.equal(duplicated.status, "error");
+  assert.match(duplicated.summary, /outside the required schema/);
+  // Normalization-equivalent duplicate finding IDs ("F2" vs " F2") would trim
+  // to the same value in the attempt store and throw after dispatch.
+  process.env.FAKE_CLAUDE_DUPLICATE_FINDINGS = "1";
+  const duplicatedFindings = runtime.runReview({
+    changeId: "claude-duplicate-finding-ids", workspace, packet: {}
+  });
+  delete process.env.FAKE_CLAUDE_DUPLICATE_FINDINGS;
+  assert.equal(duplicatedFindings.status, "error");
+  assert.match(duplicatedFindings.summary, /outside the required schema/);
+
   process.env.FAKE_CLAUDE_AUTH_FAIL = "1";
   const auth = runtime.reviewerStatus();
   delete process.env.FAKE_CLAUDE_AUTH_FAIL;
@@ -146,6 +175,7 @@ try {
   delete process.env.CLAUDECODE;
   delete process.env.FAKE_CLAUDE_AUTH_FAIL;
   delete process.env.FAKE_CLAUDE_INVALID;
+  delete process.env.FAKE_CLAUDE_DUPLICATE;
   delete process.env.FAKE_CLAUDE_SESSION;
   rmSync(root, { recursive: true, force: true });
 }

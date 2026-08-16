@@ -135,6 +135,10 @@ export function createChangeLifecycle({
       mkdirSync(join(target, "specs", "change"), { recursive: true });
       writeFileSync(spec, instantiate(join(source, "spec.md"), intent));
     }
+    // The rapid marker declared skip_specs; keeping it beside the specs/ this
+    // upgrade just materialized makes the packet self-contradictory and fails
+    // OpenSpec strict validation.
+    writeFileSync(join(target, ".openspec.yaml"), "schema: foundation-standard\n");
   }
 
   function createChange(intent, flags) {

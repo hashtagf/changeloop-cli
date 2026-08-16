@@ -91,6 +91,13 @@ export function sandboxCodePathspec(changeId, submoduleRelativePaths = []) {
   ];
 }
 
+export function nestedRepositoryPathMatcher(relativePaths = []) {
+  const roots = relativePaths
+    .map((path) => String(path || "").replace(/\/$/, ""))
+    .filter(Boolean);
+  return (path) => roots.some((root) => path === root || path.startsWith(`${root}/`));
+}
+
 // Every ancestor directory of a tracked file is itself worth descending into,
 // which a directory-level filter has to know before it reaches the file.
 export function trackedPathSet(relativePaths) {

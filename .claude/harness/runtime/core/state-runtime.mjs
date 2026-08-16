@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import {
   declaredPathMatcher, isChangePacketPath, isExcludedPath, trackedPathSet
 } from "./workspace-surface.mjs";
-import { taskBlocks, taskMetadata } from "../workflow/change-artifacts.mjs";
+import { taskBlocks, taskMetadata } from "../contracts/change-artifacts.mjs";
 
 export function createStateRuntime({
   root,

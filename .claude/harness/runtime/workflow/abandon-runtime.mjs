@@ -124,7 +124,8 @@ export function createAbandonRuntime({
 
     const journals = transactionJournals(id);
     const divergent = journals.filter((journal) =>
-      ["rolling-back", "manual-recovery"].includes(journal.status));
+      ["rolling-back", "manual-recovery", "recovering-backup", "settling-current"]
+        .includes(journal.status));
     const interrupted = journals.filter((journal) =>
       ["prepared", "applying"].includes(journal.status));
     const applied = state.workspace?.applied ? state.workspace.apply : null;

@@ -105,6 +105,9 @@ export function createLandRuntime({
       console.log(`ALREADY ARCHIVED ${id}\n  archived: ${state.archivedAt || "unknown"}`);
       return { archived: true, state };
     }
+    if (state.workspace?.recovery?.requiresSync)
+      fail(`the target was preserved during manual recovery; run 'claude-foundation sandbox sync ${
+        id}' before proving and landing again`);
     // A check reports; it does not settle. Resuming or rolling back an
     // interrupted apply replays filesystem mutations against the target, so it
     // belongs to `land recover`, under a decision reference — not to the
@@ -227,11 +230,17 @@ export function createLandRuntime({
       console.log(`NOTHING TO RECOVER ${id}\n  no unresolved apply transaction`);
       return;
     }
+    const manual = pending.some((transaction) =>
+      ["rolling-back", "manual-recovery", "recovering-backup", "settling-current"]
+        .includes(transaction.status));
+    const resolution = String(flags.resolution || "").trim();
+    if (manual && !["keep-current", "restore-backup"].includes(resolution))
+      fail("land recover requires --resolution keep-current|restore-backup for a manual recovery");
     for (const transaction of pending)
       console.log(`RECOVERING ${transaction.transactionId}\n  status: ${
         transaction.status}\n  update: ${transaction.counts.update}; create: ${
         transaction.counts.create}; delete: ${transaction.counts.delete}`);
-    recoverPendingApply(id, loadRuntime(id));
+    recoverPendingApply(id, loadRuntime(id), { resolution, decisionRef });
     const remaining = pendingApplyTransactions(id);
     console.log(`RECOVERED ${id}\n  settled: ${
       pending.length - remaining.length}/${pending.length}\n  next: claude-foundation land check ${id}`);
