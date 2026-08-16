@@ -6,6 +6,7 @@ import { nextCommand } from "../core/next-step.mjs";
 
 export function createChangeLifecycle({
   root,
+  policy,
   securityTerms,
   fail,
   pathInside,
@@ -25,6 +26,7 @@ export function createChangeLifecycle({
   createSandbox,
   showPacket
 }) {
+  const workflowPolicy = () => typeof policy === "function" ? policy() : policy;
   function templateDir(schema) {
     return join(root, "openspec", "schemas", schema, "templates");
   }
@@ -47,6 +49,11 @@ export function createChangeLifecycle({
     for (const field of ["changes", "nonGoals", "decisions", "risks", "tasks", "claims", "specs"])
       if (!Array.isArray(draft[field]) || draft[field].length === 0)
         fail(`draft requires a non-empty '${field}' array`);
+    if (workflowPolicy().workflow.grounding === "required" &&
+        draft.grounding?.version !== 2)
+      fail("draft requires grounding.version 2 from the single Decision Sheet");
+    if (draft.externalOperations !== undefined && !Array.isArray(draft.externalOperations))
+      fail("draft externalOperations must be an array");
     return draft;
   }
 
@@ -72,6 +79,8 @@ export function createChangeLifecycle({
         `| Risk | Mitigation | Evidence owner |\n|---|---|---|\n` +
         draft.risks.map((risk) =>
           `| ${risk.risk} | ${risk.mitigation} | ${risk.owner} |`).join("\n") + "\n");
+    if (state.groundingRequired && draft.grounding)
+      writeJson(join(changePath(id), "grounding.yaml"), draft.grounding);
     writeFileSync(join(changePath(id), "tasks.md"),
       `# Tasks\n\n> This is the sole implementation ledger.\n\n` +
       draft.tasks.map((task, index) => {
@@ -88,6 +97,10 @@ export function createChangeLifecycle({
     contract.claims = draft.claims;
     writeJson(join(changePath(id), "evidence.yaml"), contract);
     if (draft.execution) writeJson(join(changePath(id), "execution.yaml"), draft.execution);
+    writeJson(join(changePath(id), "handoffs.yaml"), {
+      version: 1,
+      operations: draft.externalOperations || []
+    });
     if (draft.repositories) writeJson(join(changePath(id), "repositories.yaml"), {
       version: 1,
       repositories: draft.repositories
@@ -114,6 +127,9 @@ export function createChangeLifecycle({
     const design = join(target, "design.md");
     if (!existsSync(design))
       writeFileSync(design, instantiate(join(source, "design.md"), intent));
+    const grounding = join(target, "grounding.yaml");
+    if (workflowPolicy().workflow.grounding === "required" && !existsSync(grounding))
+      writeFileSync(grounding, instantiate(join(source, "grounding.yaml"), intent));
     const spec = join(target, "specs", "change", "spec.md");
     if (!existsSync(spec)) {
       mkdirSync(join(target, "specs", "change"), { recursive: true });
@@ -132,7 +148,8 @@ export function createChangeLifecycle({
     const residue = [
       join(root, ".foundation", "runtime", `${id}.json`),
       join(root, ".foundation", "receipts", id),
-      join(root, ".foundation", "evidence", id)
+      join(root, ".foundation", "evidence", id),
+      join(root, ".foundation", "handoffs", id)
     ].filter((path) => existsSync(path));
     if (residue.length)
       fail(`change id '${id}' was used before and its recorded history remains ` +
@@ -150,8 +167,13 @@ export function createChangeLifecycle({
     writeFileSync(join(target, ".openspec.yaml"), schema === "foundation-rapid"
       ? `schema: ${schema}\nskip_specs: true\n`
       : `schema: ${schema}\n`);
-    for (const name of ["proposal.md", "tasks.md", "evidence.yaml", "execution.yaml", "repositories.yaml"])
+    for (const name of [
+      "proposal.md", "tasks.md", "evidence.yaml", "execution.yaml",
+      "repositories.yaml", "handoffs.yaml"
+    ])
       writeFileSync(join(target, name), instantiate(join(source, name), intent));
+    if (workflowPolicy().workflow.grounding === "required")
+      writeFileSync(join(target, "grounding.yaml"), instantiate(join(source, "grounding.yaml"), intent));
     if (schema === "foundation-standard") {
       writeFileSync(join(target, "design.md"), instantiate(join(source, "design.md"), intent));
       mkdirSync(join(target, "specs", "change"), { recursive: true });
@@ -159,6 +181,9 @@ export function createChangeLifecycle({
     }
     const state = {
       version: 2, id, intent, schema, status: "change", ambiguity: "clear",
+      groundingRequired: workflowPolicy().workflow.grounding === "required",
+      groundingVersion: workflowPolicy().workflow.grounding === "required" ? 2 : null,
+      externalOperationsVersion: 1,
       revision: 0, contractRevision: 0, executionRevision: 0,
       impact: schema === "foundation-rapid" ? "low" : null,
       coupling: schema === "foundation-rapid" ? "isolated" : null,
@@ -212,12 +237,108 @@ export function createChangeLifecycle({
           }
         },
         services: {}
+      },
+      externalOperations: [],
+      grounding: {
+        version: 2,
+        decisionBatch: {
+          status: "locked",
+          source: "user-batch",
+          reference: "replace-with-durable-decision-reference",
+          mode: "single-batch",
+          lockedAt: "replace-with-ISO-8601-timestamp",
+          decisions: [{
+            id: "replace-with-stable-decision-id",
+            question: "replace-with-material-question-or-default-reviewed",
+            answer: "replace-with-locked-answer",
+            source: "user-batch"
+          }]
+        },
+        risk: {
+          tier: "low",
+          classes: ["none"],
+          rationale: "Low-impact isolated draft with no discovered operated boundary"
+        },
+        productionEntry: {
+          status: "applicable",
+          sourceReason: "The focused production entry must be named before start",
+          paths: ["replace-with-production-entry"]
+        },
+        realWire: {
+          status: "not-applicable",
+          sourceReason: "No wire boundary is present in the isolated draft",
+          contracts: []
+        },
+        activationSemantics: {
+          status: "not-applicable",
+          sourceReason: "The isolated draft activates no dormant legacy path",
+          activatedPaths: [],
+          failureSemanticChanges: []
+        },
+        serviceInteractions: {
+          status: "not-applicable",
+          sourceReason: "The isolated draft has no cross-service interaction",
+          rows: []
+        },
+        observability: {
+          status: "not-applicable",
+          sourceReason: "The isolated draft creates no operated runtime boundary",
+          rows: []
+        },
+        readSet: [{
+          repository: "root",
+          path: "replace-with-relevant-file",
+          role: "requirement",
+          mode: "full",
+          sha256: "replace-with-file-sha256"
+        }],
+        claims: [{
+          id: "replace-with-stable-claim-id",
+          productionPath: [{
+            repository: "root",
+            path: "replace-with-entrypoint-or-observable-surface"
+          }],
+          failurePaths: [{
+            repository: "root",
+            path: "replace-with-path-containing-failure-branch",
+            failure: "replace-with-branch-input-class-or-dependency-stage"
+          }],
+          evidenceClass: ["test"],
+          testDoubleGap: "none"
+        }],
+        criticalCases: [],
+        mutants: [],
+        derivedFacts: []
       }
     };
   }
 
   function resolveChange(id, flags) {
     const state = loadRuntime(id);
+    if (flags["reopen-grounding"]) {
+      const decisionRef = String(flags["decision-ref"] || "").trim();
+      const reason = String(flags["reopen-reason"] || "").trim();
+      if (!decisionRef || !reason)
+        fail("--reopen-grounding requires --decision-ref and --reopen-reason");
+      if (state.groundingReopenPending)
+        fail("grounding already has an open revision; complete and validate that batch first");
+      if (!state.groundingDigest)
+        fail("--reopen-grounding requires a currently locked grounding ledger");
+      if ((state.groundingReopens || []).some((row) => row.decisionRef === decisionRef))
+        fail("--decision-ref was already used for a grounding reopen");
+      state.groundingReopenPending = {
+        version: 1,
+        decisionRef,
+        reason,
+        priorDigest: state.groundingDigest,
+        priorLockedAt: state.groundingLockedAt || null,
+        openedAt: now()
+      };
+      delete state.groundingDigest;
+      delete state.groundingLockedAt;
+      state.contractRevision = Number(state.contractRevision || 0) + 1;
+    } else if (flags["decision-ref"] || flags["reopen-reason"])
+      fail("--decision-ref and --reopen-reason require --reopen-grounding");
     // The only consumer gates on strict equality with "unclear", so an
     // unvalidated value silently defeats the /investigate blocker it feeds.
     if (flags.ambiguity && !["clear", "unclear"].includes(flags.ambiguity))
@@ -302,6 +423,7 @@ export function createChangeLifecycle({
          state.acceptance?.required)) {
       state.schema = "foundation-standard";
       state.upgradedFrom = "foundation-rapid";
+      state.groundingRequired = workflowPolicy().workflow.grounding === "required";
       upgraded = true;
       // The rapid packet has no design.md and no specs/, which the standard
       // schema requires. Leaving them absent made `validate` refuse a change
@@ -352,6 +474,9 @@ export function createChangeLifecycle({
     const rapid = impact === "low" && coupling === "isolated" &&
       securityTriggers.filter((trigger) => trigger.toLowerCase() !== "none").length === 0 &&
       !draft.reviewRequired && !draft.acceptance?.required;
+    if (workflowPolicy().workflow.grounding === "required" &&
+        (!draft.grounding || draft.grounding.version !== 2))
+      fail("start draft requires grounding.version 2 after the initial Decision Sheet");
     const id = createChange(draft.intent, { rapid, draft: draftPath, id: draft.id });
     resolveChange(id, {
       impact,
@@ -364,7 +489,7 @@ export function createChangeLifecycle({
       "acceptance-reason": draft.acceptance?.reason || undefined,
       "acceptance-claims": (draft.acceptance?.claimIds || []).join(",") || undefined
     });
-    if (loadRuntime(id).schema === "foundation-standard") materializeDraft(id, draft);
+    materializeDraft(id, draft);
     validate(id, "root", { quiet: true });
     createSandbox(id);
     showPacket(id, { phase: "build" });

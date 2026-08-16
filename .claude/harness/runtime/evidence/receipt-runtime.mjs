@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 // Adapters the harness itself executes. A receipt may only claim one of these
 // when this process ran the command; naming one on the command line is a claim
@@ -13,6 +13,57 @@ const EXECUTING_ADAPTERS = new Set([
 // URI-shaped token with a scheme, or a path that exists in the workspace.
 const REFERENCE_URI = /^[a-zA-Z][a-zA-Z0-9+.-]*:[^\s]*$/;
 
+export function groundedRepairBinding(grounding, finding) {
+  if (!grounding || grounding.version !== 2) return null;
+  const rawPath = String(finding?.path || "")
+    .replaceAll("\\", "/").replace(/^\.\//, "");
+  if (!rawPath) return null;
+  const repositoryIds = new Set((grounding.claims || []).flatMap((claim) =>
+    [...(claim.productionPath || []), ...(claim.failurePaths || [])]
+      .map((row) => row.repository || "root")));
+  const separator = rawPath.indexOf("/");
+  const prefix = separator > 0 ? rawPath.slice(0, separator) : "";
+  const repository = repositoryIds.has(prefix) ? prefix : "root";
+  const path = repository === prefix ? rawPath.slice(separator + 1) : rawPath;
+  const claimIds = (grounding.claims || []).filter((claim) =>
+    [...(claim.productionPath || []), ...(claim.failurePaths || [])].some((row) =>
+      (row.repository || "root") === repository && row.path === path))
+    .map((claim) => claim.id).filter(Boolean).sort();
+  const claimSet = new Set(claimIds);
+  const verificationCaseIds = (grounding.criticalCases || []).filter((row) =>
+    (row.claimIds || []).some((claimId) => claimSet.has(claimId)))
+    .map((row) => row.id).filter(Boolean).sort();
+  return claimIds.length && verificationCaseIds.length
+    ? { claimIds, verificationCaseIds, source: "grounding-v2-path" } : null;
+}
+
+export function repairClosureFindings(findings, resolveBinding = () => null) {
+  return (findings || []).map((finding) => {
+    const declaredClaims = [...new Set(finding.claimIds || [])].filter(Boolean).sort();
+    const declaredCases = [...new Set(finding.verificationCaseIds || [])]
+      .filter(Boolean).sort();
+    if (declaredClaims.length && declaredCases.length)
+      return {
+        ...finding, claimIds: declaredClaims,
+        verificationCaseIds: declaredCases, bindingSource: "reviewer"
+      };
+    const derived = resolveBinding(finding) || {};
+    return {
+      ...finding,
+      claimIds: [...new Set(derived.claimIds || [])].filter(Boolean).sort(),
+      verificationCaseIds: [...new Set(derived.verificationCaseIds || [])]
+        .filter(Boolean).sort(),
+      bindingSource: derived.source || null
+    };
+  });
+}
+
+export function approvedGroundingRevision(state, currentContractFingerprint) {
+  return [...(state?.groundingReopens || [])].reverse().find((row) =>
+    row.completedAt && row.newDigest === state.groundingDigest &&
+    row.contractFingerprint === currentContractFingerprint) || null;
+}
+
 export function createReceiptRuntime({
   ROOT, LOGS, PROVIDERS, INPUT_MODES, providerWorkspace,
   ADAPTER_PROTOCOL_VERSION, PROVIDER_PROTOCOL_VERSION,
@@ -24,7 +75,9 @@ export function createReceiptRuntime({
   providerInputIdentity, contractFingerprint, executionFingerprint, stableHash,
   adapterFingerprint, environmentDescriptor, reviewPolicy, subjectProvenance,
   reviewProvenanceResult, readJson, flagValues, reviewHistoryState,
-  reserveReviewAttempt, reviewReceiptBinding, die
+  reserveReviewAttempt, reviewAttemptByDigest, reviewAttemptIsValid,
+  reviewReceiptBinding, recordRepairClosureAttempt, deliveredAiAttempts,
+  groundingForReview = () => null, foundationPolicy, die
 }) {
   // What a provider is bound to decides what re-running proof will cost, and
   // the plan is where that is cheap to learn. `stale` alone told an operator to
@@ -257,10 +310,17 @@ export function createReceiptRuntime({
       startedAt: flags.started || now(), finishedAt: now()
     };
     if (capability === "review") {
+      // Internal callers may grandfather a request created before the dispatch
+      // protocol existed. CLI flags cannot select this option, so a new review
+      // cannot downgrade itself to the legacy reserve-on-record behavior.
+      const reviewCircuit = options.reviewCircuit ||
+        foundationPolicy().workflow.reviewCircuit;
       const policy = reviewPolicy(id);
       const reviewerType = String(flags["reviewer-type"] ||
         (flags.reviewer ? "human" : "")).toLowerCase();
-      if (!['ai', 'human'].includes(reviewerType))
+      const deterministicClosure = options.repairClosure || null;
+      if (!['ai', 'human'].includes(reviewerType) &&
+          !(reviewerType === "deterministic" && deterministicClosure))
         die("review receipt requires --reviewer-type ai|human");
       const reviewerIdentity = String(
         flags["reviewer-identity"] || flags.reviewer || ""
@@ -275,16 +335,21 @@ export function createReceiptRuntime({
         sessionId: String(flags["reviewer-session"] || "").trim() || null
       };
       const subjects = subjectProvenance(flags);
+      const infrastructureError = status === "error";
       if (reviewerType === "ai" && [
-        reviewer.providerFamily, reviewer.modelFamily, reviewer.modelId, reviewer.sessionId
+        reviewer.providerFamily, reviewer.modelFamily, reviewer.modelId
       ].some((value) => !value))
-        die("AI review requires reviewer provider/model family, model ID, and session");
+        die("AI review requires reviewer provider/model family and model ID");
+      if (reviewerType === "ai" && !reviewer.sessionId && !infrastructureError)
+        die("AI review requires the actual reviewer session unless the recorded status is an infrastructure error");
       if (!subjects.length)
         die("review requires implementation provenance: --subject-actor on " +
           "'evidence record', or a \"subject-actor\" field under \"evidence\" in " +
           "the response file when recording through 'authority record', which " +
           "takes no provenance flags of its own");
-      const provenance = reviewProvenanceResult({ reviewer, subjects });
+      const provenance = reviewProvenanceResult({ reviewer, subjects }, {
+        allowMissingAiSession: infrastructureError
+      });
       if (!provenance.complete)
         die("review requires complete structured reviewer and subject provenance");
       const { independent, diverse } = provenance;
@@ -293,7 +358,7 @@ export function createReceiptRuntime({
       // the predicate would make a self-review's own receipt claim an
       // independence it did not have, which is the record a later reader needs
       // most.
-      if (!independent && policy.independence !== "self")
+      if (!infrastructureError && !independent && policy.independence !== "self")
         die("reviewer must use an identity and session independent of implementation");
       if (status === "pass" && policy.diversity === "required" && !diverse)
         die("review policy requires a different provider/model family or a human reviewer");
@@ -310,28 +375,68 @@ export function createReceiptRuntime({
         die("review finding counts must be non-negative integers");
       if (status === "pass" && blockers > 0)
         die("passing review cannot contain unresolved blockers");
+      const findingRows = Array.isArray(flags.findings) ? flags.findings.map((finding) => ({
+        id: String(finding?.id || "").trim(),
+        severity: String(finding?.severity || "").toLowerCase(),
+        path: String(finding?.path || ""),
+        line: finding?.line === null || finding?.line === undefined
+          ? null : Number(finding.line),
+        message: String(finding?.message || "").trim(),
+        claimIds: [...new Set((finding?.claimIds || []).map((value) =>
+          String(value).trim()).filter(Boolean))].sort(),
+        verificationCaseIds: [...new Set((finding?.verificationCaseIds || [])
+          .map((value) => String(value).trim()).filter(Boolean))].sort()
+      })) : [];
+      if (findingRows.some((finding) => !finding.id || !finding.message ||
+          !["blocker", "major", "minor"].includes(finding.severity)) ||
+          new Set(findingRows.map((finding) => finding.id)).size !== findingRows.length)
+        die("review findings must have unique IDs, blocker|major|minor severity, and messages");
+      const unresolvedIds = findingRows.filter((finding) =>
+        ["blocker", "major"].includes(finding.severity)).map((finding) => finding.id).sort();
+      const verifiedFindingIds = [...new Set((Array.isArray(flags.verifiedFindingIds)
+        ? flags.verifiedFindingIds : []).map((value) => String(value).trim())
+        .filter(Boolean))].sort();
       const prior = existsSync(receiptPath(id, provider))
         ? readJson(receiptPath(id, provider), {}) : null;
       const scopePaths = [...new Set(flagValues(flags, "scope-path"))].sort();
       const history = reviewHistoryState(id);
-      const nextAttempt = Number(history.totalAttempts || 0) + 1;
-      if (nextAttempt >= 2 && reviewerType === "ai" && scopePaths.length === 0)
-        die("AI review round 2 requires at least one --scope-path");
+      const dispatched = reviewCircuit === "full-delta"
+        ? reviewAttemptByDigest(id, String(flags["review-attempt"] || ""))
+        : null;
+      if (reviewCircuit === "full-delta" && !dispatched)
+        die("review evidence requires an authority dispatch attempt; run 'authority dispatch' before recording it");
+      const nextAttempt = dispatched?.attempt || Number(history.totalAttempts || 0) + 1;
+      const scopeMode = dispatched?.scope?.mode ||
+        (nextAttempt === 1 || scopePaths.length === 0 ? "full" : "changed");
+      const baseAttemptDigest = dispatched?.scope?.baseAttemptDigest || null;
+      if ((findingRows.length > 0 || verifiedFindingIds.length > 0 ||
+          scopeMode === "delta") &&
+          (blockers !== unresolvedIds.length || verified !== verifiedFindingIds.length))
+        die("review finding counts must equal the supplied finding and verifiedFindingIds rows");
+      if (scopeMode === "delta" && reviewerType === "ai" && scopePaths.length === 0)
+        die("AI delta review requires at least one scope-path in the response evidence");
       receipt.reviewProtocolVersion = REVIEW_PROTOCOL_VERSION;
       receipt.review = {
         round: nextAttempt,
+        requestId: dispatched?.requestId || null,
         reviewer,
         subjects,
         policy: { ...policy, independent, diverse },
         scope: {
-          mode: nextAttempt === 1 || scopePaths.length === 0 ? "full" : "changed",
+          mode: scopeMode,
+          baseAttemptDigest,
           paths: scopePaths,
+          dispatchDigest: dispatched?.scope?.digest || null,
           digest: stableHash({ priorWorkspaceHash: prior?.workspaceHash || null, workspaceHash, paths: scopePaths })
         },
+        packetDigest: dispatched?.packetDigest || null,
         findings: {
           verified,
           unresolvedBlockers: blockers,
-          reference: references[0] || null
+          reference: references[0] || null,
+          items: findingRows,
+          verifiedIds: verifiedFindingIds,
+          unresolvedIds
         },
         supersedes: prior ? {
           receiptSha256: stableHash(prior),
@@ -340,10 +445,13 @@ export function createReceiptRuntime({
           round: Number(prior?.review?.round || 0) || null
         } : null
       };
-      const attempt = reserveReviewAttempt(id, reviewerType, {
+      if (deterministicClosure) receipt.review.repairClosure = deterministicClosure;
+      const attempt = dispatched || reserveReviewAttempt(id, reviewerType, {
         workspaceHash, status, reviewBinding: reviewReceiptBinding(receipt)
       });
       receipt.review.attemptDigest = attempt.digest;
+      if (!reviewAttemptIsValid(receipt, attempt))
+        die("review evidence does not match its dispatched reviewer, workspace, request, or scope");
     }
     if (capability === "acceptance") {
       const acceptor = String(flags.acceptor || "").trim();
@@ -399,8 +507,189 @@ export function createReceiptRuntime({
       die("passing mutation receipt requires --classification behavioral-kill|test-failure; crash is not a kill");
     if (capability === "mutation") receipt.classification = flags.classification || null;
     writeJson(receiptPath(id, provider), receipt);
-    console.log(`RECEIPT ${id}/${provider}: ${status}`);
+    if (!options.quiet) console.log(`RECEIPT ${id}/${provider}: ${status}`);
   }
 
-  return { proofPlan, rebindReusableReceipt, recordReceipt };
+  function recordDeterministicReviewClosure(id, provider, workspaceHash) {
+    const config = providerConfig(id, provider);
+    if (providerCapability(provider, config) !== "review") return null;
+    const delivered = deliveredAiAttempts(id);
+    const source = delivered.at(-1);
+    if (delivered.length < 2 || source?.resultStatus !== "fail" ||
+        source.scope?.mode !== "delta") return null;
+    const priorPath = receiptPath(id, provider);
+    const prior = existsSync(priorPath) ? readJson(priorPath, {}) : null;
+    const priorClosure = prior?.review?.repairClosure || null;
+    const directlyBound = prior?.status === "fail" &&
+      prior?.review?.attemptDigest === source.digest;
+    const priorClosureAttempt = priorClosure && prior?.review?.attemptDigest
+      ? reviewAttemptByDigest(id, prior.review.attemptDigest) : null;
+    const closureBound = prior?.status === "pass" &&
+      priorClosure?.sourceAttemptDigest === source.digest &&
+      priorClosureAttempt && reviewAttemptIsValid(prior, priorClosureAttempt);
+    if (!directlyBound && !closureBound)
+      return {
+        closed: false,
+        route: "CONTRACT_DECISION_REQUIRED",
+        reason: "Neither the failed final AI delta nor a valid deterministic closure of it is currently bound to this change."
+      };
+    const currentContractFingerprint = contractFingerprint(id);
+    const contractChanged = prior.contractFingerprint !== currentContractFingerprint;
+    const state = loadRuntime(id);
+    const approvedRevision = approvedGroundingRevision(
+      state, currentContractFingerprint);
+    if (contractChanged && !approvedRevision)
+      return {
+        closed: false,
+        route: "CONTRACT_DECISION_REQUIRED",
+        reason: "The agreement changed after the final AI delta without a completed locked Decision Sheet revision."
+      };
+    if (source.workspaceHash === workspaceHash)
+      return {
+        closed: false,
+        route: "AUTO_REPAIR",
+        reason: "The final AI delta still describes the current workspace; repair its blocker/major findings before advancing."
+      };
+    const blockers = repairClosureFindings(
+      (source.findings || []).filter((finding) =>
+        ["blocker", "major"].includes(finding.severity)),
+      (finding) => groundedRepairBinding(groundingForReview(id), finding));
+    if (!blockers.length || blockers.some((finding) =>
+      !String(finding.path || "").trim() ||
+      !finding.claimIds?.length || !finding.verificationCaseIds?.length))
+      return {
+        closed: false,
+        route: "AUTO_REPAIR",
+        reason: "Final blocker/major findings must name a path, claimIds, and verificationCaseIds before deterministic closure is possible."
+      };
+
+    const currentProviders = requiredProviders(id).filter((candidate) => {
+      const capability = providerCapability(candidate, providerConfig(id, candidate));
+      return capability !== "review" && capability !== "acceptance";
+    });
+    const current = currentProviders.map((candidate) => ({
+      provider: candidate,
+      config: providerConfig(id, candidate),
+      validity: receiptValidity(id, candidate, workspaceHash)
+    }));
+    const invalidProviders = current.filter((row) => row.validity.validity !== "valid");
+    if (invalidProviders.length)
+      return {
+        closed: false,
+        route: "AUTO_REPAIR",
+        reason: "Current non-review proof is not yet valid for every required provider.",
+        providers: invalidProviders.map((row) => ({
+          provider: row.provider, validity: row.validity.validity
+        }))
+      };
+
+    const bindings = [];
+    for (const finding of blockers) {
+      for (const claimId of finding.claimIds) {
+        for (const caseId of finding.verificationCaseIds) {
+          const row = current.find((candidate) =>
+            claimsForProvider(id, candidate.provider).some((claim) => claim.id === claimId) &&
+            (candidate.config?.criticalCases || []).includes(caseId));
+          if (!row)
+            return {
+              closed: false,
+              route: "AUTO_REPAIR",
+              reason: `No current executable provider binds finding '${finding.id}' to claim '${claimId}' and critical case '${caseId}'.`,
+              findingId: finding.id,
+              claimId,
+              caseId
+            };
+          const evidencePath = receiptPath(id, row.provider);
+          const evidenceReceipt = readJson(evidencePath, {});
+          bindings.push({
+            provider: row.provider,
+            findingId: finding.id,
+            claimId,
+            caseId,
+            bindingSource: finding.bindingSource,
+            receiptDigest: stableHash(evidenceReceipt),
+            receipt: relative(ROOT, evidencePath)
+          });
+        }
+      }
+    }
+    const evidenceBindings = [...new Map(bindings.sort((left, right) =>
+      `${left.provider}/${left.claimId}/${left.caseId}`.localeCompare(
+        `${right.provider}/${right.claimId}/${right.caseId}`))
+      .map((row) => [`${row.findingId}/${row.provider}/${row.claimId}/${row.caseId}`, row])).values()];
+    const scopePaths = [...new Set(blockers.map((finding) => finding.path))].sort();
+    const scopeDigest = stableHash({
+      priorWorkspaceHash: prior.workspaceHash || null,
+      workspaceHash,
+      paths: scopePaths
+    });
+    const verifiedFindingIds = blockers.map((finding) => finding.id).sort();
+    const attempt = recordRepairClosureAttempt(id, {
+      sourceAttemptDigest: source.digest,
+      workspaceHash,
+      paths: scopePaths,
+      scopeDigest,
+      verifiedFindingIds,
+      evidenceBindings
+    });
+    const repairClosure = {
+      version: 1,
+      kind: contractChanged
+        ? "deterministic-after-approved-contract-revision"
+        : "deterministic-after-bounded-ai",
+      sourceAttemptDigest: source.digest,
+      sourceWorkspaceHash: source.workspaceHash,
+      sourceContractFingerprint: priorClosure?.sourceContractFingerprint ||
+        prior.contractFingerprint,
+      contractFingerprint: currentContractFingerprint,
+      ...(approvedRevision ? {
+        approvedRevision: {
+          decisionRef: approvedRevision.decisionRef,
+          reason: approvedRevision.reason,
+          priorDigest: approvedRevision.priorDigest,
+          newDigest: approvedRevision.newDigest,
+          completedAt: approvedRevision.completedAt
+        }
+      } : {}),
+      findingBindings: blockers.map((finding) => ({
+        findingId: finding.id,
+        source: finding.bindingSource,
+        claimIds: finding.claimIds,
+        verificationCaseIds: finding.verificationCaseIds
+      })),
+      evidenceBindings
+    };
+    recordReceipt(id, provider, "pass", {
+      claims: "declared",
+      workspaceHash,
+      observed: `closed final AI finding IDs ${verifiedFindingIds.join(", ")} with current declared critical-case evidence`,
+      source: `foundation-repair-closure:${source.digest}`,
+      reference: evidenceBindings.map((row) => row.receipt),
+      "reviewer-type": "deterministic",
+      "reviewer-identity": "foundation-repair-closure",
+      "subject-provenance": (prior.review.subjects || []).map((subject) =>
+        JSON.stringify(subject)),
+      "unresolved-blockers": 0,
+      "verified-findings": verifiedFindingIds.length,
+      findings: [],
+      verifiedFindingIds,
+      "scope-path": scopePaths,
+      "review-attempt": attempt.digest
+    }, { repairClosure, quiet: true });
+    return {
+      closed: true,
+      provider,
+      sourceAttemptDigest: source.digest,
+      attemptDigest: attempt.digest,
+      findingIds: verifiedFindingIds,
+      evidenceBindings
+    };
+  }
+
+  return {
+    proofPlan,
+    rebindReusableReceipt,
+    recordReceipt,
+    recordDeterministicReviewClosure
+  };
 }

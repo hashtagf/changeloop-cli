@@ -1,29 +1,25 @@
 # Foundation agent contract
 
-```text
-Investigate? → Change → Build → Prove → Land
-```
+Use `investigate → change → build → prove → land`. OpenSpec owns intent,
+`tasks.md` implementation, `handoffs.yaml` external operations, and
+`.foundation/` state.
 
-OpenSpec is intent, `tasks.md` the ledger, `.foundation/` machine state.
+Before the first packet on a developer machine, verify Foundation 3.2.22;
+runtime API is `20`; run both doctors. On failure relay
+`.claude/harness/DEVELOPER-SETUP.md`; never improvise installation.
+Single-family: select reviewer plus `single-model` in `foundation.json`;
+retain distinct identity/session.
 
-Start Build/Prove from packets. Edit only sandbox paths. `agents plan` only for
-independent work; workers receive `packet --task`.
+Start from `packet <change> --phase <phase>`. Edit only sandbox paths; keep
+claims in `evidence.yaml`, providers in `execution.yaml`.
 
-Claims go in `evidence.yaml`, providers in `execution.yaml`. Never report an
-unproven pass.
+Harness output is a machine handoff: translate it. Use AskUserQuestion when
+available, plain text otherwise; never present only the option that makes the workflow pass.
 
-Land is explicit. Never archive, commit, push, install, or weaken evidence
-without authority.
+Front-load production, wire, activation, proof, and authority into one Decision
+Sheet. Build/Prove repair in-contract defects, recover providers, and hand off
+missing permission. Ask again only for a locked material change.
 
-## Human interaction
-
-Harness output is a machine handoff, not a user-facing answer. Translate it
-into the user's language: outcome, reason, smallest decision. Hide statuses,
-hashes, JSON, receipt grammar, placeholders, commands unless asked.
-
-Ask before authority or consequential choices — via AskUserQuestion when
-offered, plain text otherwise. Offer reject, inconclusive, or pause; recommend
-first; never present only the option that makes the workflow pass. Users answer
-naturally; the agent owns CLI and evidence metadata.
-
-`fundamentals.md` for conduct and skill routing, `orchestrator.md` for policy.
+Land requires authority; never fabricate evidence or delivery.
+Follow `.claude/rules/fundamentals.md` for conduct and skill routing, then
+`.claude/orchestrator.md`.

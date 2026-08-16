@@ -3,23 +3,21 @@ description: Produce content-bound evidence for an OpenSpec change.
 argument-hint: <change>
 ---
 
-Prove **$ARGUMENTS**.
+Prove **$ARGUMENTS** from a fresh `packet <change> --phase prove`; inherit no
+Build history. Run `proof advance`; it executes once, routes review before
+acceptance, reuses `authority request`, and never polls. Send each `handoff packet` once;
+continue without asking for cloud credentials.
 
-Start from `packet <change> --phase prove` in a fresh context, not Build
-history. Inherit only the packet. A provider with no adapter is wiring, not a
-person: run `evidence init --write`, then retry. For external review or
-acceptance, run `proof collect` and `authority request`; explain the packet and
-ask whether to inspect, send, or pause. Record real responses through
-`authority record`. Run `proof run`; reuse fresh receipts.
+Review is fresh independent work: full, then one changed delta after repair.
+Infrastructure gets one full retry. Final in-contract findings close only from
+their current claim/critical-case receipts—never AI round three or a generic
+redesign/split/pause question. Reopen one Decision Sheet only for changed
+behavior, compatibility, security, data, or rollout.
 
-Follow deterministic steps, but stop on decisions. Never expose raw readiness JSON
-or ask users for receipt syntax, provenance, or placeholders.
-Relay every blocker with the route the harness prints for it.
-Responses may pass, fail, be inconclusive, or pause.
-
-Use a fresh independent reviewer when policy requires one; under
-`review.independence: "self"` a project reviews itself — a recorded waiver, not
-a substitute. Human acceptance inspects the final workspace.
-
-Never substitute self-review for a required reviewer, fabricate provenance,
-claim an unproven pass, or Land.
+For a missing adapter use `evidence init --write`. Identity may be shared only
+with committed `review.independence: "self"`. Codex-only or Claude-Code-only
+review uses `review.diversity: "single-model"`; it still requires a fresh
+identity/session.
+Never substitute self-review for a required reviewer. Never expose raw readiness JSON.
+Relay every blocker with the route printed by the harness; stop on real
+decisions. Never fabricate provenance, claim an unproven pass, or Land.

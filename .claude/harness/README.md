@@ -114,14 +114,15 @@ claude-foundation doctor --stage prove --change <change>
 | `change validate <change>` | Validates change artifacts | After creating or revising an agreement |
 | `change audit <change> [--json]` | Audits scenario → claim → task → provider traceability | Before Build or after contract edits |
 | `proof readiness <change>` | Returns READY or a typed blocker with exact next commands | At the end of Build and start of Prove |
-| `proof run <change>` | Executes, finalizes, and audits proof as one operation | Normal Prove path |
-| `proof collect <change>` | Runs available project-owned evidence without finalizing proof | Before external review or acceptance |
+| `proof advance <change>` | Executes missing evidence once, routes external gates, and resumes unchanged waits without polling | Normal Prove path |
+| `proof run <change>` | Executes, finalizes, and audits proof as one operation | Low-level diagnostic/integration path |
+| `proof collect <change>` | Runs available project-owned evidence without finalizing proof | Low-level preparation for an explicit integration |
 | `evidence detect <change>` | Finds safe project-owned provider candidates without executing them | When `execution.yaml` is empty or incomplete |
 | `evidence init <change> [--write]` | Previews or explicitly writes high-confidence provider wiring | Before manually wiring detected test/static/browser tools |
 | `evidence doctor <change>` | Explains configured, detectable, and unresolved capabilities | Diagnosing why Prove lacks a provider |
 | `evidence verify-ci <change> <provider> <signed.json>` | Verifies a signed, workspace-bound CI envelope | Importing trusted remote CI evidence |
 | `evidence record ...` | Records evidence produced by an external system | CI, human review, or remote systems |
-| `authority request|status|record ...` | Exports bounded review/acceptance packets and validates responses | Crossing a human or remote authority boundary |
+| `authority request\|status\|dispatch\|run\|abort\|record ...` | Routes configured AI review and bound human review/acceptance responses | Crossing a human or remote authority boundary |
 | `evidence upgrade <change>` | Upgrades evidence v1 to v2 without guessing commands | Migrating an older active change |
 | `sandbox create <change>` | Creates an isolated Git worktree | Before Build |
 | `sandbox challenge <change>` | Creates a short-lived nonce and permission contract | Before a host signs unattended authority |
@@ -132,6 +133,9 @@ claude-foundation doctor --stage prove --change <change>
 | `land record <change> ...` | Binds an explicitly created child commit | After authorized commit/CI work |
 | `land resume <change>` | Rechecks the resumable Land saga | After a child PR or branch lands |
 | `land archive <change>` | Applies, verifies, archives, and safely cleans up | Completing an accepted change |
+| `handoff status <change>` | Shows external operations and Land disposition | Checking work owned by DevOps/SRE/security |
+| `handoff packet <change> [--id H00n]` | Emits one credential-free operator packet | Sending the exact operation to its named owner |
+| `handoff record <change> ...` | Records accepted/completed/rejected with actor and evidence references | Resuming Land without turning operator work into a developer task |
 
 `--unattended` is a presence-only security flag. Valued and duplicate forms are
 rejected before telemetry or workspace mutation. The host first calls `sandbox
@@ -142,10 +146,15 @@ and still fail when a host-control socket, SSH agent, or mounted cluster
 credential is exposed. Container detection alone is never treated as trust.
 
 Review and acceptance adapters are external-only. Review packets combine
-committed and dirty paths from recorded repository bases. Protocol-v2 receipts
-store reviewer/subject tuples and bind the complete receipt to a change-level
-hash-chained attempt history; deleting a receipt or renaming a provider cannot
-reset the two-AI limit. Acceptance is revalidated against explicit claims, human
+committed and dirty paths from recorded repository bases with contract
+artifacts. Protocol-v3 receipts store reviewer/subject tuples, actual AI
+sessions, finding closure, and exact scope in a change-level hash-chained
+attempt history. Low gets one full AI review; medium and high get at most one
+full AI review plus one post-correction delta. One infrastructure retry is
+separate from delivered review waves. A final in-contract blocker is closed by
+its named claims and passing critical-case receipts, not a third AI. High-risk decisions are settled
+in the initial Decision Sheet, not a mandatory human-final gate. Deleting a receipt, aborting, or
+renaming a provider cannot reset the circuit. Acceptance is revalidated against explicit claims, human
 identity, criteria, observation, provenance, durable evidence, contract reason,
 and workspace hash.
 
@@ -163,7 +172,9 @@ and dependency scope. The runtime creates child worktrees under
 `.foundation/repository-sandboxes/`, hashes them into one composite snapshot,
 and scopes provider commands and receipts with `repository`.
 
-`tasks.md` stays the only ledger. `[repo:<id>]`, `[depends:<task-ids>]`,
+`tasks.md` stays the only implementation ledger. Permission-bound operations
+live in `handoffs.yaml` and durable state under `.foundation/handoffs/`.
+`[repo:<id>]`, `[depends:<task-ids>]`,
 `[kind:<kind>]`, `[paths:<paths>]`, and `[resources:<locks>]` are compact
 execution annotations. `agents plan` uses them to prevent same-workspace or
 shared-resource concurrency and applies the model tiers in `foundation.json`.
@@ -211,6 +222,26 @@ security negative paths, and migration rollback/integrity expectations.
 Use `/build <change>`. For a Git project, the harness creates an isolated
 workspace under `.foundation/sandboxes/<change>`.
 
+A fresh sandbox has no installed dependencies — the copy path excludes them
+and a worktree is a bare checkout. Declare a setup command and the harness
+runs it once inside every newly created sandbox:
+
+```json
+// foundation.json
+{ "sandbox": { "setupCommand": "npm ci", "setupTimeoutMs": 600000 } }
+```
+
+In a multi-repository topology, each `openspec/repositories.yaml` row may
+declare its own `setupCommand`, which runs inside that repository's sandbox;
+`sandbox.setupCommand` still covers the root workspace. The outcome is
+recorded on the workspace record (`setup: ok|failed`). A failing command keeps
+the sandbox and prints a warning naming the command and workspace path — rerun
+it there manually before Prove.
+
+Keep the setup command to dependency installation. Anything it writes outside
+ignored directories counts toward the change's surface, exactly as if the
+change had written it.
+
 If Build reveals a new requirement, revise the same change and synchronize it:
 
 ```bash
@@ -248,15 +279,17 @@ ticks merge back automatically.
 
 ### 3. Prove the claims
 
-Use the atomic proof path:
+Use the resumable proof path:
 
 ```bash
-claude-foundation proof readiness <change>
-claude-foundation proof run <change>
+claude-foundation proof advance <change>
 ```
 
-Preflight, execution, finalization, and audit remain internal steps used by the
-atomic command, doctor, Land, and runtime tests; they are not agent choices.
+It executes missing providers once, routes review before acceptance, and
+returns a stable external wait without polling. Readiness, collection, direct
+authority calls, execution, finalization, and audit remain diagnostic or
+integration surfaces used by the resumable command, doctor, Land, and runtime
+tests; they are not the normal agent loop.
 
 The scheduler:
 
@@ -347,6 +380,8 @@ listings elsewhere name this file as their source rather than restating it.
 | `.foundation/evidence/` | Immutable proof bundles: manifests, receipt copies, durable artifacts, and the hash-chained review-attempt ledger |
 | `.foundation/snapshots/` | One content snapshot descriptor per proof |
 | `.foundation/logs/` | Provider logs, telemetry events, receipt-reuse and budget audits |
+| `.foundation/locks/` | Recoverable per-change proof and authority mutation leases |
+| `.foundation/reviews/` | Structured reports returned by configured AI reviewers |
 | `.foundation/sandboxes/` | The control sandbox, a Git worktree or a copy |
 | `.foundation/repository-sandboxes/` | Per-repository sandboxes for multi-repository work |
 | `.foundation/plans/` | Agent execution plans |

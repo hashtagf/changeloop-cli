@@ -16,6 +16,93 @@ const worstStatus = (...values) => values
   .reduce((worst, value) =>
     STATUS_SEVERITY[value] > STATUS_SEVERITY[worst] ? value : worst, "pass");
 
+function criticalCaseRows(report) {
+  const explicit = report?.criticalCases || report?.foundation?.criticalCases;
+  if (Array.isArray(explicit))
+    return explicit.map((row) => ({
+      id: String(row?.id || ""),
+      status: String(row?.status || "").toLowerCase()
+    })).filter((row) => row.id);
+  const rows = [];
+  for (const suite of report?.testResults || []) {
+    for (const assertion of suite?.assertionResults || []) {
+      const name = [assertion?.ancestorTitles?.join(" "), assertion?.title,
+        assertion?.fullName].filter(Boolean).join(" ");
+      rows.push({ id: name, status: String(assertion?.status || "").toLowerCase() });
+    }
+  }
+  return rows;
+}
+
+export function criticalCaseResult(report, required) {
+  if (!required.length) return { status: "pass", observations: [] };
+  const rows = criticalCaseRows(report);
+  const observations = required.map((id) => {
+    const exact = rows.find((row) => row.id === id);
+    const embedded = exact || rows.find((row) =>
+      row.id.split(/\s+/).includes(id) || row.id.includes(`[${id}]`));
+    return { id, status: embedded?.status || "missing" };
+  });
+  const passWords = new Set(["pass", "passed", "success", "ok"]);
+  return {
+    status: observations.every((row) => passWords.has(row.status)) ? "pass" : "fail",
+    observations
+  };
+}
+
+export function enforceCriticalCases(baseStatus, critical) {
+  return baseStatus === "pass" ? critical.status : baseStatus;
+}
+
+export function mutationV2Result(report, required, mutantKillers = {}) {
+  const rows = Array.isArray(report?.mutants) ? report.mutants : [];
+  const observations = required.map((id) => {
+    const row = rows.find((candidate) => candidate?.id === id);
+    const killedBy = String(row?.killedBy || row?.killerCaseId || "");
+    const expectedKiller = String(mutantKillers[id] || "");
+    const killed = row?.result === "killed" || row?.killed === true;
+    return {
+      id,
+      applied: row?.applied === true,
+      compiled: row?.compiled === true,
+      result: String(row?.result || (killed ? "killed" : "missing")),
+      killedBy,
+      expectedKiller
+    };
+  });
+  const killerCases = [...new Set(observations.map((row) => row.expectedKiller)
+    .filter(Boolean))];
+  const killerResult = criticalCaseResult(report, killerCases);
+  const passedKillers = new Set(killerResult.observations
+    .filter((row) => ["pass", "passed", "success", "ok"].includes(row.status))
+    .map((row) => row.id));
+  return {
+    status: observations.every((row) =>
+      row.applied && row.compiled && row.result === "killed" &&
+      row.expectedKiller && row.killedBy === row.expectedKiller &&
+      passedKillers.has(row.expectedKiller))
+      ? "pass" : "fail",
+    observations,
+    killerCases: killerResult.observations
+  };
+}
+
+export function mutationReceiptClassification(protocol, legacyResult, configured) {
+  // Receipt classification describes how the fault was exposed. The provider
+  // fingerprint separately binds the result protocol and its full contract.
+  return protocol === "foundation-mutation-v2"
+    ? "behavioral-kill" : legacyResult || configured;
+}
+
+export function providerExecutionEnvironment(base, additions = {}) {
+  const environment = { ...base, ...additions };
+  // The harness may itself be pinned to a control root while executing a
+  // candidate sandbox. Provider commands must discover from their own cwd;
+  // leaking this pin redirects nested fixture CLIs back into the outer project.
+  delete environment.CLAUDE_FOUNDATION_PROJECT;
+  return environment;
+}
+
 export function createAdapterRuntime({
   ROOT, LOGS, PROVIDERS,
   providerCapability, providerConfig, parseFlags, providerWorkspace,
@@ -51,7 +138,7 @@ export function createAdapterRuntime({
     const result = spawnSync(command, commandArgs, {
       cwd: providerWorkspace(id, provider), encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
-      env: { ...process.env, FOUNDATION_CHANGE_ID: id }
+      env: providerExecutionEnvironment(process.env, { FOUNDATION_CHANGE_ID: id })
     });
     const logDir = join(LOGS, id);
     mkdirSync(logDir, { recursive: true });
@@ -182,8 +269,7 @@ export function createAdapterRuntime({
     });
     if (!commandCache.has(dedupKey)) {
       const commandExecutionId = `command-${Date.now()}-${commandCache.size + 1}`;
-      const executionEnv = {
-        ...process.env,
+      const executionEnv = providerExecutionEnvironment(process.env, {
         ...envFrom,
         ...(config.env || {}),
         FOUNDATION_CHANGE_ID: id,
@@ -192,7 +278,7 @@ export function createAdapterRuntime({
         FOUNDATION_PROOF_RUN_ID: proofRunId,
         FOUNDATION_COMMAND_EXECUTION_ID: commandExecutionId,
         FOUNDATION_EXECUTION_ID: commandExecutionId
-      };
+      });
       commandCache.set(dedupKey, {
         commandExecutionId,
         result: runCommand(built.command, built.args, {
@@ -230,6 +316,11 @@ export function createAdapterRuntime({
       )
       : null;
     const report = jsonReport || tapReport;
+    // A declared critical case is an executable gate for every structured
+    // command adapter, not merely metadata for test-discovery.  Keeping this
+    // result beside report parsing prevents a green exit code from hiding a
+    // skipped/missing production-path oracle.
+    const critical = criticalCaseResult(report, config.criticalCases || []);
     const baseFlags = {
       config, adapter: config.adapter, proofRunId, commandExecutionId,
       workspaceHash: providerWorkspaceHash(
@@ -255,10 +346,14 @@ export function createAdapterRuntime({
       const testProvider = provider;
       const discoveryProvider = config.discoveryProvider || "discovery";
       const discoveryConfig = providerConfig(id, discoveryProvider) || config;
-      const testStatus = result.timedOut || result.error || readinessMissed ? "error" :
-        result.status === 0 ? "pass" : "fail";
+      const testStatus = enforceCriticalCases(
+        result.timedOut || result.error || readinessMissed ? "error" :
+          result.status !== 0 ? "fail" : "pass", critical);
       recordReceipt(id, testProvider, testStatus, {
-        ...baseFlags, claims: providerClaims(id, testProvider, config).join(",")
+        ...baseFlags, claims: providerClaims(id, testProvider, config).join(","),
+        observed: `${baseFlags.observed}; critical cases ${critical.observations.length
+          ? critical.observations.map((row) => `${row.id}=${row.status}`).join(", ")
+          : "not declared"}`
       }, { executed: true });
       const discovered = numericReportValue(report, [
         "numTotalTests", "totalTests", "tests", "testCount", "expected"
@@ -298,9 +393,10 @@ export function createAdapterRuntime({
         const missingClaims = summary
           ? requiredClaims.filter((claim) => !summary.claims.includes(claim))
           : requiredClaims;
-        const status = result.timedOut || result.error || readinessMissed ? "error" :
+        const baseStatus = result.timedOut || result.error || readinessMissed ? "error" :
           result.status !== 0 || (summary?.failed || 0) > 0 ? "fail" :
           !summary || missingClaims.length ? "inconclusive" : "pass";
+        const status = enforceCriticalCases(baseStatus, critical);
         aggregateStatus = worstStatus(aggregateStatus, status);
         recordReceipt(id, output, status, {
           ...baseFlags,
@@ -314,32 +410,47 @@ export function createAdapterRuntime({
               (missingClaims.length ? `; missing ${missingClaims.join(",")}` : "") +
               (summary.skippedClaims.length
                 ? `; claimed only by skipped tests ${summary.skippedClaims.join(",")}` : "")
-            : "Playwright JSON report unavailable"
+            : "Playwright JSON report unavailable",
+          criticalCases: critical.observations
         }, { executed: true });
       }
       return { provider, status: aggregateStatus };
     }
   
     const capability = providerCapability(provider, config);
+    const mutationV2 = capability === "mutation" &&
+        config.resultProtocol === "foundation-mutation-v2"
+      ? mutationV2Result(report || parseJsonOutput(result.stdout) || {},
+        config.requiredMutants || [], config.mutantKillers || {})
+      : null;
     const mutationResult = capability === "mutation" &&
         config.resultProtocol === "foundation-mutation-v1"
       ? mutationProtocolResult(result.stdout) : null;
-    const status = result.timedOut || result.error || readinessMissed ? "error" :
-      capability === "mutation" && config.resultProtocol === "foundation-mutation-v1"
+    const baseStatus = result.timedOut || result.error || readinessMissed ? "error" :
+      capability === "mutation" && config.resultProtocol === "foundation-mutation-v2"
+        ? mutationV2.status
+        : capability === "mutation" && config.resultProtocol === "foundation-mutation-v1"
         ? ["behavioral-kill", "test-failure"].includes(mutationResult)
           ? "pass"
           : ["crash", "timeout", "not-applied"].includes(mutationResult)
             ? "error" : "fail"
         : result.status === 0 ? "pass" : "fail";
+    const status = enforceCriticalCases(baseStatus, critical);
     recordReceipt(id, provider, status, {
       ...baseFlags,
       "input-mode": config.inputMode || null,
       "foreground-required": config.foregroundRequired ? "yes" : "no",
       "foreground-available": config.foregroundAvailable ? "yes" : "no",
-      classification: mutationResult || config.classification,
-      observed: mutationResult
+      classification: mutationReceiptClassification(
+        config.resultProtocol, mutationResult, config.classification),
+      observed: mutationV2
+        ? `mutation v2 ${mutationV2.observations.map((row) =>
+          `${row.id}=${row.result}/applied:${row.applied}/compiled:${row.compiled}/killedBy:${row.killedBy || "none"}`).join(", ")}; ${baseFlags.observed}`
+        : mutationResult
         ? `mutation result ${mutationResult}; ${baseFlags.observed}`
-        : baseFlags.observed
+        : `${baseFlags.observed}; critical cases ${critical.observations.length
+          ? critical.observations.map((row) => `${row.id}=${row.status}`).join(", ")
+          : "not declared"}`
     }, { executed: true });
     return { provider, status };
   }

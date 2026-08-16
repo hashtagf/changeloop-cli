@@ -5,21 +5,16 @@ argument-hint: <change>
 
 Land **$ARGUMENTS** explicitly.
 
-Start from `packet <change> --phase land` in a fresh context; Land reads
-recorded state.
+Start fresh from `packet <change> --phase land`. Run `land check`; it is
+read-only. Resolve interrupted apply through authorized `land recover
+--decision-ref`. For multi-repo work bind authorized child commits/CI with
+`land record`, then `land resume`; re-Prove when requested.
 
-Run `claude-foundation land check`; it mutates nothing. On an unresolved apply
-it reports update/create/delete counts; settle it with `land recover
---decision-ref` only once the user authorizes. For multi-repo work follow its
-next action, bind authorized child commits/CI with `land record`, then
-`land resume`, which stages root pointers and reports when fresh Prove is
-required.
+Check `handoff status`. Accepted tracked `post-land` work may remain only when
+its claim proves `safe-before-activation`. Unresolved `pre-land` or
+`activation-coupled` work returns `WAITING_EXTERNAL`; send its packet to the
+named owner and resume after completion evidence. Store no credentials.
 
-Run `claude-foundation land archive` only when ready. Its journal applies the
-proof, preserves unrelated edits, syncs specs, audits evidence, and cleans isolation.
-`ALREADY ARCHIVED` is success.
-
-Before authority actions, explain visible effects in ordinary language. Offer
-inspect, proceed, and pause; commands are not approval.
-
-Never commit, push, or open a PR without separate authority.
+Run `land archive` only when ready; `ALREADY ARCHIVED` is success. Explain
+visible effects before authority actions. Never commit, push, or open a PR
+without separate authority.

@@ -9,7 +9,7 @@ export function createProofRuntime({
   protocolDescriptor, contractFingerprint, executionFingerprint, proofPath,
   writeJson, readJson, pathInside, validateArtifact, instructionProvenance, now, fail
 }) {
-  function finalize(id, requestedProofRunId = null) {
+  function finalize(id, requestedProofRunId = null, options = {}) {
     const stateBefore = loadRuntime(id);
     if (stateBefore.status === "archived") fail(`change '${id}' is already archived`);
     validate(id, "active", { quiet: true });
@@ -102,7 +102,8 @@ export function createProofRuntime({
     // service logs to a future, unrelated proof.
     delete state.collectedServiceArtifacts;
     saveRuntime(state);
-    console.log(`PROVEN ${id}\n  workspace: ${hash}\n  providers: ${proof.providers.join(", ")}\n  next: /land ${id}`);
+    if (!options.quiet)
+      console.log(`PROVEN ${id}\n  workspace: ${hash}\n  providers: ${proof.providers.join(", ")}\n  next: /land ${id}`);
   }
 
   function audit(id, quiet = false) {

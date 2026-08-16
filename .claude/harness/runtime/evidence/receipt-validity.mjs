@@ -18,9 +18,10 @@ const VALIDITY_RECOVERY = {
   "contract-stale": (id) => `evidence.yaml changed after this receipt; re-run: claude-foundation proof run ${id}`,
   "provider-fingerprint-stale": (id) => `the provider's execution.yaml wiring changed; re-run: claude-foundation proof run ${id}`,
   "incomplete-claims": (id, provider) => `provider '${provider}' did not cover every claim declared for it; check its claim list in execution.yaml, then re-run: claude-foundation proof run ${id}`,
-  "review-not-independent": (id) => "the reviewer shares an identity or session with the implementation. Use a fresh reviewer, or — for a project driven from one session — set \"review\": {\"independence\": \"self\"} in foundation.json, which records the waiver on the receipt",
+  "review-not-independent": () => "the reviewer shares an identity or session with the implementation. Use a fresh configured reviewer; same-family Codex-only or Claude-Code-only review needs only review.diversity='single-model'. Set review.independence='self' only for a deliberate same-identity/session waiver, which is recorded on the receipt",
   "review-not-diverse": () => "the reviewer shares a provider and model family with the implementation. Use a human or a different model family, or set \"review\": {\"diversity\": \"single-model\"} in foundation.json",
   "review-blockers": (id) => `the review recorded unresolved blockers; resolve them, then request a new review: claude-foundation authority request ${id} --type review`,
+  "review-repair-evidence-stale": (id) => `the deterministic final-review closure no longer matches its current critical-case evidence; run: claude-foundation proof advance ${id}`,
   "acceptance-invalid": (id) => `acceptance needs a named human, an "accept" decision, and criteria matching the current scope. Either record a real acceptance, or withdraw the requirement: claude-foundation change resolve ${id} --acceptance-not-required (a claim that declares capability 'acceptance' must drop it in evidence.yaml instead)`,
   "external-observation-missing": () => "a passing external receipt must state what was observed (--observed)",
   "external-provenance-missing": () => "a passing external receipt must state its source (--source or --reviewer)",
@@ -58,13 +59,28 @@ export function createReceiptValidity({
     if (value.contractFingerprint !== contractFingerprint(id))
       return { provider, validity: "contract-stale", status: value.status };
     const config = providerConfig(id, provider);
+    const expectedWorkspaceHash = providerWorkspaceHash(id, provider, hash);
+    const expectedInputs = providerInputIdentity(
+      id, provider, config, expectedWorkspaceHash);
+    let reusableInputs = false;
+    if (value.workspaceHash !== expectedWorkspaceHash) {
+      if (expectedInputs.mode === "declared" &&
+          value.inputIdentity?.mode === "declared" &&
+          value.inputIdentity.fingerprint === expectedInputs.fingerprint)
+        reusableInputs = true;
+      else return { provider, validity: "stale", status: value.status };
+    }
     const capability = providerCapability(provider, config);
     if (capability === "review") {
       if (String(value.reviewProtocolVersion || "") !== reviewProtocolVersion)
         return { provider, validity: "review-version-stale", status: value.status };
-      const provenance = reviewProvenanceResult(value.review);
+      const infrastructureError = value.status === "error";
+      const provenance = reviewProvenanceResult(value.review, {
+        allowMissingAiSession: infrastructureError
+      });
       if (!provenance.complete ||
-          (!provenance.independent && reviewPolicy(id).independence !== "self"))
+          (!infrastructureError && !provenance.independent &&
+            reviewPolicy(id).independence !== "self"))
         return { provider, validity: "review-not-independent", status: value.status };
       const attemptDigest = String(value.review?.attemptDigest || "");
       const attemptDir = join(evidenceVault, id, "review-attempts");
@@ -75,9 +91,46 @@ export function createReceiptValidity({
       const attempt = reviewAttemptByDigest(id, attemptDigest);
       if (!reviewAttemptIsValid(value, attempt))
         return { provider, validity: "review-attempt-history-invalid", status: value.status };
-      if (reviewPolicy(id).diversity === "required" && !provenance.diverse)
+      const repairClosure = value.review?.repairClosure;
+      if (repairClosure) {
+        const bindings = repairClosure.evidenceBindings;
+        const bindingValid = Array.isArray(bindings) && bindings.length > 0 &&
+          bindings.every((binding) => {
+            const boundProvider = String(binding?.provider || "");
+            const boundConfig = providerConfig(id, boundProvider);
+            const boundCapability = providerCapability(boundProvider, boundConfig);
+            const path = receiptPath(id, boundProvider);
+            if (!boundProvider || ["review", "acceptance"].includes(boundCapability) ||
+                !existsSync(path) ||
+                !(boundConfig?.criticalCases || []).includes(binding.caseId) ||
+                !claimsForProvider(id, boundProvider).some((claim) =>
+                  claim.id === binding.claimId)) return false;
+            const bound = readJson(path, {});
+            const expectedHash = providerWorkspaceHash(id, boundProvider, hash);
+            const expectedInputs = providerInputIdentity(
+              id, boundProvider, boundConfig, expectedHash);
+            return stableHash(bound) === binding.receiptDigest &&
+              bound.status === "pass" &&
+              bound.workspaceHash === expectedHash &&
+              bound.contractFingerprint === contractFingerprint(id) &&
+              String(bound.providerProtocolVersion || "") === providerProtocolVersion &&
+              String(bound.adapterProtocolVersion || "") === adapterProtocolVersion &&
+              bound.providerFingerprint === adapterFingerprint(id, boundProvider, boundConfig) &&
+              bound.inputIdentity?.fingerprint === expectedInputs.fingerprint &&
+              Array.isArray(bound.claims) && bound.claims.includes(binding.claimId) &&
+              (bound.artifacts || []).every((artifact) =>
+                artifact.required === false || validateArtifact(artifact)) &&
+              (bound.execution !== "harness" || (bound.artifacts || [])
+                .some((artifact) => artifact.type === "command-log"));
+          });
+        if (!bindingValid)
+          return { provider, validity: "review-repair-evidence-stale", status: value.status };
+      }
+      if (value.status === "pass" &&
+          reviewPolicy(id).diversity === "required" && !provenance.diverse)
         return { provider, validity: "review-not-diverse", status: value.status };
-      if (Number(value.review?.findings?.unresolvedBlockers || 0) > 0)
+      if (value.status === "pass" &&
+          Number(value.review?.findings?.unresolvedBlockers || 0) > 0)
         return { provider, validity: "review-blockers", status: value.status };
     }
     if (capability === "acceptance") {
@@ -114,16 +167,6 @@ export function createReceiptValidity({
       });
     if (value.providerFingerprint !== expectedFingerprint)
       return { provider, validity: "provider-fingerprint-stale", status: value.status };
-    const expectedWorkspaceHash = providerWorkspaceHash(id, provider, hash);
-    const expectedInputs = providerInputIdentity(id, provider, config, expectedWorkspaceHash);
-    let reusableInputs = false;
-    if (value.workspaceHash !== expectedWorkspaceHash) {
-      if (expectedInputs.mode === "declared" &&
-          value.inputIdentity?.mode === "declared" &&
-          value.inputIdentity.fingerprint === expectedInputs.fingerprint)
-        reusableInputs = true;
-      else return { provider, validity: "stale", status: value.status };
-    }
     if (value.inputIdentity?.fingerprint !== expectedInputs.fingerprint)
       return { provider, validity: "provider-inputs-stale", status: value.status };
     if (value.status !== "pass") return { provider, validity: value.status };
@@ -146,6 +189,11 @@ export function createReceiptValidity({
       if ((value.artifacts || []).length === 0 && (value.references || []).length === 0)
         return { provider, validity: "external-evidence-missing", status: value.status };
     }
+    // This is intentionally transitional rather than "valid": proof execute
+    // and proof advance first rebind the unchanged declared inputs to the new
+    // workspace hash, then recompute validity before finalize. Treating it as
+    // valid here would let Land accept the old receipt without that durable,
+    // content-bound rebind.
     return reusableInputs
       ? {
         provider, validity: "reusable-inputs", status: value.status,

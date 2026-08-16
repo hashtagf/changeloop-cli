@@ -7,12 +7,15 @@ export async function routeRuntimeCommand(command, values, api) {
     foundationPolicy, showAgentPlan, showAgentTask, acquireAgentLease,
     releaseAgentLease, prepareClaudeTelemetry, recordPhaseContext, showPacket,
     showMetrics, execObserved, continueBudget, doctor, validate, showTraceabilityAudit,
-    relevantHash, providerWorkspaceHash, proofPlan, proofReadiness, proofRun, proofCollect,
-    proofPreflight, proofExecute, proofAudit, showEvidenceDetection,
+    relevantHash, providerWorkspaceHash, proofPlan, proofReadiness, proofAdvance,
+    proofRun, proofCollect,
+    proofPreflight, proofExecute, proofAudit, proofFinalize, showEvidenceDetection,
     initializeEvidence, showEvidenceDoctor, recordVerifiedCi, requestAuthority,
-    showAuthorityStatus, recordAuthority, upgradeEvidence, recordReceipt,
+    dispatchAuthority, runAuthorityReviewer, abortAuthority, showAuthorityStatus, recordAuthority,
+    upgradeEvidence, recordReceipt,
     runProvider, prove, landCheck, recoverLand, showLandPlan, recordRepositoryLand,
     stageRootPointers, resumeLand, createAttestationChallenge,
+    showHandoffStatus, showHandoffPacket, recordHandoff,
     showSandboxInspection, createSandbox, syncSandbox, applySandbox, archive,
     recordEvent, syncClaudeTelemetry, importTelemetry, importHostExecution, migrate, usage,
     describeCommand, runtimeApiVersion, version
@@ -42,10 +45,13 @@ export async function routeRuntimeCommand(command, values, api) {
       // flag, so `validate` kept failing with the identical message and the
       // typo was invisible.
       const { flags, rest } = parseStrictCommandFlags(values, "change resolve", {
-        boolean: ["review", "acceptance-required", "acceptance-not-required"],
+        boolean: [
+          "review", "acceptance-required", "acceptance-not-required",
+          "reopen-grounding"
+        ],
         value: [
           "impact", "coupling", "security", "size", "ambiguity", "surface",
-          "acceptance-reason", "acceptance-claims"
+          "acceptance-reason", "acceptance-claims", "decision-ref", "reopen-reason"
         ]
       });
       if (rest.length !== 1) die("change resolve requires exactly one change");
@@ -164,6 +170,13 @@ export async function routeRuntimeCommand(command, values, api) {
       : relevantHash(values[0])); break;
     case "proof-plan": proofPlan(values[0]); break;
     case "proof-readiness": proofReadiness(values[0]); break;
+    case "proof-advance": {
+      const { flags, rest } = parseStrictCommandFlags(values, "proof advance", {
+        boolean: ["retry-indeterminate"], value: ["decision-ref"]
+      });
+      if (rest.length !== 1) die("proof advance requires exactly one change");
+      await proofAdvance(rest[0], flags); break;
+    }
     case "proof-run": await proofRun(values[0]); break;
     case "proof-collect": await proofCollect(values[0]); break;
     case "proof-preflight": proofPreflight(values[0]); break;
@@ -195,36 +208,86 @@ export async function routeRuntimeCommand(command, values, api) {
     case "evidence-verify-ci": {
       if (values.length !== 3)
         die("evidence verify-ci requires <change> <provider> <signed.json>");
-      recordVerifiedCi(values[0], values[1], values[2]); break;
+      await recordVerifiedCi(values[0], values[1], values[2]); break;
     }
     case "authority-request": {
       const { flags, rest } = parseStrictCommandFlags(values, "authority request", {
         value: ["type", "repo"]
       });
       if (rest.length !== 1) die("authority request requires exactly one change");
-      requestAuthority(rest[0], flags); break;
+      await requestAuthority(rest[0], flags); break;
+    }
+    case "authority-dispatch": {
+      const { flags, rest } = parseStrictCommandFlags(values, "authority dispatch", {
+        value: [
+          "request", "scope", "base-attempt", "reviewer-type",
+          "reviewer-identity", "reviewer-provider-family",
+          "reviewer-model-family", "reviewer-model", "reviewer-session"
+        ]
+      });
+      if (rest.length !== 1) die("authority dispatch requires exactly one change");
+      await dispatchAuthority(rest[0], flags); break;
+    }
+    case "authority-run": {
+      const { flags, rest } = parseStrictCommandFlags(values, "authority run", {
+        value: [
+          "request", "reviewer", "subject-actor", "subject-session",
+          "subject-provider-family", "subject-model-family", "subject-model"
+        ]
+      });
+      if (rest.length !== 1) die("authority run requires exactly one change");
+      await runAuthorityReviewer(rest[0], flags); break;
+    }
+    case "authority-abort": {
+      const { flags, rest } = parseStrictCommandFlags(values, "authority abort", {
+        value: ["request", "reason"]
+      });
+      if (rest.length !== 1) die("authority abort requires exactly one change");
+      await abortAuthority(rest[0], flags); break;
     }
     case "authority-status": {
       const { flags, rest } = parseStrictCommandFlags(values, "authority status", {
         value: ["request"], boolean: ["template"]
       });
       if (rest.length !== 1) die("authority status requires exactly one change");
-      showAuthorityStatus(rest[0], flags); break;
+      await showAuthorityStatus(rest[0], flags); break;
     }
     case "authority-record": {
       const { flags, rest } = parseStrictCommandFlags(values, "authority record", {
         value: ["request", "response"]
       });
       if (rest.length !== 1) die("authority record requires exactly one change");
-      recordAuthority(rest[0], flags); break;
+      await recordAuthority(rest[0], flags); break;
     }
     case "evidence-upgrade": upgradeEvidence(values[0]); break;
     case "receipt": {
       const [id, provider, status, ...tail] = values;
-      const { flags } = parseFlags(tail); recordReceipt(id, provider, status, flags); break;
+      const { flags } = parseFlags(tail);
+      await recordReceipt(id, provider, status, flags); break;
     }
-    case "run-provider": runProvider(values[0], values[1], values.slice(2)); break;
-    case "prove": prove(values[0]); break;
+    case "run-provider":
+      await runProvider(values[0], values[1], values.slice(2)); break;
+    case "prove": await proofFinalize(values[0]); break;
+    case "handoff-status": {
+      const { flags, rest } = parseStrictCommandFlags(values, "handoff status");
+      if (Object.keys(flags).length || rest.length !== 1)
+        die("handoff status requires exactly one change");
+      showHandoffStatus(rest[0]); break;
+    }
+    case "handoff-packet": {
+      const { flags, rest } = parseStrictCommandFlags(values, "handoff packet", {
+        value: ["id"]
+      });
+      if (rest.length !== 1) die("handoff packet requires exactly one change");
+      showHandoffPacket(rest[0], flags); break;
+    }
+    case "handoff-record": {
+      const { flags, rest } = parseStrictCommandFlags(values, "handoff record", {
+        value: ["id", "status", "actor", "reference", "evidence", "reason"]
+      });
+      if (rest.length !== 1) die("handoff record requires exactly one change");
+      recordHandoff(rest[0], flags); break;
+    }
     case "land-check": landCheck(values[0]); break;
     case "land-recover": {
       const { flags, rest } = parseStrictCommandFlags(values, "land recover", {

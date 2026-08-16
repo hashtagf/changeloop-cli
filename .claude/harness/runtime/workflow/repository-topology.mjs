@@ -71,6 +71,9 @@ export function createRepositoryTopology({
       if (!Array.isArray(repository.dependsOn) ||
           repository.dependsOn.some((item) => typeof item !== "string"))
         fail(`repository '${repository.id}' dependsOn must be an array`);
+      if (repository.setupCommand !== undefined && repository.setupCommand !== null &&
+          (typeof repository.setupCommand !== "string" || repository.setupCommand.trim() === ""))
+        fail(`repository '${repository.id}' setupCommand must be a non-empty string`);
       const absolute = canonicalPath(resolve(root, repository.path || ""));
       if (!pathInside(root, absolute) && repository.allowOutsideRoot !== true)
         fail(`repository '${repository.id}' path escapes the control root; set allowOutsideRoot only for an explicitly trusted sibling repository`);

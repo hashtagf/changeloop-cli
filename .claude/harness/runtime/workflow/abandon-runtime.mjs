@@ -200,6 +200,7 @@ export function createAbandonRuntime({
       ["evidence", join(paths.evidenceVault, id)],
       ["transactions", join(paths.transactions, id)],
       ["plans", join(paths.plans, id)],
+      ["handoffs", join(paths.handoffs, id)],
       ["logs", join(paths.logs, id)],
       ["snapshot.json", join(paths.snapshots, `${id}.json`)]
     ]);

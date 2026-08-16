@@ -23,17 +23,30 @@
     "fast": {
       "family": "haiku",
       "fallbackTier": "standard",
-      "purposes": ["inventory", "logs", "mechanical-docs"]
+      "purposes": [
+        "inventory",
+        "logs",
+        "mechanical-docs"
+      ]
     },
     "standard": {
       "family": "sonnet",
       "fallbackTier": "deep",
-      "purposes": ["implementation", "tests", "focused-investigation"]
+      "purposes": [
+        "implementation",
+        "tests",
+        "focused-investigation"
+      ]
     },
     "deep": {
       "family": "opus",
       "fallbackTier": null,
-      "purposes": ["architecture", "security", "migration", "independent-review"]
+      "purposes": [
+        "architecture",
+        "security",
+        "migration",
+        "independent-review"
+      ]
     }
   },
   "escalation": [
@@ -48,6 +61,34 @@
   ],
   "review": {
     "independence": "self",
-    "diversity": "single-model"
+    "diversity": "single-model",
+    "defaultReviewer": "codex-sol",
+    "reviewers": {
+      "codex-sol": {
+        "adapter": "codex-cli",
+        "executable": "codex",
+        "providerFamily": "openai",
+        "modelFamily": "gpt-5.6",
+        "modelId": "gpt-5.6-sol",
+        "reasoningEffort": "high",
+        "sandbox": "read-only",
+        "ephemeral": true
+      },
+      "claude-opus": {
+        "adapter": "claude-cli",
+        "executable": "claude",
+        "providerFamily": "anthropic",
+        "modelFamily": "claude",
+        "modelId": "opus",
+        "reasoningEffort": "high",
+        "sandbox": "read-only",
+        "ephemeral": true
+      }
+    }
+  },
+  "workflow": {
+    "grounding": "required",
+    "reviewCircuit": "full-delta",
+    "reviewPolicy": "risk-tiered"
   }
 }

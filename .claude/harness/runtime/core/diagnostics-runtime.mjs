@@ -53,6 +53,7 @@ export function createDiagnosticsRuntime({
   reviewForcingCapabilities,
   reviewDiversityCapabilities,
   providerCapability,
+  reviewerStatus,
   unverifiedDrift,
   unresolvedApplyTransactions,
   parseFlags,
@@ -85,7 +86,7 @@ export function createDiagnosticsRuntime({
       checks.push({
         level: "warn",
         name: "surface-forecast-undeclared",
-        detail: `${missing.map(named).join(", ")}; declare a provider now or Prove will widen the contract and expire evidence already collected`
+        detail: `${missing.map(named).join(", ")}; advisory only and does not block Build or Prove — declare a provider before signing only when this capability must become a required proof gate`
       });
     // The review signature is bound to the contract, so a capability that
     // arrives late does not merely add a provider — it expires a signature a
@@ -223,6 +224,17 @@ export function createDiagnosticsRuntime({
       name: "model-policy",
       detail: `fast=${modelPolicy.models.fast.family}; standard=${modelPolicy.models.standard.family}; deep=${modelPolicy.models.deep.family}; max-parallel=${modelPolicy.execution.maxParallelAgents}`
     });
+    if (stage === "prove") {
+      const configuredReviewer = modelPolicy.review.defaultReviewer || null;
+      if (configuredReviewer) {
+        const reviewer = reviewerStatus(configuredReviewer);
+        checks.push({
+          level: reviewer.ok ? "ok" : "error",
+          name: `reviewer:${configuredReviewer}`,
+          detail: reviewer.detail
+        });
+      }
+    }
     checks.push({
       level: modelPolicy.execution.legacyNumericPacketBytes === undefined ? "ok" : "warn",
       name: "packet-policy",
@@ -424,7 +436,10 @@ export function createDiagnosticsRuntime({
     const settingsText = JSON.stringify(settings);
     const directMainEnabled = settingsText.includes("no-direct-main-commit.sh");
     checks.push({
-      level: "info",
+      // Disabled is a warning, not information: the Hydra incident landed both
+      // repositories' commits directly on main with nothing saying the guard
+      // existed. Warn never changes the exit code, so CI reads are unaffected.
+      level: directMainEnabled ? "info" : "warn",
       name: "no-direct-main",
       detail: directMainEnabled ? "enabled" : "disabled (opt-in policy)"
     });
@@ -493,6 +508,7 @@ Commands:
   hash <change>
   proof-plan <change>
   proof-readiness <change>
+  proof-advance <change> [--retry-indeterminate --decision-ref <ref>]
   proof-run <change>
   proof-collect <change>
   proof-preflight <change>
@@ -506,7 +522,13 @@ Commands:
   evidence-upgrade <change>
   authority-request <change> --type review|acceptance
   authority-status <change> [--request <id>]
+  authority-dispatch <change> --request <id> --scope full|delta --reviewer-type ai|human --reviewer-identity <id>
+  authority-run <change> --request <id> [--reviewer <configured-id>] [subject provenance options]
+  authority-abort <change> --request <id> --reason <reason>
   authority-record <change> --request <id> --response <file>
+  handoff-status <change>
+  handoff-packet <change> [--id <operation-id>]
+  handoff-record <change> --id <operation-id> --status accepted|completed|rejected --actor <name> --reference <ref> [--evidence <refs> --reason <why>]
   run-provider <change> <provider> -- <command> [args...]
   prove <change>
   land-check <change>

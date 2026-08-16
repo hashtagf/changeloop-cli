@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync
 } from "node:fs";
@@ -46,7 +47,7 @@ function rejectedPaths(output) {
 const VERBATIM_COPY = { dereference: false, verbatimSymlinks: true };
 
 export function createSandboxRuntime({
-  root, excludedWorkspaceDirs, sandboxCopyExcludedDirs, hostAttestation,
+  root, policy, excludedWorkspaceDirs, sandboxCopyExcludedDirs, hostAttestation,
   loadRuntime, saveRuntime,
   canonicalPath, workspaceManifest, directoryHash, fileDigest, changePath, gitHead, git,
   gitBuffer, porcelainStatusRecords,
@@ -57,6 +58,43 @@ export function createSandboxRuntime({
 }) {
   function sandboxRoot(id) {
     return join(root, ".foundation", "sandboxes", id);
+  }
+
+  // A freshly created sandbox has no installed dependencies: the copy path
+  // excludes them by name and by gitignore, and a worktree is a bare checkout.
+  // The setup command exists so the first proof run does not have to discover
+  // that. Failure keeps the sandbox — the workspace itself is correct, and
+  // destroying it over a flaky install would cost more than the one manual
+  // rerun the warning asks for.
+  function runSetupCommand(record, command, timeoutMs, cwd, label) {
+    const result = spawnSync("sh", ["-c", command], {
+      cwd, encoding: "utf8", timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024
+    });
+    const failed = Boolean(result.error) || result.status !== 0;
+    record.setup = {
+      command, status: failed ? "failed" : "ok",
+      exitCode: typeof result.status === "number" ? result.status : null
+    };
+    if (failed) {
+      const cause = result.error
+        ? String(result.error.code || result.error.message)
+        : `exit ${result.status}`;
+      const tail = `${result.stdout || ""}\n${result.stderr || ""}`
+        .trim().split("\n").filter(Boolean).slice(-5).join("\n    ");
+      console.error(`WARNING: sandbox setup command failed${
+        label ? ` for '${label}'` : ""} (${cause}): ${command}\n  workspace: ${cwd}\n  rerun it there manually before Prove${tail ? `\n    ${tail}` : ""}`);
+    }
+    return record.setup;
+  }
+
+  // Single-repository setup comes from foundation.json; a repository row in a
+  // multi-repository change carries its own `setupCommand` because each
+  // repository installs its own toolchain.
+  function runWorkspaceSetup(state) {
+    const configured = policy().sandbox || {};
+    if (!configured.setupCommand) return null;
+    return runSetupCommand(state.workspace, configured.setupCommand,
+      configured.setupTimeoutMs, state.workspace.path, null);
   }
 
   // Per-file digests of a packet directory. `sync` copies the target's packet
@@ -202,9 +240,11 @@ export function createSandboxRuntime({
     };
     state.status = "building";
     saveRuntime(state);
+    const setup = runWorkspaceSetup(state);
+    if (setup) saveRuntime(state);
     console.log(`SANDBOX ${id}\n  mode: isolated-copy\n  reason: ${reason}\n  git: ${
       carriesGit ? "carried" : "absent (target has no usable .git directory)"
-    }\n  path: ${path}`);
+    }\n  path: ${path}${setup ? `\n  setup: ${setup.status}` : ""}`);
   }
 
   function createChallenge(id) {
@@ -419,7 +459,9 @@ export function createSandboxRuntime({
     };
     state.status = "building";
     saveRuntime(state);
-    console.log(`SANDBOX ${id}\n  path: ${path}`);
+    const setup = runWorkspaceSetup(state);
+    if (setup) saveRuntime(state);
+    console.log(`SANDBOX ${id}\n  path: ${path}${setup ? `\n  setup: ${setup.status}` : ""}`);
   }
 
   function create(id, flags = {}) {
@@ -484,6 +526,16 @@ export function createSandboxRuntime({
       state.status = "change";
       saveRuntime(state);
       fail(`${error.message}; created sandboxes rolled back`);
+    }
+    // Per-repository setup runs only after every worktree exists: creation
+    // failures roll everything back above, while a failed install keeps its
+    // sandbox and is reported per repository.
+    for (const repository of repositories) {
+      const record = state.repositories[repository.id];
+      if (!repository.setupCommand || !record || record.access !== "write" ||
+          record.mode !== "worktree") continue;
+      runSetupCommand(record, repository.setupCommand,
+        policy().sandbox?.setupTimeoutMs, record.path, repository.id);
     }
     state.status = "building";
     saveRuntime(state);

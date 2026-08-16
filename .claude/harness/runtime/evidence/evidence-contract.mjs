@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { isExcludedPath } from "../core/workspace-surface.mjs";
+import { classifyReviewRisk } from "./review-routing.mjs";
 
 // Named once and read by both `reviewPolicy` and the change-time forecast. The
 // forecast has to answer "will this need a reviewer?" from the same lists, but
@@ -16,13 +17,48 @@ export const REVIEW_DIVERSITY_CAPABILITIES = Object.freeze([
   "security-static", "data-migration", "compatibility"
 ]);
 
+export function providerEvidencePolicy(config = {}) {
+  return {
+    timeoutMs: Number(config.timeoutMs || 120000),
+    minimum: config.minimum ?? null,
+    report: config.report || null,
+    reportFormat: config.reportFormat || null,
+    classification: config.classification || null,
+    resultProtocol: config.resultProtocol || null,
+    criticalCases: [...(config.criticalCases || [])].sort(),
+    requiredMutants: [...(config.requiredMutants || [])].sort(),
+    mutantKillers: Object.fromEntries(Object.entries(config.mutantKillers || {})
+      .sort(([left], [right]) => left.localeCompare(right))),
+    foregroundRequired: Boolean(config.foregroundRequired),
+    foregroundAvailable: Boolean(config.foregroundAvailable),
+    readiness: config.readiness || null
+  };
+}
+
+export function providerReceiptWriterConflicts(configuredProviders, capabilityOf) {
+  const discoveryWriters = new Map();
+  const conflicts = [];
+  for (const [provider, config] of Object.entries(configuredProviders || {})) {
+    if (config?.adapter !== "test-discovery" ||
+        capabilityOf(provider, config) !== "test") continue;
+    const output = config.discoveryProvider || "discovery";
+    if (output === provider)
+      conflicts.push({ output, producers: [provider, provider], kind: "same-provider" });
+    const prior = discoveryWriters.get(output);
+    if (prior && prior !== provider)
+      conflicts.push({ output, producers: [prior, provider], kind: "multiple-producers" });
+    discoveryWriters.set(output, provider);
+  }
+  return conflicts;
+}
+
 export function createEvidenceContract({
   ROOT, PROVIDERS, ADAPTERS, INPUT_MODES, EXCLUDED_WORKSPACE_DIRS,
   ADAPTER_PROTOCOL_VERSION, PROVIDER_PROTOCOL_VERSION,
   activeChangePath, readJson, repositoryById, selectedRepositories, providerCapability,
   canonicalPath, loadRuntime, relevantHash,
   relevantSnapshot, singleRelevantSnapshot, fileDigest, stableHash,
-  policyCapabilities, foundationPolicy, die
+  policyCapabilities, foundationPolicy, handoffContract, die
 }) {
   function rawExecution(id, dir = activeChangePath(id)) {
     const path = join(dir, "execution.yaml");
@@ -190,8 +226,28 @@ export function createEvidenceContract({
           !["json", "tap", "auto"].includes(config.reportFormat))
         die(`provider '${provider}' reportFormat must be json|tap|auto`);
       if (config.resultProtocol !== undefined &&
-          config.resultProtocol !== "foundation-mutation-v1")
-        die(`provider '${provider}' resultProtocol must be foundation-mutation-v1`);
+          !["foundation-mutation-v1", "foundation-mutation-v2"].includes(config.resultProtocol))
+        die(`provider '${provider}' resultProtocol must be foundation-mutation-v1|foundation-mutation-v2`);
+      if (config.criticalCases !== undefined &&
+          (!Array.isArray(config.criticalCases) ||
+           config.criticalCases.some((item) => typeof item !== "string" || !item.trim())))
+        die(`provider '${provider}' criticalCases must be an array of non-empty IDs`);
+      if (config.criticalCases?.length &&
+          ["external", "contract-digest"].includes(config.adapter))
+        die(`provider '${provider}' adapter '${config.adapter}' cannot execute criticalCases; use a structured command adapter`);
+      if (config.resultProtocol === "foundation-mutation-v2") {
+        if (capability !== "mutation")
+          die(`provider '${provider}' foundation-mutation-v2 requires capability 'mutation'`);
+        if (!Array.isArray(config.requiredMutants) || config.requiredMutants.length === 0 ||
+            config.requiredMutants.some((item) => typeof item !== "string" || !item.trim()) ||
+            new Set(config.requiredMutants).size !== config.requiredMutants.length)
+          die(`provider '${provider}' foundation-mutation-v2 requires unique requiredMutants IDs`);
+        if (!config.mutantKillers || typeof config.mutantKillers !== "object" ||
+            Array.isArray(config.mutantKillers) ||
+            config.requiredMutants.some((id) => !String(config.mutantKillers[id] || "").trim()) ||
+            Object.keys(config.mutantKillers).some((id) => !config.requiredMutants.includes(id)))
+          die(`provider '${provider}' foundation-mutation-v2 requires one mutantKillers mapping per required mutant`);
+      }
       if (config.dependsOn !== undefined &&
           (!Array.isArray(config.dependsOn) ||
            config.dependsOn.some((item) =>
@@ -251,6 +307,7 @@ export function createEvidenceContract({
           !INPUT_MODES.has(config.inputMode || (config.adapter === "playwright" ? "browser-automation" : "")))
         die("configured browser provider requires a valid inputMode");
       if (capability === "mutation" && config.adapter !== "external" &&
+          config.resultProtocol !== "foundation-mutation-v2" &&
           !["behavioral-kill", "test-failure"].includes(config.classification))
         die("configured mutation provider requires classification behavioral-kill|test-failure");
       if (capability === "review" && config.adapter !== "external")
@@ -279,6 +336,13 @@ export function createEvidenceContract({
           die(`provider '${provider}' config must cover every declared claim: ${missing.join(", ")}`);
       }
     }
+    const writerConflict = providerReceiptWriterConflicts(
+      configuredProviders, providerCapability)[0];
+    if (writerConflict?.kind === "same-provider")
+      die(`provider '${writerConflict.output}' cannot write both test and discovery into the same receipt identity; configure a distinct discoveryProvider`);
+    if (writerConflict)
+      die(`discovery receipt '${writerConflict.output}' has multiple writers ('${
+        writerConflict.producers.join("', '")}'); each durable provider receipt requires one producer`);
     return { ...value, providers: configuredProviders, execution: executionValue };
   }
   
@@ -480,15 +544,7 @@ export function createEvidenceContract({
         name: config.service,
         config: evidence(id).execution?.services?.[config.service] || null
       } : null,
-      executionPolicy: {
-        timeoutMs: Number(config?.timeoutMs || 120000),
-        minimum: config?.minimum ?? null,
-        report: config?.report || null,
-        classification: config?.classification || null,
-        foregroundRequired: Boolean(config?.foregroundRequired),
-        foregroundAvailable: Boolean(config?.foregroundAvailable),
-        readiness: config?.readiness || null
-      }
+      executionPolicy: providerEvidencePolicy(config)
     });
   }
   
@@ -502,6 +558,7 @@ export function createEvidenceContract({
       reviewRequired: Boolean(state.reviewRequired),
       reviewPolicy: reviewPolicy(id, state, contract),
       acceptance: resolvedAcceptance(id, state, contract),
+      externalOperations: handoffContract(id).operations,
       claims: contract.claims,
       invariants: contract.invariants || []
     });
@@ -533,6 +590,7 @@ export function createEvidenceContract({
   }
   
   function reviewPolicy(id, state = loadRuntime(id), contract = evidence(id)) {
+    const grounding = readJson(join(activeChangePath(id), "grounding.yaml"), {});
     const capabilities = new Set([
       ...(state.evidenceCapabilities || []),
       ...contract.claims.flatMap((claim) => claim.capabilities || []),
@@ -555,6 +613,9 @@ export function createEvidenceContract({
       diversityTriggers.push("critical-capability");
     if (/\b(money|payment|billing|financial|migration|irreversible)\b/.test(semantic))
       diversityTriggers.push("critical-semantics");
+    const riskRoute = classifyReviewRisk({
+      state, claims: contract.claims, capabilities, grounding, requiredTriggers
+    });
     const triggers = [...new Set([...requiredTriggers, ...diversityTriggers])].sort();
     // A project with one model available cannot satisfy diversity with a second
     // provider, so the only remaining path is a person — on every critical
@@ -576,18 +637,32 @@ export function createEvidenceContract({
     // re-fingerprint every in-flight change and invalidate evidence nobody
     // asked to re-earn. Hence each key appears only when its waiver is in force.
     const policy = foundationPolicy().review || {};
+    const riskTiered = foundationPolicy().workflow.reviewPolicy === "risk-tiered";
     const singleModel = policy.diversity === "single-model";
-    const waived = singleModel && diversityTriggers.length > 0;
+    const diversityRequired = diversityTriggers.length > 0 ||
+      (riskTiered && riskRoute.tier === "high");
+    const waived = singleModel && diversityRequired;
     if (waived) triggers.push("diversity-waived-single-model");
     const selfReview = policy.independence === "self";
     if (selfReview) triggers.push("independence-waived-self-review");
     return {
-      required: Boolean(state.reviewRequired || requiredTriggers.length || capabilities.has("review")),
+      required: riskTiered
+        ? true
+        : Boolean(state.reviewRequired || requiredTriggers.length ||
+          capabilities.has("review")),
+      ...(riskTiered ? {
+        tier: riskRoute.tier,
+        route: riskRoute.route,
+        maxAiAttempts: riskRoute.maxAiAttempts,
+        requiresHumanFinal: riskRoute.requiresHumanFinal
+      } : {}),
       independence: selfReview ? "self" : "required",
-      diversity: diversityTriggers.length > 0 && !singleModel ? "required" : "preferred",
+      diversity: diversityRequired && !singleModel ? "required" : "preferred",
       ...(waived ? { diversityWaived: true } : {}),
       ...(selfReview ? { independenceWaived: true } : {}),
-      triggers: triggers.sort()
+      triggers: [...new Set(riskTiered
+        ? [...triggers, ...riskRoute.triggers]
+        : triggers)].sort()
     };
   }
   

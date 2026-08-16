@@ -30,6 +30,11 @@ export function createAuthorityStore({ root, protocolVersion, readJson, writeJso
     return path;
   }
 
+  function replace(entry, request) {
+    writeJson(entry.path, request);
+    return request;
+  }
+
   // `expectedHashFor` resolves the hash a given request is bound to: a
   // repository-scoped request carries its repository's hash, not the composite,
   // so comparing every request against the composite marked scoped requests
@@ -43,15 +48,12 @@ export function createAuthorityStore({ root, protocolVersion, readJson, writeJso
           const expected = expectedHashFor ? expectedHashFor(value) : workspaceHash;
           if (value.workspaceHash !== expected) value.status = "stale";
           else if (Date.parse(value.expiresAt || "") <= Date.now()) value.status = "expired";
-          if (value.status !== entry.value.status) writeJson(entry.path, value);
         } else if (value.status === "stale" && expectedHashFor &&
             value.workspaceHash === expectedHashFor(value) &&
             Date.parse(value.expiresAt || "") > Date.now()) {
-          // Heal requests the pre-scoping comparison wrongly persisted as
-          // stale: their own hash still matches and they have not expired, so
-          // the verdict they were opened for is still recordable.
+          // Heal the value in memory. Status is deliberately side-effect free;
+          // request transitions are serialized by the authority mutation lock.
           value.status = "requested";
-          writeJson(entry.path, value);
         }
         return value;
       });
@@ -102,5 +104,8 @@ export function createAuthorityStore({ root, protocolVersion, readJson, writeJso
     });
   }
 
-  return { list, writeRequest, status, validateResponse, complete, isOpen: (statusValue) => OPEN_STATUSES.has(statusValue) };
+  return {
+    list, writeRequest, replace, status, validateResponse, complete,
+    isOpen: (statusValue) => OPEN_STATUSES.has(statusValue)
+  };
 }

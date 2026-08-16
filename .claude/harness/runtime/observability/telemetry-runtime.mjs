@@ -284,6 +284,15 @@ export function createTelemetryRuntime({
     writeJson(telemetryCursorPath(id), cursors);
   }
 
+  // Whether any model-usage row was ever imported for this change. Archive
+  // consults this to warn — not block — when the record is sealed with empty
+  // cost columns.
+  function modelUsageRecorded(id) {
+    const path = join(logs, id, "events.jsonl");
+    try { return existsSync(path) && statSync(path).size > 0; }
+    catch { return false; }
+  }
+
   function bindClaudeSession(id, operationId, options = {}) {
     const context = claudeHostContext(options.source || null);
     if (!context) return null;
@@ -486,6 +495,7 @@ export function createTelemetryRuntime({
     bindClaudeSession,
     claudeHostContext,
     importTelemetry,
+    modelUsageRecorded,
     prepareClaudeTelemetry,
     recordContextMetric,
     recordEvent,

@@ -10,6 +10,7 @@ export function createPacketRuntime({
   modelForTask, compactList, fileDigest, directoryHash, ensureBudgetState,
   budgetDecision, scopedReviewClaims, relevantHash, providerCapability,
   receiptPath, contractFingerprint, reviewPolicy, resolvedAcceptance,
+  handoffReadiness,
   serializedJson, foundationPolicy, recordContextMetric, recordInstructionManifest,
   fail
 }) {
@@ -126,7 +127,7 @@ export function createPacketRuntime({
     const artifactReferences = {};
     for (const name of [
       "proposal.md", "design.md", "tasks.md", "evidence.yaml",
-      "execution.yaml", "repositories.yaml"
+      "execution.yaml", "repositories.yaml", "grounding.yaml", "handoffs.yaml"
     ]) {
       const path = join(activePath, name);
       if (existsSync(path))
@@ -159,11 +160,13 @@ export function createPacketRuntime({
     const packet = {
       version: Number(PACKET_SCHEMA_VERSION),
       packetType, changeId: id, intent: state.intent, schema: state.schema,
+      controlProjectRoot: ROOT,
       status: state.status, revision: Number(state.revision || 0),
       contractRevision: Number(state.contractRevision || 0),
       executionRevision: Number(state.executionRevision || 0),
       impact: state.impact, coupling: state.coupling,
       reviewRequired: Boolean(state.reviewRequired),
+      externalOperations: handoffReadiness(id),
       changePath: relative(ROOT, activePath) || ".",
       repository: repository ? {
         id: repository.id, type: repository.type, mode: repository.mode,
@@ -196,7 +199,7 @@ export function createPacketRuntime({
     const workspaceHash = relevantHash(id);
     const reviewClaims = scopedReviewClaims(contract.claims).map((claim) => ({
       id: claim.id,
-      scenario: String(claim.scenario).slice(0, 240),
+      scenario: String(claim.scenario).slice(0, 160),
       impact: claim.impact,
       capabilities: claim.capabilities,
       repositories: claim.repositories || null
@@ -204,13 +207,27 @@ export function createPacketRuntime({
     const artifact = (name) => {
       const path = join(activePath, name);
       return existsSync(path) ? {
-        path: relative(ROOT, path).replaceAll("\\", "/"),
-        workspacePath: activePath,
         relativePath: name,
         sha256: statSync(path).isDirectory() ? directoryHash(path) : fileDigest(path)
       } : null;
     };
-    const surfaceRows = canonicalChangedSurface(id, state);
+    const surfaceRows = canonicalChangedSurface(id, state).map((row) => {
+      const workspace = row.repositoryId === "root"
+        ? state.workspace?.path || ROOT
+        : state.repositories?.[row.repositoryId]?.path ||
+          repositoryById(id, row.repositoryId, state).workspacePath;
+      const path = join(workspace, row.path);
+      let identity = "deleted";
+      if (existsSync(path)) {
+        try { identity = statSync(path).isDirectory() ? directoryHash(path) : fileDigest(path); }
+        catch { identity = "unreadable"; }
+      }
+      return {
+        ...row,
+        kind: "code",
+        identity
+      };
+    });
     const paths = surfaceRows.map((row) => `${row.repositoryId}/${row.path}`);
     const inspection = [...surfaceRows.reduce((groups, row) => {
       if (!groups.has(row.repositoryId)) groups.set(row.repositoryId, []);
@@ -268,22 +285,67 @@ export function createPacketRuntime({
       providerCapability(provider, providerConfig(id, provider)) === "review") || "review";
     const prior = existsSync(receiptPath(id, reviewProvider))
       ? readJson(receiptPath(id, reviewProvider), {}) : null;
+    const grounding = artifact("grounding.yaml");
+    const groundingValue = grounding ? readJson(join(activePath, "grounding.yaml"), {}) : null;
+    const reviewArtifactNames = [
+      "proposal.md", "design.md", "tasks.md", "evidence.yaml",
+      "execution.yaml", "repositories.yaml", "grounding.yaml", "handoffs.yaml", "specs"
+    ];
+    const contractArtifacts = Object.fromEntries(reviewArtifactNames.map((name) =>
+      [name, artifact(name)]).filter(([, row]) => Boolean(row)));
+    const reviewArtifactManifest = reviewArtifactNames.map((name) => {
+      const row = artifact(name);
+      return row ? {
+        repositoryId: "contract",
+        path: name,
+        relativePath: name,
+        kind: "contract-artifact",
+        sources: ["change-contract"],
+        identity: row.sha256
+      } : null;
+    }).filter(Boolean);
+    const reviewManifest = [...surfaceRows, ...reviewArtifactManifest]
+      .sort((left, right) => `${left.repositoryId}/${left.path}`
+        .localeCompare(`${right.repositoryId}/${right.path}`));
+    if (reviewArtifactManifest.length) changedSurface.inspection.push({
+      repositoryId: "contract",
+      workspacePath: activePath,
+      baseHead: null,
+      paths: reviewArtifactManifest.map((row) => row.relativePath)
+    });
     const packet = {
       version: Number(REVIEW_PACKET_SCHEMA_VERSION),
       packetType: "review",
       changeId: id,
+      controlProjectRoot: ROOT,
+      contractWorkspacePath: activePath,
       intent: state.intent,
       workspaceHash,
       contractFingerprint: contractFingerprint(id),
       reviewPolicy: reviewPolicy(id, state, contract),
       acceptance: resolvedAcceptance(id, state, contract),
-      claims: compactList(reviewClaims, 12),
+      externalOperations: handoffReadiness(id),
+      claims: compactList(reviewClaims, 8),
       decisions: {
         proposal: artifact("proposal.md"),
         design: artifact("design.md"),
-        specs: artifact("specs")
+        specs: artifact("specs"),
+        grounding
       },
-      changedSurface: { ...changedSurface, rows: compactList(surfaceRows, 60) },
+      contractArtifacts,
+      changedSurface: {
+        ...changedSurface,
+        // Dispatch uses the identities to derive round-two scope from the
+        // first dispatch. Keeping the complete manifest here prevents a large
+        // change from degrading into a reviewer-supplied list.
+        manifest: reviewManifest
+      },
+      grounding: groundingValue ? {
+        decisionBatch: groundingValue.decisionBatch || null,
+        readSet: compactList(groundingValue.readSet || [], 30),
+        claims: compactList(groundingValue.claims || [], 30),
+        reference: grounding
+      } : null,
       evidence: compactList(evidenceRows, 15),
       priorReview: prior ? {
         round: prior.review?.round || null,
@@ -296,7 +358,9 @@ export function createPacketRuntime({
       unresolvedFindings: Number(prior?.review?.findings?.unresolvedBlockers || 0),
       references: {
         evidence: artifact("evidence.yaml"),
-        tasks: artifact("tasks.md")
+        tasks: artifact("tasks.md"),
+        grounding,
+        handoffs: artifact("handoffs.yaml")
       }
     };
     return { ...packet, packetDigest: stableHash(packet) };

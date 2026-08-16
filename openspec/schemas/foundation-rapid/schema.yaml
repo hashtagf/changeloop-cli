@@ -21,6 +21,12 @@ artifacts:
     template: evidence.yaml
     instruction: 'Map the intended outcome to evidence. Discovery is implicit for test claims. A claim that spans repositories must list them in "repositories": ["api", "app"]; omit the field entirely for a single-repository change.'
     requires: [proposal]
+  - id: grounding
+    generates: grounding.yaml
+    description: Locked single-batch decisions, read set, and claim-to-production evidence map
+    template: grounding.yaml
+    instruction: Record the completed discovery and the one locked decision batch before Build.
+    requires: [proposal, evidence]
   - id: repositories
     generates: repositories.yaml
     description: Repositories this change may touch, and their write scope
@@ -33,7 +39,15 @@ artifacts:
     template: execution.yaml
     instruction: Configure project-owned adapters separately from the behavioral contract.
     requires: [evidence]
+  - id: handoffs
+    generates: handoffs.yaml
+    description: Permission-bound external operations and their activation-safe delivery contract
+    template: handoffs.yaml
+    instruction: Declare operator work separately from implementation tasks; use an empty operations array when none exists.
+    requires: [proposal, tasks, evidence, grounding]
 
 apply:
-  requires: [tasks, evidence, execution, repositories]
+  # Runtime state marks new v3.3 changes and validates handoffs there. Keep the
+  # schema dependency additive for active changes created by older releases.
+  requires: [tasks, evidence, grounding, execution, repositories]
   tracks: tasks.md

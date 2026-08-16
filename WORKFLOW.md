@@ -1,6 +1,6 @@
 # Foundation workflow
 
-**Version 3.2.19**
+**Version 3.2.22**
 
 Foundation is an OpenSpec-native harness for safe, economical software changes
 in brownfield repositories.
@@ -66,7 +66,9 @@ revert them; `--applied keep|revert` records that answer.
 ### `/build <change>`
 
 The native harness reads the compact change packet and implements it. `tasks.md`
-is the only ledger. Focused checks run during convergence. Native task primitives
+is the only implementation ledger; `handoffs.yaml` separately owns operations
+that require AWS, cluster, secret, Terraform, deploy, restart, or other external
+authority. Focused checks run during convergence. Native task primitives
 or subagents are used only for independently verifiable parallel/resumable work
 packages, not lifecycle personas.
 
@@ -110,8 +112,10 @@ claims behavior outside its repository authority or has no evidence provider.
 Load one primary construction skill per task; add only the security and
 observability cross-cutting skills whose triggers apply.
 
-If requirements or design change during Build, pause, revise the same OpenSpec
-change, then synchronize it without losing unchanged completed tasks:
+An in-contract defect is repaired without asking again. Only new evidence that
+would change locked behavior, compatibility, security, data, or rollout opens
+one audited batched amendment. Then revise the same OpenSpec change and
+synchronize it without losing unchanged completed tasks:
 
 ```bash
 claude-foundation sandbox sync <change>
@@ -183,10 +187,13 @@ with `[claims:<claim-id>]`.
 
 Remote CI can return a signed envelope through `evidence verify-ci`; issuer,
 workspace, optional commit, run URL, and artifact digests are verified before a
-receipt is created. Human review and acceptance use `authority request`,
-`authority status`, and `authority record`, so external work is resumable,
-expires when abandoned, becomes stale with the workspace, and cannot bypass the
-existing receipt validator.
+receipt is created. `proof advance` is the normal resumable Prove path. It runs
+configured evidence once, routes review before acceptance, and stops cleanly
+while external authority is pending. Configured AI review uses `authority run`;
+named-human review uses `authority dispatch` before `authority record`;
+acceptance uses `authority request` and `authority record` without a review
+dispatch. All paths expire or become stale with the workspace and pass the same
+receipt validator.
 
 ### `/land <change>`
 
@@ -361,32 +368,43 @@ validation pointers. `changes` also exposes non-archived runtime files whose
 active OpenSpec directories disappeared as `orphan-runtime`, and doctor reports
 how to restore or quarantine them.
 
-External authority returns `NEEDS_USER_DECISION`. Its `decision` envelope is a
+Subjective acceptance or a genuine contract contradiction returns
+`NEEDS_USER_DECISION`. Its `decision` envelope is a
 machine handoff for the agent, not text to paste to the user. The agent explains
 the outcome in the user's language, presents honest choices (including reject,
 inconclusive, or pause), and owns all commands and metadata after the user
 answers. Decision recovery never embeds a preselected passing receipt.
 
-When executable project evidence and external review are both required, run
-`claude-foundation proof collect <change>` first. It records workspace-bound
-receipts without finalizing proof, allowing the review packet to carry executed
-test evidence. After the external receipt is recorded, `proof run` reuses those
-receipts and finalizes atomically.
+Run `claude-foundation proof advance <change>` once as the normal path. It
+collects executable evidence, creates or reuses the authority request, and
+returns a stable waiting handoff instead of polling or rerunning providers. The
+agent uses `authority run` when handing a full or delta packet to the configured
+Codex or Claude Code reviewer. An explicitly chosen human review reserves the exact packet with
+`authority dispatch`, then records only the real response with `authority record`. Low-level
+`proof collect` and `proof run` remain diagnostic/integration commands.
 
-The agent creates an `authority request`, presents its packet in human language,
-and records the real external response through `authority record`; the user does
-not construct receipt commands or provenance metadata.
+The user never constructs receipt commands or provenance metadata. A crashed,
+aborted, or tool-failed dispatch is recorded as infrastructure, does not unlock
+a delta, and permits only one full infrastructure retry. It does not overwrite
+a previously delivered review receipt.
 
 ## Review
 
-Review is required for high impact, `coupling: coupled` above low impact, a
-resolved security trigger (authentication/authorization, public compatibility,
-data migration, irreversible mutation, concurrency, monetary logic,
-multi-repository contracts), anomalous evidence, or explicit `--review`.
-Coupling at low impact reports that a change spans components — it earns the
-standard schema's `design.md` and `specs/`, not a reviewer. The cross-repository
-cases that need one are caught separately: any claim above low impact that spans
-repositories requires review on its own.
+Under `workflow.reviewPolicy: "risk-tiered"`, every change receives independent
+review, but the correction route is bounded by risk:
+
+- **low** — one full AI review; a material correction promotes the change to
+  medium rather than silently spending another low-risk round;
+- **medium** — one full AI review, at most one correction batch, then one fresh
+  AI delta review that closes the first-round finding IDs;
+- **high** — material risks are answered in the initial Decision Sheet; one
+  full AI review and at most one post-correction delta, with no human approval
+  gate and no third AI.
+
+High risk includes authorization/secrets, public or cross-repository contracts,
+migration/destructive state, money, concurrency, replay/idempotency, brokers and
+real wire behavior, or activating legacy behavior. Medium includes non-low
+impact/coupling and declared review risk; everything else is low.
 
 Security triggers are inferred from the intent as whole words and phrases, so
 the words have to name a trust boundary rather than merely appear near one.
@@ -400,10 +418,12 @@ Required review starts from the ≤8 KiB `packet --phase review`, never Build
 history. Its changed surface unions committed base-to-HEAD paths with staged,
 unstaged, untracked, renamed, and deleted paths for each repository; a missing
 recorded base blocks review instead of appearing clean. Every review receipt
-identifies the reviewer and one or more structured implementation subjects.
-Critical security, migration, compatibility, monetary, or irreversible changes
-require a different model/provider family or a human; other reviews require a
-fresh context and prefer diversity. A project with one model available can set
+identifies the reviewer, the actual reviewer session, and structured
+implementation subjects. A medium delta contains only changed review artifacts
+and must explicitly close the blocker/major finding IDs from the full review;
+out-of-scope delta findings are rejected. Critical work requires a different
+model/provider family or a human; other reviews require a fresh context and
+prefer diversity. A project with one model available can set
 `"review": { "diversity": "single-model" }` in `foundation.json` to accept a
 same-family reviewer on critical work; the waiver is named in the review packet
 and recorded in the receipt as `diversityWaived`. A project driven from one
@@ -413,16 +433,31 @@ is named the same way, recorded as `independenceWaived` beside the observed
 `independent: false`, and relaxes only its own axis — a same-family self-review
 of critical work still needs the diversity waiver declared alongside it. Both
 live only in the committed policy file; neither is a command flag. The shipped
-`foundation.json` seeds both, because the common setup is one operator driving
-one model; a project with a second reviewer available should set either axis to
-`"required"` to demand it. Whichever way the file reads, the receipt records
-what was observed, not what was permitted.
-AI re-review is limited to two rounds, after
-which unresolved work escalates to a human; that stop names the human path, the
-return to Build, and retiring the change. A change-level hash chain binds each
-attempt to its receipt payload, so deleting a receipt or renaming its provider
-cannot reset the limit. Missing or modified history fails closed. Workspace edits
-stale prior review.
+`foundation.json` requires both independence and diversity, configures
+`codex-sol` as the default, and also ships `claude-opus`. Codex-only teams select
+`codex-sol`; Claude-Code-only teams select `claude-opus`; either team commits
+only the `single-model` diversity waiver while keeping independence required.
+Both adapters create a separate read-only, non-persistent session; the Claude
+adapter also removes the parent Claude Code nesting marker before launch.
+Whichever way the file reads, the receipt records what was observed, not what
+was permitted.
+
+The risk route is a hard circuit breaker, not a loop-until-pass rule. After the
+allowed delivered AI waves, another open review is refused. A blocker found in
+the final delta must name its affected claims and predeclared verification
+cases; after an in-contract fix, current passing provider receipts close those
+exact IDs deterministically without a third AI. Only a real contract
+contradiction opens one batched amendment, and missing operational authority is
+`WAITING_EXTERNAL`. A change-level hash chain binds dispatch, completion, finding closure,
+scope, and receipt payload, so aborting, deleting a receipt, or renaming a
+provider cannot reset the limit. Missing or modified history fails closed.
+Workspace edits stale prior review.
+
+`handoffs.yaml` does not block Build or evidence collection. Land blocks an
+unresolved `pre-land` or `activation-coupled` operation, but permits an accepted
+tracked `post-land` operation only when a declared claim proves the merged
+artifact remains safe before activation. Operator records carry names, tickets,
+and evidence references—never credentials.
 
 Human acceptance is separate from review. New standard changes keep this choice
 `undecided` until `/change` explicitly records whether subjective product or

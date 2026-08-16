@@ -18,6 +18,10 @@ export function createProofReadinessRuntime({
   relevantHash,
   executionNodes,
   pendingTasks,
+  handoffReadiness = (id) => ({
+    version: 1, changeId: id, status: "COMPLETE",
+    operations: [], blocking: [], tracked: []
+  }),
   activeChangeLeases,
   activeRepositoryConflicts,
   changePath,
@@ -79,7 +83,10 @@ export function createProofReadinessRuntime({
     return issues;
   }
 
-  function changedSurfaceIssues(id) {
+  // `details`, when supplied, collects `{ repositoryId, paths }` per blocked
+  // repository so the recovery can render a paste-ready annotation. The string
+  // return stays as-is — proof-runtime consumes it verbatim.
+  function changedSurfaceIssues(id, details = null) {
     const state = loadRuntime(id);
     if (!state.repositories || Object.keys(state.repositories).length <= 1) return [];
     const tasks = taskBlocks(readFileSync(join(activeChangePath(id), "tasks.md"), "utf8"))
@@ -96,8 +103,10 @@ export function createProofReadinessRuntime({
         const normalized = scope.replace(/\/\*\*?$/, "").replace(/\/$/, "");
         return scope === "*" || path === normalized || path.startsWith(`${normalized}/`);
       }));
-      if (outside.length)
+      if (outside.length) {
         issues.push(`repository '${repository.id}' changed outside task paths: ${outside.join(", ")}`);
+        details?.push({ repositoryId: repository.id, paths: outside });
+      }
     }
     return issues;
   }
@@ -139,12 +148,12 @@ export function createProofReadinessRuntime({
         summary: "Automated evidence is ready, but an independent reviewer must inspect the current implementation before proof can finish.",
         options: [
           { id: "prepare-for-user", outcome: "Prepare a bounded review packet for the user to inspect." },
-          { id: "prepare-for-reviewer", outcome: "Prepare the packet for a fresh independent reviewer." },
+          { id: "prepare-for-reviewer", outcome: "Run the configured fresh reviewer. A Codex-only or Claude-Code-only project may commit review.diversity='single-model' while keeping identity/session independence required." },
           // A project driven from one session has no second session to open, so
           // the reviewer gate had no reachable end state and the loop stopped
           // here for good. The waiver already existed in `reviewPolicy`; it was
           // simply never named at the point where somebody needs it.
-          { id: "waive-independence", outcome: "Record that this project reviews itself: set \"review\": {\"independence\": \"self\"} in foundation.json. The receipt still records that independence was not observed." },
+          { id: "waive-independence", outcome: "Only if the project deliberately accepts the same reviewer identity/session, set review.independence='self'; the receipt records that independence was not observed." },
           { id: "pause", outcome: "Keep the change pending without recording a review result." }
         ],
         recommended: "prepare-for-reviewer",
@@ -261,8 +270,18 @@ export function createProofReadinessRuntime({
     }];
   }
 
-  function configurationRecovery(id, issues) {
+  function configurationRecovery(id, issues, surfaceFixits = []) {
     return [
+      // The changed-surface blocker already names every offending path; this
+      // entry restates them in the exact form `tasks.md` accepts, so clearing
+      // the block is a paste instead of a reconstruction.
+      ...(surfaceFixits.length ? [{
+        kind: "declare-surface",
+        reason: `append each listed annotation to the owning task's [paths:] in openspec/changes/${id}/tasks.md, then rerun readiness`,
+        choices: surfaceFixits.map((fixit) => ({
+          instruction: `repository '${fixit.repositoryId}': [paths:${fixit.paths.join(",")}]`
+        }))
+      }] : []),
       {
         kind: "diagnose",
         command: `claude-foundation doctor --stage prove --change ${id}`
@@ -346,10 +365,12 @@ export function createProofReadinessRuntime({
   function proofReadinessValue(id, stage = "prove") {
     validate(id, "active", { quiet: true });
     const issues = topologyIssues(id);
-    if (stage === "prove") issues.push(...changedSurfaceIssues(id));
+    const surfaceFixits = [];
+    if (stage === "prove") issues.push(...changedSurfaceIssues(id, surfaceFixits));
     const hash = relevantHash(id);
     const { unconfigured, unavailable } = executionNodes(id, hash);
     const pending = pendingTasks(id);
+    const externalOperations = handoffReadiness(id);
     const leases = stage === "prove" ? activeChangeLeases(id) : [];
     // The cross-change guard reached dispatch and lease acquisition but never
     // the proof path, so two changes could execute providers against the same
@@ -370,6 +391,11 @@ export function createProofReadinessRuntime({
       status,
       workspaceHash: hash,
       pendingTasks: pending.map((task) => task.id || task.text),
+      externalOperations: {
+        ...externalOperations,
+        proofBlocking: false,
+        note: "External operations are handed off during Prove and are evaluated at Land by timing and activation safety."
+      },
       externalProviders: unconfigured,
       unavailableProviders: unavailable,
       activeLeases: leases.map((lease) => ({
@@ -385,7 +411,7 @@ export function createProofReadinessRuntime({
       next: status === "NEEDS_CODE_CHANGE"
         ? codeChangeRecovery(id, pending)
         : status === "CONFIGURATION_ERROR"
-          ? configurationRecovery(id, issues)
+          ? configurationRecovery(id, issues, surfaceFixits)
           : status === "BLOCKED_BY_ACTIVE_WORK"
             ? activeWorkRecovery(id, leases, repositoryConflicts)
             : status === "NEEDS_USER_DECISION"

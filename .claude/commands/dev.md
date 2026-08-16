@@ -8,9 +8,9 @@ Execute **$ARGUMENTS**.
 With `--resume`, continue the first incomplete operation; never replay work.
 With `--plan-only`, run `/change` and stop after validation.
 
-For fresh rapid work, run `change start --template`, write one
-completed draft under `.foundation/`, then run `change start <draft>`. Continue
-from its Build packet once. Otherwise use `/change`, then `/build`; finish `/prove`.
+For all fresh work use `/change`; only that intake may run
+`change start --template` after its complete read and Decision Sheet. Then run `/build` and
+finish `/prove`.
 
 Use contracts. Do not reread framework files unless a command reports a blocker.
 

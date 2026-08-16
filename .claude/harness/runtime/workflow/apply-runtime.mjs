@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import {
+  existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { verifySpecSync } from "./spec-sync-verify.mjs";
@@ -25,6 +27,8 @@ export function createApplyRuntime({
   proofPath,
   readJson,
   stableHash,
+  syncClaudeTelemetry,
+  modelUsageRecorded,
   saveApplyJournal,
   transactionJournalPath,
   verifyAppliedProjection,
@@ -86,7 +90,35 @@ export function createApplyRuntime({
     });
     if (check.status !== 0)
       fail(`sandbox diff conflicts with target: ${check.stderr.trim()}`);
-    return sandboxDiffNames(id, sandboxPath, state);
+    const names = sandboxDiffNames(id, sandboxPath, state);
+    // `apply --check` validates the patch textually, but application copies
+    // whole files — so a target file carrying uncommitted edits the sandbox
+    // never saw would be silently overwritten. Two changes landed sequentially
+    // over the same file lost the first one's work exactly this way. Refuse
+    // and name the paths, as the isolated-copy path already does.
+    const base = sandboxBase(state);
+    // Read like a git blob: a symlink's blob is its link target, not the
+    // linked file's content — following the link makes every unchanged
+    // symlink read as a conflict.
+    const workingBlob = (path) => {
+      const stats = lstatSync(path, { throwIfNoEntry: false });
+      if (!stats) return null;
+      return stats.isSymbolicLink() ? Buffer.from(readlinkSync(path)) : readFileSync(path);
+    };
+    const clobbered = names.filter((path) => {
+      const target = workingBlob(join(root, path));
+      if (target === null) return false;
+      const sandboxContent = workingBlob(join(sandboxPath, path));
+      if (sandboxContent !== null && target.equals(sandboxContent)) return false;
+      const shown = gitBuffer(["show", `${base}:${path}`], root);
+      return shown.status !== 0 || !target.equals(shown.stdout);
+    });
+    if (clobbered.length) {
+      const listed = clobbered.slice(0, 10).join(", ") +
+        (clobbered.length > 10 ? ", ..." : "");
+      fail(`apply would overwrite uncommitted target edits at: ${listed} — commit or reconcile the landed work first, then sync the sandbox and prove again`);
+    }
+    return names;
   }
 
   function assertTargetHeadUnmoved(id, state) {
@@ -487,6 +519,10 @@ export function createApplyRuntime({
     const state = loadRuntime(id);
     const pending = pendingTasks(id);
     if (pending.length) fail(`${pending.length} implementation task(s) remain unchecked`);
+    // One quiet telemetry drain while usage is still attributable to an active
+    // change. An absent transcript already returns imported 0; anything that
+    // throws degrades to the same, because telemetry never costs an archive.
+    try { syncClaudeTelemetry(id, { quiet: true }); } catch { /* warned below */ }
     const preArchiveWorkspaceHash = readiness.hash;
     // 'openspec archive' moves the change out of openspec/changes and rewrites
     // openspec/specs in one step, so the delta and the pre-merge spec text can
@@ -534,6 +570,8 @@ export function createApplyRuntime({
       console.error("WARNING: OpenSpec reported success but the archived change directory was not found");
     if (["failed", "refused"].includes(state.workspace.cleanup.status))
       console.error(`WARNING: sandbox cleanup ${state.workspace.cleanup.status}: ${state.workspace.cleanup.reason}`);
+    if (!modelUsageRecorded(id))
+      console.error(`WARNING: no model usage was imported for this change; cost and token columns stay empty — claude-foundation telemetry sync ${id} [transcript.jsonl]`);
     console.log(cli.stdout.trim());
     console.log(`ARCHIVED ${id}`);
   }

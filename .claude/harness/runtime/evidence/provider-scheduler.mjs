@@ -1,3 +1,5 @@
+import { findCyclePath } from "../core/graph.mjs";
+
 export function createProviderScheduler({
   requiredProviders,
   receiptValidity,
@@ -82,8 +84,13 @@ export function createProviderScheduler({
   async function runExecutionDag(id, nodes, proofRunId) {
     const pending = new Map(nodes.map((node) => [node.provider, node]));
     const completed = new Set();
+    const failedOutputs = new Set();
     const commandCache = new Map();
     const outcomes = [];
+    // A dependency may name a covered output of another pending node, not the
+    // node's own provider id; resolve those to the owning node for cycle edges.
+    const owner = new Map(nodes.flatMap((node) =>
+      [node.provider, ...node.covers].map((output) => [output, node.provider])));
     while (pending.size) {
       const ready = [...pending.values()].filter((node) =>
         node.dependsOn.every((dependency) =>
@@ -92,9 +99,26 @@ export function createProviderScheduler({
       // Throw rather than fail(): fail is process.exit, which skips the
       // caller's catch — the thing that stops services and clears
       // activeProofRun — so the next `evidence record` bound a dead run's
-      // workspace hash. A failed dependency lands here too, not only a cycle.
-      if (!ready.length)
-        throw new Error(`provider dependency cycle or blocked dependency: ${[...pending.keys()].join(", ")}`);
+      // workspace hash.
+      if (!ready.length) {
+        const blocked = [...pending.values()]
+          .map((node) => ({
+            node,
+            failed: node.dependsOn.filter((dependency) => failedOutputs.has(dependency))
+          }))
+          .filter((entry) => entry.failed.length);
+        if (blocked.length)
+          throw new Error(`provider(s) blocked by failed dependency: ${blocked
+            .map((entry) => `${entry.node.provider} (needs ${entry.failed.join(", ")})`)
+            .join("; ")}`);
+        const cycle = findCyclePath(new Map([...pending.values()].map((node) =>
+          [node.provider, node.dependsOn
+            .map((dependency) => owner.get(dependency))
+            .filter((dependency) => dependency !== undefined && pending.has(dependency))])));
+        if (cycle)
+          throw new Error(`provider dependency cycle: ${cycle.join(" -> ")}`);
+        throw new Error(`provider dependency unresolvable: ${[...pending.keys()].join(", ")}`);
+      }
       const batch = [];
       for (const node of ready)
         if (batch.every((selected) => !resourcesConflict(selected.resources, node.resources)))
@@ -105,10 +129,13 @@ export function createProviderScheduler({
       for (let index = 0; index < batch.length; index += 1) {
         pending.delete(batch[index].provider);
         outcomes.push({ provider: batch[index].provider, status: results[index].status });
-        if (results[index].status === "pass")
+        if (results[index].status === "pass") {
           for (const covered of batch[index].covers) completed.add(covered);
-        else
+        } else {
+          failedOutputs.add(batch[index].provider);
+          for (const covered of batch[index].covers) failedOutputs.add(covered);
           logError(`PROVIDER ${batch[index].provider}: ${results[index].status}`);
+        }
       }
     }
     return outcomes;

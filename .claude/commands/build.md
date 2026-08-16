@@ -5,21 +5,20 @@ argument-hint: <change>
 
 Build **$ARGUMENTS**.
 
-Validate; run `sandbox create <change>` or `sandbox sync`. Start from
-`packet <change> --phase build`.
+Validate; `sandbox create <change>` or `sandbox sync`; read `packet <change>
+--phase build`. `--unattended` requires the runtime guard. Use `agents plan`
+only for multi-repo work.
 
-For unattended execution, use one bare `--unattended` on doctor/create.
-Detection never authorizes; stop when blocked.
+Edit only allowed sandbox paths. Update `tasks.md` after focused checks. Move
+unauthorized infrastructure operations to `handoffs.yaml`; relay `handoff
+packet` once and never ask for credentials. Time long commands with `exec
+<change> -- <command>`.
 
-For multi-repo work, run `agents plan`; keep single-agent work single. The host
-owns leases and gives workers only `packet --task <task>`.
+The host owns leases. Give workers only `packet --task <task>`. Declare new files
+in the owning task's `[paths:]`.
 
-Edit only allowed sandbox paths. Run focused checks and update the sole ledger,
-`tasks.md`. Wrap long external commands (container builds, installs, full test
-runs) in `exec <change> -- <command>` so metrics sees their time. Run `claude-foundation proof readiness <change>` and resolve
-code/configuration blockers before fresh Prove.
-
-Never replay history, mirror tasks, archive, commit, or Land.
-
-Translate readiness for the user. Follow deterministic recovery, but ask before
-structured decisions; never paste raw JSON or commands.
+Auto-repair findings inside the locked contract. Provider and permission
+failures follow typed recovery. Ask again only if behavior, compatibility,
+security, data, or rollout must change. Run `proof readiness <change>` before
+fresh Prove. Never replay history, expose raw JSON, archive, commit, or Land.
+Translate readiness for the user; ask only for structured decisions.

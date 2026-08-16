@@ -53,6 +53,7 @@ import { taskBlocks, taskMetadata } from "./runtime/workflow/change-artifacts.mj
 import { createChangeLifecycle } from "./runtime/workflow/change-lifecycle.mjs";
 import { createLeaseRuntime } from "./runtime/workflow/lease-runtime.mjs";
 import { createAuthorityRuntime } from "./runtime/workflow/authority-runtime.mjs";
+import { createHandoffRuntime } from "./runtime/workflow/handoff-runtime.mjs";
 import {
   assertOpenSpecCli, createLandRuntime, openSpecCliStatus
 } from "./runtime/workflow/land-runtime.mjs";
@@ -76,12 +77,13 @@ import { createReceiptRuntime } from "./runtime/evidence/receipt-runtime.mjs";
 import { createReceiptValidity } from "./runtime/evidence/receipt-validity.mjs";
 import { createAdapterRuntime } from "./runtime/evidence/adapter-runtime.mjs";
 import { createProofExecutionRuntime } from "./runtime/evidence/proof-execution-runtime.mjs";
+import { createConfiguredReviewerRuntime } from "./runtime/evidence/codex-reviewer.mjs";
 import { createBlockedDecision } from "./runtime/core/blocked-decision.mjs";
 import { createAbandonRuntime } from "./runtime/workflow/abandon-runtime.mjs";
 import { RUNTIME_MODULE_API } from "./runtime/version.mjs";
 
-const VERSION = "2.8.0";
-const RUNTIME_API_VERSION = "19";
+const VERSION = "3.2.22";
+const RUNTIME_API_VERSION = "20";
 // Checked here, at load, rather than only inside `doctor`: a torn install —
 // this file from one revision, runtime/** from another — otherwise passed
 // every command up to `archive` and then threw partway through Land.
@@ -93,16 +95,16 @@ if (RUNTIME_MODULE_API !== RUNTIME_API_VERSION) {
   process.exit(1);
 }
 const PROVIDER_PROTOCOL_VERSION = "8";
-const ADAPTER_PROTOCOL_VERSION = "4";
-const PROOF_PROTOCOL_VERSION = "4";
-const PACKET_SCHEMA_VERSION = "5";
+const ADAPTER_PROTOCOL_VERSION = "5";
+const PROOF_PROTOCOL_VERSION = "5";
+const PACKET_SCHEMA_VERSION = "6";
 const AGENT_PLAN_SCHEMA_VERSION = "3";
 const CONTEXT_EVENT_SCHEMA_VERSION = "2";
-const REVIEW_PROTOCOL_VERSION = "2";
+const REVIEW_PROTOCOL_VERSION = "3";
 const ACCEPTANCE_PROTOCOL_VERSION = "2";
-const REVIEW_PACKET_SCHEMA_VERSION = "3";
+const REVIEW_PACKET_SCHEMA_VERSION = "4";
 const ATTESTATION_PROTOCOL_VERSION = "1";
-const AUTHORITY_PROTOCOL_VERSION = "1";
+const AUTHORITY_PROTOCOL_VERSION = "2";
 const CI_EVIDENCE_PROTOCOL_VERSION = "1";
 // `contract-digest` executes no command: it hashes the same declared contract
 // artifact in two or more repositories and passes only when every side carries
@@ -258,6 +260,7 @@ const LEASES = join(ROOT, ".foundation", "leases");
 const PROTOTYPES = join(ROOT, ".foundation", "prototypes");
 const ATTESTATIONS = join(ROOT, ".foundation", "attestations");
 const AUTHORITY = join(ROOT, ".foundation", "authority");
+const HANDOFFS = join(ROOT, ".foundation", "handoffs");
 const INSTRUCTION_MANIFESTS = join(ROOT, ".foundation", "instruction-manifests");
 const RECOVERY = join(ROOT, ".foundation", "recovery");
 const CHANGES = join(ROOT, "openspec", "changes");
@@ -271,6 +274,7 @@ mkdirSync(PLANS, { recursive: true });
 mkdirSync(LEASES, { recursive: true });
 mkdirSync(ATTESTATIONS, { recursive: true });
 mkdirSync(AUTHORITY, { recursive: true });
+mkdirSync(HANDOFFS, { recursive: true });
 mkdirSync(INSTRUCTION_MANIFESTS, { recursive: true });
 mkdirSync(CHANGES, { recursive: true });
 
@@ -283,6 +287,7 @@ const operationStartedAt = Date.now();
 let operationChangeId = null;
 let operationName = null;
 let operationPhase = null;
+let operationStatusAtStart = null;
 // Commands that only read. `showMetrics` buckets every row of operations.jsonl
 // and then this handler appended a row for the read itself, so each inspection
 // permanently inflated the next one — and an archived change, which is
@@ -293,13 +298,17 @@ let operationPhase = null;
 const READ_ONLY_OPERATIONS = new Set([
   "metrics", "hash", "changes", "providers", "repos", "models", "describe",
   "packet", "agent-task", "audit-change", "authority-status",
-  "evidence-detect", "evidence-doctor", "doctor", "api-version", "version"
+  "handoff-status", "handoff-packet", "evidence-detect", "evidence-doctor",
+  "doctor", "api-version", "version"
 ]);
 process.on("exit", (code) => {
   if (process.env.FOUNDATION_TELEMETRY === "0" || !operationChangeId || !operationName) return;
   if (READ_ONLY_OPERATIONS.has(operationName)) return;
-  // An archived change is finished. Nothing this session did belongs in it.
-  if (readJson(runtimePath(operationChangeId), {}).status === "archived") return;
+  // An archived change is finished. Nothing this session did belongs in it —
+  // judged by the status the change had when the command started, so the
+  // archive that finishes it still logs its own row while later sessions that
+  // merely touch the finished change stay silent.
+  if (operationStatusAtStart === "archived") return;
   try {
     const path = join(LOGS, operationChangeId, "operations.jsonl");
     mkdirSync(dirname(path), { recursive: true });
@@ -371,6 +380,11 @@ const {
   foundationPolicy
 } = createRuntimeEnvironment({
   root: ROOT,
+  // During Foundation's own Build, state remains pinned to the control root
+  // while the candidate entrypoint runs from its sandbox. Protocol integrity
+  // belongs to that executable bundle, not to the state root it operates on.
+  protocolPath: join(dirname(fileURLToPath(import.meta.url)), "protocol.json"),
+  policyPath: join(dirname(fileURLToPath(import.meta.url)), "..", "..", "foundation.json"),
   protocols: {
     runtime: VERSION,
     runtimeApi: RUNTIME_API_VERSION,
@@ -395,6 +409,17 @@ const { recordInstructionManifest } = createInstructionRecorder({
   foundationVersion: VERSION,
   instructionManifests: INSTRUCTION_MANIFESTS,
   writeJson
+});
+const {
+  reviewerConfig,
+  reviewerStatus,
+  runReview: runConfiguredReview
+} = createConfiguredReviewerRuntime({
+  root: ROOT,
+  foundationPolicy,
+  commandExists,
+  now,
+  fail: die
 });
 const stateRuntime = createStateRuntime({
   root: ROOT,
@@ -458,7 +483,14 @@ const {
   reviewHistoryState,
   reviewAttemptByDigest,
   reviewHistoryChainValid,
-  reserveReviewAttempt
+  assertReviewDispatchAllowed,
+  reserveReviewAttempt,
+  dispatchReviewAttempt,
+  completeReviewAttempt,
+  recordRepairClosureAttempt,
+  reviewAttempts,
+  deliveredAiAttempts,
+  infrastructureAiAttempts
 } = createReviewAttemptStore({
   receiptsRoot: RECEIPTS,
   evidenceVault: EVIDENCE_VAULT,
@@ -590,6 +622,7 @@ const {
   bindClaudeSession,
   claudeHostContext,
   importTelemetry,
+  modelUsageRecorded,
   prepareClaudeTelemetry,
   recordContextMetric,
   recordEvent,
@@ -638,6 +671,24 @@ function importHostExecution(id, source) {
   );
   console.log(`HOST EXECUTION ${id}: ${result.duplicate ? "duplicate" : "recorded"}; imported ${imported}`);
 }
+const handoffRuntime = createHandoffRuntime({
+  root: ROOT,
+  handoffsRoot: HANDOFFS,
+  activeChangePath,
+  loadRuntime,
+  readJson,
+  writeJson,
+  stableHash,
+  now,
+  fail: die
+});
+const {
+  handoffContract,
+  handoffReadiness,
+  showHandoffPacket,
+  showHandoffStatus,
+  recordHandoff
+} = handoffRuntime;
 const evidenceContract = createEvidenceContract({
   ROOT,
   PROVIDERS,
@@ -660,6 +711,7 @@ const evidenceContract = createEvidenceContract({
   stableHash,
   policyCapabilities,
   foundationPolicy,
+  handoffContract,
   die
 });
 const {
@@ -743,8 +795,12 @@ const changeValidationRuntime = createChangeValidationRuntime({
   changedSurfaceResolvable,
   forecastCapabilities,
   rawExecution,
+  handoffContract,
+  contractFingerprint,
   commandExists,
   stableHash,
+  fileDigest,
+  pathInside,
   knownProviders: PROVIDERS,
   writeJson,
   now,
@@ -755,6 +811,7 @@ const {
   assertNoDroppedScenarios,
   changeArtifactGaps,
   changeSpecScenarios,
+  groundingValue,
   evidenceDetectionValue,
   initializeEvidence,
   pendingTasks,
@@ -818,10 +875,24 @@ const receiptRuntime = createReceiptRuntime({
   flagValues,
   reviewHistoryState,
   reserveReviewAttempt,
+  reviewAttemptByDigest,
+  reviewAttemptIsValid,
   reviewReceiptBinding,
+  recordRepairClosureAttempt,
+  deliveredAiAttempts,
+  groundingForReview: (id) => {
+    const state = loadRuntime(id);
+    return groundingValue(id, state, activeChangePath(id, state))?.value || null;
+  },
+  foundationPolicy,
   die
 });
-const { proofPlan, rebindReusableReceipt, recordReceipt } = receiptRuntime;
+const {
+  proofPlan,
+  rebindReusableReceipt,
+  recordReceipt,
+  recordDeterministicReviewClosure
+} = receiptRuntime;
 const adapterRuntime = createAdapterRuntime({
   ROOT,
   LOGS,
@@ -919,6 +990,7 @@ const packetRuntime = createPacketRuntime({
   contractFingerprint,
   reviewPolicy,
   resolvedAcceptance,
+  handoffReadiness,
   serializedJson,
   foundationPolicy,
   recordContextMetric,
@@ -934,6 +1006,9 @@ const {
   authorityProvider,
   authorityPacket,
   requestAuthority,
+  dispatchAuthority,
+  runAuthorityReviewer,
+  abortAuthority,
   authorityStatusValue,
   showAuthorityStatus,
   recordAuthority,
@@ -960,6 +1035,17 @@ const {
   readJson,
   expandList,
   listCount,
+  dispatchReviewAttempt,
+  completeReviewAttempt,
+  reviewHistoryState,
+  reviewAttempts,
+  deliveredAiAttempts,
+  reviewAttemptByDigest,
+  assertReviewDispatchAllowed,
+  foundationPolicy,
+  reviewerConfig,
+  runConfiguredReview,
+  writeJson,
   receiptPath,
   recordReceipt,
   receiptValidity,
@@ -1059,6 +1145,7 @@ const {
   relevantHash,
   executionNodes,
   pendingTasks,
+  handoffReadiness,
   activeChangeLeases,
   activeRepositoryConflicts,
   changePath,
@@ -1093,6 +1180,7 @@ const {
 const sandboxRuntime = createSandboxRuntime({
   markBlocked,
   root: ROOT,
+  policy: foundationPolicy,
   excludedWorkspaceDirs: EXCLUDED_WORKSPACE_DIRS,
   sandboxCopyExcludedDirs: SANDBOX_COPY_EXCLUDED_DIRS,
   hostAttestation,
@@ -1141,6 +1229,7 @@ const {
   resolveChange
 } = createChangeLifecycle({
   root: ROOT,
+  policy: foundationPolicy,
   securityTerms: SECURITY_TERMS,
   fail: die,
   pathInside,
@@ -1217,6 +1306,7 @@ const {
   reviewForcingCapabilities: REVIEW_FORCING_CAPABILITIES,
   reviewDiversityCapabilities: REVIEW_DIVERSITY_CAPABILITIES,
   providerCapability,
+  reviewerStatus,
   unverifiedDrift: (id) => modelDriftInspector.changeDrift(id).unverified,
   parseFlags,
   parseStrictCommandFlags,
@@ -1290,8 +1380,11 @@ const { finalize: prove, audit: proofAudit } = createProofRuntime({
   fail: die
 });
 const {
+  guardProofMutation,
+  proofAdvance,
   proofCollect,
   proofExecute,
+  proofFinalize,
   proofRun
 } = createProofExecutionRuntime({
   markBlocked,
@@ -1313,9 +1406,38 @@ const {
   prove,
   proofAudit,
   readJson,
+  writeJson,
   proofPath,
+  proofAdvancePath: (id) => join(EVIDENCE_VAULT, id, "proof-advance.json"),
+  proofAdvanceLockPath: (id) => join(ROOT, ".foundation", "locks", `proof-${id}.lock`),
+  providerCapability,
+  providerConfig,
+  providerWorkspaceHash,
+  reviewPolicy,
+  deliveredAiAttempts,
+  recordDeterministicReviewClosure,
+  authorityStatusValue,
+  requestAuthority,
   die
 });
+const guardPublicProofMutation = (command, operation) =>
+  (id, ...args) => guardProofMutation(id, command, () => operation(id, ...args));
+const guardedRecordVerifiedCi = guardPublicProofMutation(
+  "evidence verify-ci", recordVerifiedCi);
+const guardedRequestAuthority = guardPublicProofMutation(
+  "authority request", requestAuthority);
+const guardedDispatchAuthority = guardPublicProofMutation(
+  "authority dispatch", dispatchAuthority);
+const guardedRunAuthorityReviewer = guardPublicProofMutation(
+  "authority run", runAuthorityReviewer);
+const guardedAbortAuthority = guardPublicProofMutation(
+  "authority abort", abortAuthority);
+const guardedRecordAuthority = guardPublicProofMutation(
+  "authority record", recordAuthority);
+const guardedRecordReceipt = guardPublicProofMutation(
+  "evidence receipt", recordReceipt);
+const guardedRunProvider = guardPublicProofMutation(
+  "evidence run-provider", runProvider);
 const modelDriftInspector = createModelDriftInspector({
   logs: LOGS,
   instructionManifests: INSTRUCTION_MANIFESTS,
@@ -1355,6 +1477,7 @@ const {
   receiptValidity,
   fileDigest,
   receiptPath,
+  handoffReadiness,
   verifyAppliedProjection,
   selectedRepositories,
   repositoryById,
@@ -1383,6 +1506,8 @@ const applyRuntime = createApplyRuntime({
   proofPath,
   readJson,
   stableHash,
+  syncClaudeTelemetry,
+  modelUsageRecorded,
   saveApplyJournal,
   transactionJournalPath,
   verifyAppliedProjection,
@@ -1424,6 +1549,7 @@ const abandonRuntime = createAbandonRuntime({
     transactions: TRANSACTIONS,
     snapshots: SNAPSHOTS,
     plans: PLANS,
+    handoffs: HANDOFFS,
     logs: LOGS,
     changes: CHANGES
   },
@@ -1473,8 +1599,10 @@ operationName = command || null;
 const namedChange = (value) =>
   typeof value === "string" && !value.startsWith("-") ? value : null;
 operationChangeId = command === "sandbox" ? namedChange(values[1]) :
-  ["resolve", "validate", "audit-change", "hash", "packet", "agent-plan", "agent-task", "agent-acquire", "agent-release", "metrics", "budget-continue", "proof-plan", "proof-readiness", "proof-run", "proof-collect", "proof-preflight", "proof-execute", "proof-audit", "evidence-upgrade", "evidence-verify-ci", "authority-request", "authority-status", "authority-record", "receipt", "run-provider", "prove",
-    "evidence-detect", "evidence-init", "evidence-doctor", "land-check", "land-plan", "land-record", "land-pointers", "land-resume", "archive", "event", "telemetry-sync", "telemetry-import"].includes(command) ? namedChange(values[0]) : null;
+  ["resolve", "validate", "audit-change", "hash", "packet", "agent-plan", "agent-task", "agent-acquire", "agent-release", "metrics", "budget-continue", "proof-plan", "proof-readiness", "proof-advance", "proof-run", "proof-collect", "proof-preflight", "proof-execute", "proof-audit", "evidence-upgrade", "evidence-verify-ci", "authority-request", "authority-dispatch", "authority-run", "authority-abort", "authority-status", "authority-record", "receipt", "run-provider", "prove",
+    "evidence-detect", "evidence-init", "evidence-doctor", "handoff-status", "handoff-packet", "handoff-record", "land-check", "land-plan", "land-record", "land-pointers", "land-resume", "archive", "event", "telemetry-sync", "telemetry-import"].includes(command) ? namedChange(values[0]) : null;
+operationStatusAtStart = operationChangeId
+  ? readJson(runtimePath(operationChangeId), {}).status ?? null : null;
 
 // One table, in `runtime/core/lifecycle-phase.mjs`, shared with the operations
 // row written on exit. The phase is derived here rather than read only from
@@ -1524,21 +1652,26 @@ await routeRuntimeCommand(command, values, {
   providerWorkspaceHash,
   proofPlan,
   proofReadiness,
+  proofAdvance,
   proofRun,
   proofCollect,
   proofPreflight,
   proofExecute,
   proofAudit,
+  proofFinalize,
   showEvidenceDetection,
   initializeEvidence,
   showEvidenceDoctor,
-  recordVerifiedCi,
-  requestAuthority,
+  recordVerifiedCi: guardedRecordVerifiedCi,
+  requestAuthority: guardedRequestAuthority,
+  dispatchAuthority: guardedDispatchAuthority,
+  runAuthorityReviewer: guardedRunAuthorityReviewer,
+  abortAuthority: guardedAbortAuthority,
   showAuthorityStatus,
-  recordAuthority,
+  recordAuthority: guardedRecordAuthority,
   upgradeEvidence,
-  recordReceipt,
-  runProvider,
+  recordReceipt: guardedRecordReceipt,
+  runProvider: guardedRunProvider,
   prove,
   landCheck,
   recoverLand,
@@ -1546,6 +1679,9 @@ await routeRuntimeCommand(command, values, {
   recordRepositoryLand,
   stageRootPointers,
   resumeLand,
+  showHandoffStatus,
+  showHandoffPacket,
+  recordHandoff,
   createAttestationChallenge,
   showSandboxInspection,
   createSandbox,

@@ -5,23 +5,21 @@ argument-hint: <intent|existing-change> [--prototype-selection <path>]
 
 Create or update **$ARGUMENTS**.
 
-With `--prototype-selection`, summarize that file; never use it as evidence.
+Read requirements, locked decisions, architecture/contracts, production path,
+tests, dependencies, and repository facts first. Challenge production entry,
+real wire, activation, negative oracles, and environment authority. Ask every
+material choice in one Decision Sheet and hash reads in `grounding.yaml`.
+Only a real contradiction permits one batched `--reopen-grounding`.
 
-Run `doctor --stage change`; reuse the change.
-Otherwise classify before creating it: `change new <intent> --rapid` only for
-low-impact, isolated, unit/static work, standard otherwise. Resolve ambiguity,
-impact, coupling, security, surface, and evidence.
-Omit `--security` when there are no triggers. Require review only for policy
-triggers. Declare `--surface`, then act on its forecast before signing: wire
-what `evidence init --write` can wire, and settle the reviewer now. When the
-forecast names review and no independent reviewer will exist, ask the user to
-choose one or set `review.independence: "self"`; found after Build, it costs
-the build.
+Record AWS/IAM/secret/Terraform/deploy/restart ownership in `handoffs.yaml` with
+timing, activation safety, evidence, runbook, rollback, claims, and tasks.
 
-Complete artifacts, tasks, evidence, execution. Run `change validate`, then
-`doctor --stage build --change <change>`. Sync any sandbox.
+Run `doctor --stage change`; reuse an existing change. Otherwise classify before creating it:
+rapid is only low-impact isolated unit/static work. Resolve impact, coupling,
+security, surface, acceptance, and review. Omit `--security` when there are no triggers.
+Declare surface, wire evidence, and settle the reviewer now. Prove must not
+discover an unnamed operator.
 
-Offer `change abandon` for an unprovable change; never retire one unasked.
-
-Ask material decisions in the user's language. Classify subjective
-acceptance—never infer it from silence or expose harness fields.
+Complete artifacts/tasks, validate, run Build doctor, and sync. Offer
+`change abandon` for an unprovable contract; never retire one unasked, infer
+acceptance from silence, or expose harness fields.

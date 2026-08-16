@@ -67,11 +67,11 @@
     },
     {
       "name": "change resolve",
-      "usage": "change resolve <change> --impact low|medium|high --coupling isolated|coupled [--ambiguity clear|unclear] [--surface <glob,glob>] [--security <terms>] [--review] [--size xs|s|m|l] (--acceptance-not-required | --acceptance-required --acceptance-reason <why> [--acceptance-claims <ids>])",
+      "usage": "change resolve <change> [--impact low|medium|high] [--coupling isolated|coupled] [--ambiguity clear|unclear] [--surface <glob,glob>] [--security <terms>] [--review] [--size xs|s|m|l] [--acceptance-not-required | --acceptance-required --acceptance-reason <why> [--acceptance-claims <ids>]] [--reopen-grounding --decision-ref <ref> --reopen-reason <why>]",
       "audience": "agent",
       "kind": "write",
       "idempotent": true,
-      "description": "Persist ambiguity, impact, coupling, size, security, expected surface, review, and acceptance decisions."
+      "description": "Persist agreement decisions or open one audited batched grounding revision."
     },
     {
       "name": "change validate",
@@ -122,6 +122,14 @@
       "description": "Collect executable evidence before an external boundary."
     },
     {
+      "name": "proof advance",
+      "usage": "proof advance <change> [--retry-indeterminate --decision-ref <ref>]",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Advance executable evidence, review, acceptance, and proof once; unchanged external waits resume without rerunning work."
+    },
+    {
       "name": "proof run",
       "usage": "proof run <change>",
       "audience": "agent",
@@ -136,6 +144,30 @@
       "kind": "read",
       "idempotent": true,
       "description": "Validate that the proven projection remains landable."
+    },
+    {
+      "name": "handoff status",
+      "usage": "handoff status <change>",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Show permission-bound external operations without treating them as developer tasks."
+    },
+    {
+      "name": "handoff packet",
+      "usage": "handoff packet <change> [--id <H00n>]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Emit the bounded DevOps/SRE operation packet, required evidence, rollback, and next command."
+    },
+    {
+      "name": "handoff record",
+      "usage": "handoff record <change> --id <H00n> --status accepted|completed|rejected --actor <name> --reference <ticket-or-run> [--evidence <reference,...>] [--reason <why>]",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Record a named operator's tracked acceptance or completion without storing credentials."
     },
     {
       "name": "land recover",
@@ -216,6 +248,30 @@
       "kind": "read",
       "idempotent": true,
       "description": "Inspect external authority; --template emits the response file to fill in."
+    },
+    {
+      "name": "authority dispatch",
+      "usage": "authority dispatch <change> --request <id> --scope full|delta --reviewer-type ai|human --reviewer-identity <id> [--base-attempt <digest>] [AI provenance options]",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Reserve a policy-routed review attempt when work is handed to a reviewer."
+    },
+    {
+      "name": "authority abort",
+      "usage": "authority abort <change> --request <id> --reason <text>",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Close a review request; an already dispatched attempt remains consumed."
+    },
+    {
+      "name": "authority run",
+      "usage": "authority run <change> --request <id> [--reviewer codex-sol] --subject-actor <id> [AI implementation provenance options]",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Run a configured read-only ephemeral reviewer, preserve its structured report, and record the bound response."
     },
     {
       "name": "authority record",
@@ -567,6 +623,7 @@
     "hash",
     "proof-plan",
     "proof-readiness",
+    "proof-advance",
     "proof-run",
     "proof-collect",
     "proof-preflight",
@@ -578,11 +635,17 @@
     "evidence-verify-ci",
     "evidence-upgrade",
     "authority-request",
+    "authority-dispatch",
+    "authority-run",
+    "authority-abort",
     "authority-status",
     "authority-record",
     "receipt",
     "run-provider",
     "prove",
+    "handoff-status",
+    "handoff-packet",
+    "handoff-record",
     "land-check",
     "land-recover",
     "land-plan",

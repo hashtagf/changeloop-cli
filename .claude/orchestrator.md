@@ -4,10 +4,10 @@
 Investigate? → Change → Build → Prove → Land
 ```
 
-OpenSpec owns intent, code/tests own implementation truth, and
-`.claude/harness/foundation.mjs` owns deterministic state, evidence, budgets,
-isolation, and Land guards. `tasks.md` is the only ledger. `.workflow/` is
-read-only legacy state.
+OpenSpec owns intent, code/tests implementation truth, and the harness owns
+state, evidence, budgets, isolation, and Land guards. `tasks.md` is the implementation ledger;
+`handoffs.yaml` is the external-operation contract. `.workflow/` is read-only
+legacy state.
 
 Use the public `claude-foundation` CLI. Do not reproduce its runtime logic in
 prompts or Markdown.
@@ -22,10 +22,8 @@ Rapid schema requires low impact, isolated coupling, unit/static evidence, and
 no public contract, migration, trust boundary, irreversible effect, or
 sensitive data. Upgrade when risk appears.
 
-Select providers from observable claims. Security is semantic: identity/access,
-secrets, permissions, cross-user data, network trust, unsafe sinks, sensitive
-storage, irreversible mutation, and security-relevant migrations trigger it;
-syntax alone does not.
+Select providers from observable claims. Security follows actual trust
+boundaries, not syntax.
 
 ## Build
 
@@ -37,23 +35,22 @@ Use subagents only for independent, verifiable, resumable work. Multi-repository
 work uses committed topology, per-change scope, `agents plan`, scoped packets,
 and task leases. A small isolated change stays with one agent.
 
-Worktrees and copies isolate workspace changes, not processes or host authority.
-Explicitly unattended work must pass the runtime's detected security-boundary
-guard; never enable a host permission bypass by implication.
+Worktrees/copies isolate files, not processes or host authority. Unattended work
+must pass the runtime guard; never enable a host permission bypass by implication.
 
-Model tiers are policy:
-
-- fast/Haiku: bounded inventory, logs, mechanical docs;
-- standard/Sonnet: implementation, tests, focused investigation;
-- deep/Opus: architecture, security, migration, contract decisions, independent
-  review.
-
-Risk and ambiguity—not file count—escalate. Deterministic providers use no
-model. Never weaken evidence to meet a budget.
+Model tiers follow risk and ambiguity, not file count. Deterministic providers
+use no model. Never weaken evidence for budget.
 
 If intent changes, pause, revise the same change, and `sandbox sync`. Stable task
 IDs preserve unaffected progress. Repository-scope changes require an explicit
 topology revision rather than silently exposing an unsandboxed repository.
+
+Cloud IAM, secret writes, infrastructure apply, deploy/restart, and environment
+verification belong to `handoffs.yaml` when the developer lacks authority.
+They never remain unchecked implementation tasks. Prove can continue after the
+packet is delivered once. Land permits an accepted incomplete handoff only for
+`post-land + safe-before-activation`; other unresolved operations report
+`WAITING_EXTERNAL` with the named owner and do not open a user decision loop.
 
 ## Prove
 
@@ -61,16 +58,16 @@ Validate the active change, snapshot relevant workspaces once, resolve claims to
 providers, reuse only fingerprint/hash-valid receipts, and execute missing
 evidence by a resource-safe DAG. Test evidence requires discovery. Required
 failed, missing, stale, error, or inconclusive evidence blocks Land.
+An external-operation wait is not failed evidence and never causes provider
+reruns. Reviewer infrastructure error has one bounded retry separate from
+delivered review waves.
 
-Review independently for high-impact, non-low-coupled, auth/access, public
-compatibility, migration, irreversible mutation, concurrency, money, multi-repo
-contracts, evidence anomalies, or policy. Findings are
+Review independently when risk policy requires it. Findings are
 `verified|hypothesis|disproved|accepted-risk`; only deterministic verified
 blockers and missing evidence block.
 
-Review starts from the bounded review packet in a fresh context. Critical policy
-requires a different model/provider family or a human. Human acceptance remains
-separate and is required only when the Change explicitly declares subjective taste.
+Review starts from its bounded packet in fresh context. Critical policy requires
+model-family diversity or its committed waiver. Acceptance stays separate.
 
 Proof artifacts and receipts are immutable and content-bound. Proof-time edits
 invalidate affected evidence. A mutation crash is not a behavioral kill, and a
@@ -83,14 +80,11 @@ A phase boundary is a context boundary: each phase inherits only its packet.
 
 ## Budget
 
-Spend is input, output, and cache writes from host request records; cache
-reads never count. Unknown is never zero. Lifetime usage is
-accounting; enforcement uses the active run window. At 70%, batch and reuse. At
-85%, obey the packet's completion-only policy: no speculative investigation,
-scope expansion, optional refactor, or new subagent. Focused fixes and required
-proof remain allowed. At 100%, recommend split or re-scope without blocking
-deterministic lifecycle recovery. Only an operator may open another audited
-window with `budget continue`. Required proof remains.
+Count input, output, and cache writes; unknown is never zero. At 70%, batch and
+reuse. At 85%, allow only focused fixes and required proof: no scope expansion.
+At 100%, recommend
+re-scope without blocking deterministic recovery. Only an operator may use
+`budget continue`.
 
 ## Land
 
@@ -107,11 +101,8 @@ identity, resume, then archive the control change last.
 
 ## Human interaction boundary
 
-Runtime JSON, lifecycle constants, hashes, receipts, provider names, provenance
-flags, and canonical commands are agent/host protocol. Never paste them into a
-user-facing answer by default. Translate machine state into the user's language:
-what completed, what remains, why the system stopped, and which decision is
-needed.
+Do not paste runtime protocol. Translate what completed, remains, stopped, and
+which decision is needed.
 
 Only deterministic recovery may be followed automatically. A structured
 `decision` requires an explicit user answer, including one a blocked operation

@@ -33,6 +33,12 @@ artifacts:
     template: evidence.yaml
     instruction: Map every observable scenario to stable claims. Discovery is implicit for test claims.
     requires: [proposal, specs]
+  - id: grounding
+    generates: grounding.yaml
+    description: Locked single-batch decisions, complete read set, and claim-to-production evidence map
+    template: grounding.yaml
+    instruction: Record discovery and every locked material choice/default before Build.
+    requires: [proposal, specs, evidence]
   - id: repositories
     generates: repositories.yaml
     description: Repositories this change may touch, and their write scope
@@ -45,7 +51,15 @@ artifacts:
     template: execution.yaml
     instruction: Configure project-owned adapters separately from the behavioral contract.
     requires: [evidence]
+  - id: handoffs
+    generates: handoffs.yaml
+    description: Permission-bound external operations and their activation-safe delivery contract
+    template: handoffs.yaml
+    instruction: Declare DevOps, SRE, security, or operator work separately from implementation tasks; use an empty operations array when none exists.
+    requires: [proposal, tasks, evidence, grounding]
 
 apply:
-  requires: [tasks, evidence, execution, repositories]
+  # handoffs is required by v3.3 lifecycle state, but remains optional here so
+  # an active pre-v3.3 change can still apply without mutating its agreement.
+  requires: [tasks, evidence, grounding, execution, repositories]
   tracks: tasks.md

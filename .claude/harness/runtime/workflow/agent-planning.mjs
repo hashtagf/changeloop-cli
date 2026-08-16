@@ -3,6 +3,7 @@ import { join, relative } from "node:path";
 // Shared with drift classification: the same kinds that force a deep tier here
 // are the ones a silent downgrade must block at Land.
 import { DRIFT_BLOCKING_TASK_KINDS } from "../observability/model-drift.mjs";
+import { findCyclePath } from "../core/graph.mjs";
 
 export function createModelRouter({ loadRuntime, policy, fail }) {
   function modelForTask(id, task, selectedPolicy = policy()) {
@@ -146,7 +147,16 @@ export function createAgentPlanner({
     while (pending.size) {
       const ready = [...pending.values()].filter((task) =>
         task.dependsOn.every((dependency) => completed.has(dependency)));
-      if (!ready.length) fail(`task dependency cycle: ${[...pending.keys()].join(", ")}`);
+      if (!ready.length) {
+        // Unknown dependencies already failed above and done tasks are in
+        // `completed`, so a stuck graph here can only be a cycle among the
+        // pending tasks — name one concrete cycle instead of every pending id.
+        const cycle = findCyclePath(new Map([...pending.values()].map((task) =>
+          [task.id, task.dependsOn.filter((dependency) => pending.has(dependency))])));
+        fail(cycle
+          ? `task dependency cycle: ${cycle.join(" -> ")}`
+          : `task dependency deadlock: ${[...pending.keys()].join(", ")}`);
+      }
       const group = [];
       for (const task of ready) {
         const conflicts = group.some((selected) => taskResourcesConflict(selected, task));

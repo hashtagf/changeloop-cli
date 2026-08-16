@@ -112,17 +112,21 @@ command prints the change's workspace hash. An invalid signature,
 stale workspace, wrong issuer, or unsigned passing artifact is rejected before
 a receipt is written.
 
-For human review or acceptance, use the resumable authority bridge:
+Use `proof advance` as the normal resumable path:
 
 ```bash
-claude-foundation authority request <change> --type review|acceptance
-claude-foundation authority status <change> --request <request-id>
-claude-foundation authority record <change> --request <request-id> --response response.json
+claude-foundation proof advance <change>
 ```
 
-Requests contain bounded packets and expire or become stale with the workspace.
-Responses must match the request identity and workspace, then pass the ordinary
-review or acceptance receipt validator. Completed requests cannot be replayed.
+It executes missing project evidence once, routes review before acceptance, and
+returns a stable waiting handoff. Repeating it against an unchanged open request
+does not rerun evidence or dispatch another reviewer. Configured AI review uses
+`authority run`; a named human review uses `authority dispatch` before
+`authority record`; acceptance uses request/status/record without a review
+dispatch. Requests contain bounded packets and expire or become stale with the
+workspace. Responses must match the request identity and workspace, then pass
+the ordinary review or acceptance receipt validator. Completed requests cannot
+be replayed.
 Readiness exposes this boundary as a structured user decision with pass, fail,
 inconclusive, error, and pause paths. It never emits a pre-filled passing receipt.
 The agent translates the packet and owns the response artifact; users answer in
@@ -231,10 +235,11 @@ refused, and a provider configured for one cannot be given a passing receipt at
 all — run `proof run` so the declared command is what executes. A `--reference`
 must be a URI or a path that exists; free text is not a reference.
 
-Review receipts additionally identify reviewer type/identity, request and model
-provenance for AI reviewers, one or more structured implementation-subject tuples,
-finding counts, and changed-path scope after the first round. The review packet
-unions committed base-to-HEAD and dirty paths per repository. Critical policy
+Review receipts additionally identify reviewer type/identity, the actual model
+session for AI reviewers, one or more structured implementation-subject tuples,
+finding IDs/details, verified closure IDs, and changed-artifact scope after the
+first round. The review packet unions committed base-to-HEAD and dirty paths per
+repository with all review contract artifacts. Critical policy
 requires a different provider/model family or a human, unless the project has
 declared `"review": { "diversity": "single-model" }` in `foundation.json`; that
 waiver is named in the packet and recorded as `review.policy.diversityWaived`.
@@ -242,14 +247,28 @@ Reviewer independence is waived the same way and nowhere else: with
 `"review": { "independence": "self" }`, a reviewer may share an implementer's
 identity and session at any impact, the receipt still records the observed
 `review.policy.independent` as false alongside `independenceWaived`, and each
-waiver relaxes only its own axis. The shipped `foundation.json` seeds both
-waivers; a project with a second reviewer available sets either axis to
-`"required"`. The runtime itself still defaults to `required` on both when the
-key is absent, so an existing project that never declared a policy is
-unaffected. A change-level hash chain
-binds the complete receipt payload and limits AI to two recorded attempts even if
-the current receipt is deleted or its provider is renamed; corrupt history fails
-closed. Legacy review receipts remain readable but cannot satisfy protocol v2.
+waiver relaxes only its own axis. The shipped `foundation.json` requires both
+axes and configures fresh read-only Codex and Claude Code reviewer profiles,
+with Codex selected by default. A Codex-only or Claude-Code-only project may
+commit only the `single-model` diversity waiver while keeping identity/session
+independence required. The runtime also defaults to `required` when either key is
+absent. Risk routing bounds the circuit: low gets one full AI review; medium
+and high may use one full plus one finding-bound delta after one correction
+batch. High-risk decisions are settled in the initial Decision Sheet, so Prove
+has no mandatory human-final gate. Reviewer infrastructure failures receive one
+full retry and never create a delivered baseline. If the final delta reports an
+in-contract blocker, it must bind that finding to affected claims and declared
+critical cases; a later current pass of those providers creates a deterministic
+repair-closure receipt, not a third AI review. A change-level hash chain binds
+dispatch, completion, scope, findings, closure evidence, and receipt payload.
+Corrupt history fails closed. Legacy review receipts remain readable but cannot
+satisfy protocol v3.
+
+External operations use `handoffs.yaml`, not evidence receipts or unchecked
+developer tasks. Prove may finish while those operations are pending. Land
+requires completion evidence for pre-Land or activation-coupled work; accepted
+post-Land work may remain only when its activation-proof claim establishes a
+dark merge. Handoff packets and records reject credential material.
 
 Acceptance is external and human-only. A passing receipt requires explicit claim
 scope, `--acceptor`, `--decision accept`, unique nonblank `--criterion` values,
