@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "router-pins-agents",
+      "scenario": "ตาราง router ใน config ปัก model ของ agent ที่ถูก map และช่อง small-model เป็น candidate แรกที่พร้อมใช้ของ tier ตอน boot",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "router-fallback",
+      "scenario": "routing rule ที่ไม่มี candidate พร้อมใช้จะ log คำเตือน ปล่อยช่องว่างไว้ และ boot จบโดย fallback chain เดิมของ engine ยังทำงาน",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "router-precedence",
+      "scenario": "pin ของ cfg.agent model หรือ cfg.small_model ที่ผู้ใช้ตั้งชัดเจนรอดจาก router โดยไม่ถูกแก้",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "router-config-compat",
+      "scenario": "เอกสาร config ที่มี field router ผ่าน v1 decode โดย field ครบ และผ่านเส้นทาง migrate v1→v2 โดยไม่มี error",
+      "impact": "medium",
+      "capabilities": ["test"]
+    }
+  ]
+}

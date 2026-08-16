@@ -58,6 +58,38 @@ config.json → opencode.json → opencode.jsonc → changeloop.json → changel
 กติกา: ถ้าตั้ง `CHANGELOOP_*` ใช้ค่านั้น; ถ้าไม่ตั้ง fallback ไปอ่าน
 `OPENCODE_*` เดิม
 
+## Model router (`router`)
+
+ตาราง routing เลือก model ให้ agent อัตโนมัติตอน boot — ใส่ใน config ชั้นไหน
+ก็ได้ (merge ตามลำดับปกติ; ไม่มี section นี้ = พฤติกรรมเดิมทุกประการ):
+
+```jsonc
+{
+  "router": {
+    // tier → รายการ candidate เรียงลำดับ (ตัวแรกที่พร้อมใช้ชนะ)
+    "tiers": {
+      "fast": ["anthropic/claude-haiku-4-5", "google/gemini-2.5-flash"],
+      "deep": ["anthropic/claude-opus-4-1"]
+    },
+    // ชื่อ agent → tier หรือ "provider/model" ตรง ๆ
+    "agents": { "plan": "deep", "test": "fast", "debug": "openai/gpt-5" },
+    // ช่อง small model (เช่น title generation)
+    "small_model": "fast"
+  }
+}
+```
+
+กติกา:
+
+- **พร้อมใช้** = provider มี auth record (`changeloop auth login`), ถูกตั้งใน
+  `provider` ของ config, หรือมี env var ของ API key ตั้งอยู่
+- **Warn + fallback** — rule ที่ resolve ไม่ได้จะ log คำเตือน
+  (`[changeloop-router] …`) แล้วปล่อยช่องว่างให้ fallback chain เดิม
+  (`agent.model → model → default`) ทำงาน; boot ไม่มีวันล้มเพราะตาราง
+- **Pin ผู้ใช้ชนะเสมอ** — `agent.<name>.model` หรือ `small_model` ที่ตั้ง
+  ไว้แล้วไม่ถูก router ทับ
+- ทำงานครั้งเดียวตอน boot; แก้ตารางแล้วต้องเริ่ม session ใหม่
+
 ## สิ่งที่ยังใช้ชื่อ opencode โดยเจตนา (Phase 3)
 
 npm scope `@opencode-ai/*`, service tags, URL `opencode.ai` (config `$schema`,

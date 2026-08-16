@@ -14,6 +14,7 @@ import { ConfigMCPV1 } from "./mcp"
 import { ConfigPermissionV1 } from "./permission"
 import { ConfigPluginV1 } from "./plugin"
 import { ConfigProviderV1 } from "./provider"
+import { ConfigRouterV1 } from "./router"
 import { ConfigServerV1 } from "./server"
 import { ConfigSkillsV1 } from "./skills"
 
@@ -76,6 +77,9 @@ export const Info = Schema.Struct({
   }),
   small_model: Schema.optional(Schema.String).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
+  }),
+  router: Schema.optional(ConfigRouterV1.Info).annotate({
+    description: "Model routing table applied at boot: tier candidates and agent-to-tier assignments",
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
