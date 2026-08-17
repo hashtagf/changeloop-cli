@@ -1,57 +1,158 @@
 import { describe, expect, test } from "bun:test"
-import type { Config } from "@opencode-ai/plugin"
-import { applyFoundationCommands, FOUNDATION_COMMANDS, FoundationWorkflowPlugin } from "../../src/plugin/foundation"
+import type { Config, Hooks } from "@opencode-ai/plugin"
+import {
+  applyFoundationCommands,
+  createFoundationWorkflowHooks,
+  FOUNDATION_COMMANDS,
+  FoundationWorkflowPlugin,
+  resolveFoundationInstruction,
+} from "../../src/plugin/foundation"
 
-const LOOP = ["investigate", "change", "build", "prove", "land", "changes", "feature", "dev"]
-const COMMAND_PATHS = Object.fromEntries(LOOP.map((name) => [name, `.claude/commands/${name}.md`]))
+const LOOP = ["investigate", "change", "build", "prove", "land", "changes", "feature", "dev"] as const
+const fixtureExecutable = [
+  "bun",
+  "-e",
+  `const args = process.argv.slice(1)
+const command = args[2]
+const argument = args[args.indexOf("--arguments") + 1]
+console.log(JSON.stringify({
+  protocol: 1,
+  command,
+  description: "fixture " + command,
+  instruction: "resolved " + command + ": " + argument,
+  argumentMode: command === "changes" ? "none" : "required",
+  foundationVersion: "fixture",
+  additiveField: true,
+}))`,
+]
 
 describe("foundation templates", () => {
   test("template set covers exactly the eight loop commands", () => {
     expect(Object.keys(FOUNDATION_COMMANDS).toSorted()).toEqual(LOOP.toSorted())
   })
 
-  test("dispatches each command to its matching canonical project instruction", () => {
+  test("uses one private dispatcher marker per command without project file instructions", () => {
     for (const name of LOOP) {
-      const template = FOUNDATION_COMMANDS[name]!.template
-      const normalized = template.replace(/\s+/g, " ")
-      expect(normalized).toContain(`Read \`${COMMAND_PATHS[name]}\` completely`)
-      expect(normalized).toContain("canonical workflow instruction")
-      expect(
-        LOOP.filter((candidate) => candidate !== name).every(
-          (candidate) => !template.includes(COMMAND_PATHS[candidate]!),
-        ),
-      ).toBe(true)
+      expect(FOUNDATION_COMMANDS[name].template.trim()).toBe(`<!-- changeloop:foundation-dispatch:v1:${name} -->`)
+      expect(FOUNDATION_COMMANDS[name].template).not.toContain(".claude/commands")
+      expect(FOUNDATION_COMMANDS[name].template).not.toContain("workflow body")
+    }
+  })
+})
+
+describe("resolveFoundationInstruction", () => {
+  test("accepts additive protocol fields and preserves opaque arguments in one argv value", async () => {
+    const result = await resolveFoundationInstruction({
+      command: "change",
+      arguments: "spaces '$HOME' $(touch nope) `echo nope`",
+      directory: import.meta.dir,
+      executable: fixtureExecutable,
+    })
+    expect(result).toEqual({
+      ok: true,
+      instruction: "resolved change: spaces '$HOME' $(touch nope) `echo nope`",
+    })
+  })
+
+  test("rejects malformed, mismatched, and oversized responses", async () => {
+    const cases = [
+      { executable: ["bun", "-e", "console.log('{')"] },
+      {
+        executable: [
+          "bun",
+          "-e",
+          `console.log(JSON.stringify({protocol:1,command:"build",description:"x",instruction:"x",argumentMode:"required",foundationVersion:"x"}))`,
+        ],
+      },
+      { executable: ["bun", "-e", "console.log('x'.repeat(1024))"], maxOutputBytes: 100 },
+    ]
+    for (const item of cases) {
+      const result = await resolveFoundationInstruction({
+        command: "change",
+        arguments: "intent",
+        directory: import.meta.dir,
+        ...item,
+      })
+      expect(result).toEqual({ ok: false, code: "foundation_response_invalid" })
     }
   })
 
-  test("fails closed when the Foundation installation is missing or partial", () => {
+  test("classifies missing, timed-out, and unsupported CLI boundaries", async () => {
+    expect(
+      await resolveFoundationInstruction({
+        command: "changes",
+        arguments: "",
+        directory: import.meta.dir,
+        executable: ["definitely-not-a-foundation-executable"],
+      }),
+    ).toEqual({ ok: false, code: "foundation_cli_missing" })
+    expect(
+      await resolveFoundationInstruction({
+        command: "changes",
+        arguments: "",
+        directory: import.meta.dir,
+        executable: ["bun", "-e", "await Bun.sleep(200)"],
+        timeoutMs: 10,
+      }),
+    ).toEqual({ ok: false, code: "foundation_cli_timeout" })
+    expect(
+      await resolveFoundationInstruction({
+        command: "changes",
+        arguments: "",
+        directory: import.meta.dir,
+        executable: ["bun", "-e", "console.error('unknown command'); process.exit(1)"],
+      }),
+    ).toEqual({ ok: false, code: "foundation_host_api_unsupported" })
+  })
+})
+
+describe("Foundation workflow hooks", () => {
+  test("replaces all eight owned markers with instructions from the CLI boundary", async () => {
+    const hooks = createFoundationWorkflowHooks({ directory: import.meta.dir }, { executable: fixtureExecutable })
+    const config = {} as Config
+    await hooks.config!(config)
     for (const name of LOOP) {
-      const template = FOUNDATION_COMMANDS[name]!.template
-      const normalized = template.replace(/\s+/g, " ")
-      expect(template).toContain(".claude/harness/foundation.mjs")
-      expect(template).toContain(COMMAND_PATHS[name]!)
-      expect(template).toContain("DEVELOPER-SETUP.md")
-      expect(normalized).toContain("install or reinstall claude-foundation, and stop")
-      expect(normalized).toContain("Never fall back to a bundled workflow body or improvise the workflow")
-      expect(template).not.toMatch(/Bundled from claude-foundation|claude-foundation \d+\.\d+\.\d+/)
+      const output = commandOutput(FOUNDATION_COMMANDS[name].template)
+      await hooks["command.execute.before"]!({ command: name, sessionID: "session", arguments: "intent" }, output)
+      expect(text(output)).toBe(`resolved ${name}: intent`)
     }
   })
 
-  test("argument-taking dispatchers preserve $ARGUMENTS without adding them to changes", () => {
-    for (const name of LOOP.filter((command) => command !== "changes")) {
-      expect(FOUNDATION_COMMANDS[name]!.template).toContain("$ARGUMENTS")
-    }
-    expect(FOUNDATION_COMMANDS.changes!.template).not.toContain("$ARGUMENTS")
+  test("fails closed with upgrade guidance and no project-file fallback", async () => {
+    const hooks = createFoundationWorkflowHooks(
+      { directory: import.meta.dir },
+      { executable: ["bun", "-e", "console.error('old cli'); process.exit(1)"] },
+    )
+    await hooks.config!({} as Config)
+    const output = commandOutput(FOUNDATION_COMMANDS.changes.template)
+    await hooks["command.execute.before"]!({ command: "changes", sessionID: "session", arguments: "" }, output)
+    expect(text(output)).toContain("foundation_host_api_unsupported")
+    expect(text(output)).toContain("Stop here")
+    expect(text(output)).toContain("Do not read project command files")
   })
 
-  test("documents the dispatcher, CLI, project runtime, and runtime API separately", async () => {
-    const docs = await Bun.file(new URL("../../../../docs/CONFIGURATION.md", import.meta.url)).text()
-    expect(docs).toContain("thin dispatcher")
-    expect(docs).toContain("claude-foundation version")
-    expect(docs).toContain("claude-foundation runtime version")
-    expect(docs).toContain("claude-foundation runtime api-version")
-    expect(docs).toContain("claude-foundation doctor --stage change")
-    expect(docs).not.toContain("template bundle จาก Foundation 3.2.27")
+  test("never intercepts a user-defined command with the same name", async () => {
+    const hooks = createFoundationWorkflowHooks({ directory: import.meta.dir }, { executable: fixtureExecutable })
+    const config = {
+      command: { change: { template: "my own change command" } },
+    } as unknown as Config
+    await hooks.config!(config)
+    const output = commandOutput("my own change command")
+    await hooks["command.execute.before"]!({ command: "change", sessionID: "session", arguments: "intent" }, output)
+    expect(text(output)).toBe("my own change command")
+  })
+
+  test("foundation_workflow false disables injection and interception", async () => {
+    const hooks = createFoundationWorkflowHooks({ directory: import.meta.dir }, { executable: fixtureExecutable })
+    const config = {
+      foundation_workflow: false,
+      command: { mine: { template: "user command" } },
+    } as unknown as Config
+    await hooks.config!(config)
+    const output = commandOutput(FOUNDATION_COMMANDS.change.template)
+    await hooks["command.execute.before"]!({ command: "change", sessionID: "session", arguments: "intent" }, output)
+    expect(Object.keys((config as Config & { command: Record<string, unknown> }).command)).toEqual(["mine"])
+    expect(text(output)).toBe(FOUNDATION_COMMANDS.change.template)
   })
 })
 
@@ -62,47 +163,26 @@ describe("applyFoundationCommands", () => {
     const commands = (config as Config & { command: Record<string, { template: string; description?: string }> })
       .command
     expect(Object.keys(commands).toSorted()).toEqual(LOOP.toSorted())
-    expect(commands["change"]!.template).toBe(FOUNDATION_COMMANDS["change"]!.template)
-    expect(commands["change"]!.description).toBe(FOUNDATION_COMMANDS["change"]!.description)
-  })
-
-  test("never overwrites a user-defined command with the same name", () => {
-    const config = {
-      command: { change: { template: "my own change command" } },
-    } as unknown as Config & { command: Record<string, { template: string }> }
-    applyFoundationCommands(config)
-    expect(config.command["change"]!.template).toBe("my own change command")
-    expect(Object.keys(config.command).toSorted()).toEqual(LOOP.toSorted())
-  })
-
-  test("foundation_workflow: false disables injection entirely and leaves other commands alone", () => {
-    const config = {
-      foundation_workflow: false,
-      command: { mine: { template: "user command" } },
-    } as unknown as Config & { foundation_workflow: boolean; command: Record<string, { template: string }> }
-    applyFoundationCommands(config)
-    expect(Object.keys(config.command)).toEqual(["mine"])
+    expect(commands.change).toEqual(FOUNDATION_COMMANDS.change)
   })
 })
 
 describe("FoundationWorkflowPlugin config hook", () => {
-  const hook = async (config: Config) => {
-    const hooks = await FoundationWorkflowPlugin({} as never)
-    await hooks.config!(config)
-    return config
-  }
-
   test("injects the loop commands at boot by default", async () => {
     const config = {} as Config
-    await hook(config)
-    const cfg = config as Config & { command?: Record<string, { template: string }> }
-    expect(Object.keys(cfg.command ?? {}).toSorted()).toEqual(LOOP.toSorted())
-  })
-
-  test("respects the opt-out field", async () => {
-    const config = { foundation_workflow: false } as unknown as Config
-    await hook(config)
-    const cfg = config as Config & { command?: Record<string, unknown> }
-    expect(cfg.command).toBeUndefined()
+    const hooks = await FoundationWorkflowPlugin({ directory: import.meta.dir } as never)
+    await hooks.config!(config)
+    expect(Object.keys((config as Config & { command?: Record<string, unknown> }).command ?? {}).toSorted()).toEqual(
+      LOOP.toSorted(),
+    )
   })
 })
+
+function commandOutput(value: string) {
+  return { parts: [{ type: "text", text: value }] } as Parameters<NonNullable<Hooks["command.execute.before"]>>[1]
+}
+
+function text(output: ReturnType<typeof commandOutput>) {
+  const part = output.parts.find((item) => item.type === "text")
+  return part?.type === "text" ? part.text : undefined
+}

@@ -1,11 +1,1 @@
-This is Changeloop's built-in dispatcher for the Foundation `feature` command.
-
-First check that both `.claude/harness/foundation.mjs` and
-`.claude/commands/feature.md` exist in this project. If either file is missing,
-the project has no complete Foundation installation: relay
-`.claude/harness/DEVELOPER-SETUP.md` when present, otherwise tell the user to
-install or reinstall claude-foundation, and stop. Never fall back to a bundled
-workflow body or improvise the workflow.
-
-Read `.claude/commands/feature.md` completely and follow it as the canonical
-workflow instruction for **$ARGUMENTS**.
+<!-- changeloop:foundation-dispatch:v1:feature -->

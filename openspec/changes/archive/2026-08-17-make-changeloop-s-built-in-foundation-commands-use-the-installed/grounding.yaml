@@ -1,0 +1,146 @@
+{
+  "version": 2,
+  "decisionBatch": {
+    "status": "locked",
+    "source": "mixed",
+    "reference": "conversation-2026-08-17-option-4",
+    "mode": "single-batch",
+    "lockedAt": "2026-08-17T15:07:03Z",
+    "decisions": [
+      {
+        "id": "instruction-source",
+        "question": "Which source should provide semantics for Changeloop's eight built-in Foundation commands?",
+        "answer": "Use a new versioned host-instruction endpoint exposed by the installed claude-foundation CLI; do not point at project files or bundle workflow bodies.",
+        "source": "user-batch"
+      },
+      {
+        "id": "execution-boundary",
+        "question": "Should the plugin execute complete Foundation workflows?",
+        "answer": "No. The plugin synchronously fetches the canonical instruction; the agent and Foundation runtime retain workflow, mutation, evidence, and authority ownership.",
+        "source": "recommended-default"
+      },
+      {
+        "id": "compatibility-failure",
+        "question": "What happens when the installed CLI cannot serve the negotiated instruction protocol?",
+        "answer": "Fail closed with a typed upgrade/reinstall diagnosis and no fallback.",
+        "source": "recommended-default"
+      }
+    ]
+  },
+  "risk": {
+    "tier": "high",
+    "classes": ["public-compatibility", "cross-process-contract", "process-arguments"],
+    "rationale": "The change replaces the default command instruction source across a synchronous process boundary and accepts user-supplied arguments, while preserving existing lifecycle ownership."
+  },
+  "productionEntry": {
+    "status": "applicable",
+    "sourceReason": "The built-in plugin injects the live command surface at boot.",
+    "paths": [
+      { "repository": "root", "path": "packages/opencode/src/plugin/foundation.ts" }
+    ]
+  },
+  "realWire": {
+    "status": "applicable",
+    "sourceReason": "The command hook can replace prompt parts immediately before the command message is submitted.",
+    "contracts": [
+      { "repository": "root", "path": "packages/opencode/src/session/prompt.ts" }
+    ]
+  },
+  "activationSemantics": {
+    "status": "applicable",
+    "sourceReason": "The new behavior activates by default after the producer endpoint and a new Changeloop binary are installed; foundation_workflow false remains the kill switch.",
+    "activatedPaths": [
+      { "repository": "root", "path": "packages/opencode/src/plugin/foundation.ts" }
+    ],
+    "failureSemanticChanges": [
+      "An old or missing claude-foundation CLI fails closed even when project-owned .claude/commands files exist."
+    ]
+  },
+  "serviceInteractions": {
+    "status": "applicable",
+    "sourceReason": "Changeloop synchronously invokes a separately released local executable and requires its response for the next model request.",
+    "rows": [
+      {
+        "id": "foundation-host-instruction",
+        "owner": "claude-foundation maintainers",
+        "producer": "installed claude-foundation CLI",
+        "consumer": "Changeloop FoundationWorkflowPlugin",
+        "contract": "host instruction protocol 1 JSON",
+        "delivery": "synchronous local process request-response",
+        "timeoutRetry": "five-second timeout with no automatic retry",
+        "idempotency": "read-only lookup; repeated requests have no side effects",
+        "ordering": "one independent lookup per slash-command invocation",
+        "consistency": "instruction is the snapshot owned by the installed CLI release",
+        "rollout": "publish the additive producer endpoint before activating the Changeloop consumer",
+        "rollback": "restore the previous Changeloop binary or set foundation_workflow false"
+      }
+    ]
+  },
+  "observability": {
+    "status": "applicable",
+    "sourceReason": "Boundary failures must identify capability and compatibility faults without exposing raw instruction contents.",
+    "rows": [
+      {
+        "interactionId": "foundation-host-instruction",
+        "correlation": "slash command name and session identifier",
+        "structuredEvents": "instruction_resolved and instruction_failed with command, error_code, and protocol",
+        "sli": "successful instruction resolutions divided by injected command invocations",
+        "alert": "no background alert; an interactive failure is surfaced immediately to the invoking user",
+        "runbook": "verify PATH, run claude-foundation version, then upgrade or reinstall a protocol-1-capable CLI",
+        "operatorQuestion": "which command, protocol, and stable boundary error failed?"
+      }
+    ]
+  },
+  "readSet": [
+    { "repository": "root", "path": "packages/opencode/src/plugin/foundation.ts", "role": "production-path", "mode": "full", "sha256": "a26d210cf33c69384a090c914d2a2df0d1b5fe3bfbabe6cc58bfc595dc74c2e6" },
+    { "repository": "root", "path": "packages/opencode/test/plugin/foundation.test.ts", "role": "test-topology", "mode": "full", "sha256": "f1c9a68c2ce3573650c70bcae81fdd04f8ef7dd7f19d2d52815488172f231f3f" },
+    { "repository": "root", "path": "openspec/specs/foundation-workflow/spec.md", "role": "requirement", "mode": "full", "sha256": "df664fed006352d36d2dad39873e928d5ef05c0364bed0bf6403ca3c138ba83d" },
+    { "repository": "root", "path": "openspec/investigations/foundation-builtin-version-compatibility.md", "role": "architecture", "mode": "full", "sha256": "9f7798e2583a363251fb5ee027634157a0004c95bd24b13460645f627f2b87b4" },
+    { "repository": "root", "path": "packages/opencode/src/plugin/index.ts", "role": "composition-root", "mode": "full", "sha256": "73cdc992090d88cc14865aca70aa65fe85c2e7ff845b8a3353a55171cb34f535" },
+    { "repository": "root", "path": "packages/plugin/src/index.ts", "role": "dependency-source", "mode": "full", "sha256": "7ce98ddab759903e6618b40a1c8beb1b621f0691f8f508ad2c07dba2041744e1" },
+    { "repository": "root", "path": "packages/opencode/src/session/prompt.ts", "role": "contract", "mode": "full", "sha256": "0ef73c460d46619cd3e75d4b790a22a3c4c999b311a43e7887b634ff7a3fa06d" }
+  ],
+  "claims": [
+    {
+      "id": "installed-foundation-instructions-drive-builtins",
+      "productionPath": [{ "repository": "root", "path": "packages/opencode/src/plugin/foundation.ts" }],
+      "failurePaths": [{ "repository": "root", "path": "packages/opencode/src/plugin/foundation.ts", "failure": "CLI returns a response for the wrong command or unsupported protocol" }],
+      "evidenceClass": ["test"],
+      "testDoubleGap": "none"
+    },
+    {
+      "id": "foundation-boundary-fails-closed",
+      "productionPath": [{ "repository": "root", "path": "packages/opencode/src/plugin/foundation.ts" }],
+      "failurePaths": [{ "repository": "root", "path": "packages/opencode/src/plugin/foundation.ts", "failure": "missing executable, timeout, unsupported API, malformed JSON, or oversized output" }],
+      "evidenceClass": ["test"],
+      "testDoubleGap": "none"
+    },
+    {
+      "id": "user-command-precedence-remains",
+      "productionPath": [{ "repository": "root", "path": "packages/opencode/src/plugin/foundation.ts" }],
+      "failurePaths": [{ "repository": "root", "path": "packages/opencode/src/plugin/foundation.ts", "failure": "hook intercepts a command without the private marker" }],
+      "evidenceClass": ["test"],
+      "testDoubleGap": "none"
+    }
+  ],
+  "criticalCases": [
+    { "id": "opaque-arguments", "claimIds": ["installed-foundation-instructions-drive-builtins"], "oracle": "contract-oracle", "case": "quotes, spaces, dollar signs, and command-substitution syntax arrive as one literal argv value" },
+    { "id": "old-cli", "claimIds": ["foundation-boundary-fails-closed"], "oracle": "failure-path", "case": "CLI without the host instruction endpoint yields upgrade guidance and no fallback" },
+    { "id": "user-override", "claimIds": ["user-command-precedence-remains"], "oracle": "real-wire", "case": "a user-defined change command is neither replaced nor intercepted" }
+  ],
+  "mutants": [],
+  "derivedFacts": [
+    {
+      "fact": "The current claude-foundation 3.2.29 CLI has lifecycle operations and describe metadata but no machine-readable host-instruction endpoint.",
+      "command": "claude-foundation help --all"
+    },
+    {
+      "fact": "The command.execute.before hook runs after template resolution and before the command prompt is submitted.",
+      "command": "grep -n 'command.execute.before' packages/opencode/src/session/prompt.ts packages/plugin/src/index.ts"
+    },
+    {
+      "fact": "The existing spec intentionally names project-owned command files as the instruction source and therefore requires a MODIFIED requirement.",
+      "command": "grep -n 'project-owned canonical command file' openspec/specs/foundation-workflow/spec.md"
+    }
+  ]
+}

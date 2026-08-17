@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "installed-foundation-instructions-drive-builtins",
+      "scenario": "All eight injected commands replace their private marker with the matching protocol-1 instruction returned by the claude-foundation executable selected from PATH, preserving opaque arguments.",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "foundation-boundary-fails-closed",
+      "scenario": "Missing, incompatible, timed-out, malformed, or oversized CLI responses produce typed actionable failure without a project-file or bundled-body fallback.",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "user-command-precedence-remains",
+      "scenario": "User-defined command collisions and foundation_workflow false bypass both injection and runtime interception.",
+      "impact": "medium",
+      "capabilities": ["test"]
+    }
+  ],
+  "invariants": [
+    "The plugin never constructs a shell command string from invocation arguments.",
+    "Only commands carrying a plugin-owned dispatcher marker are intercepted.",
+    "No failure path falls back to project command files or bundled workflow instructions."
+  ]
+}

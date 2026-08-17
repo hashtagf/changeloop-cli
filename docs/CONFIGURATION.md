@@ -95,8 +95,9 @@ config.json → opencode.json → opencode.jsonc → changeloop.json → changel
 changeloop ฝัง change-loop commands ของ claude-foundation มาในตัว —
 `/investigate /change /build /prove /land /changes /feature /dev` — โผล่ทุก
 project โดยไม่ต้องตั้งอะไร ตัว builtin เป็น thin dispatcher ซึ่งอ่านคำสั่ง
-canonical จาก `.claude/commands/<command>.md` ของ project จึงใช้ instruction
-revision เดียวกับ harness ที่ติดตั้ง แทนการ bundle workflow body ของ Foundation
+canonical ผ่าน `claude-foundation host instruction` จาก executable ที่ resolve
+ผ่าน `PATH` จึงใช้ instruction ของ Foundation release ที่ติดตั้งอยู่ โดยไม่อ่าน
+`.claude/commands` ของ project และไม่ bundle workflow body ของ Foundation
 เวอร์ชันใดเวอร์ชันหนึ่ง:
 
 ```jsonc
@@ -110,16 +111,17 @@ revision เดียวกับ harness ที่ติดตั้ง แท�
 
 - **เปิดเป็น default** — ไม่มี field นี้ = commands ทั้ง 8 ถูกฉีดตอน boot
 - **Command ผู้ใช้ชนะเสมอ** — `command.<name>` ที่ define เองชื่อชนกันไม่ถูกทับ
-- **ต้องมี harness ใน project** — ตัว command จะตรวจ
-  `.claude/harness/foundation.mjs` และ canonical command file ที่ตรงกันก่อน;
-  project ที่ยังไม่ติดตั้งหรือติดตั้งไม่ครบจะได้คำแนะนำติดตั้งใหม่ แล้ว command
-  จะหยุดแทนการใช้ workflow เก่าหรือ improvise
+- **ต้องมี CLI ที่รองรับ protocol 1** — ตัว command เรียก local process ด้วย
+  argv โดยตรง มี timeout 5 วินาที และจำกัด response 256 KiB; เมื่อ CLI หาย,
+  เก่า, timeout หรือส่ง response ผิด contract จะหยุดพร้อมคำแนะนำ upgrade/reinstall
+  โดยไม่ fallback ไป project file หรือ improvise
 - แก้ field แล้วต้องเริ่ม session ใหม่ (อ่านครั้งเดียวตอน boot)
 
 เวอร์ชันมี 3 ชั้นที่แยกจากกัน ตรวจได้ด้วย:
 
 ```sh
 claude-foundation version              # CLI ที่ resolve จาก PATH
+claude-foundation host instruction changes --protocol 1 --format json
 claude-foundation runtime version      # runtime ที่ติดตั้งใน project
 claude-foundation runtime api-version  # compatibility API ของ project runtime
 claude-foundation doctor --stage change
@@ -127,7 +129,8 @@ claude-foundation doctor --stage change
 
 CLI ตรวจ runtime API compatibility ก่อนส่ง operation ไปยัง project harness;
 semantic version ของ CLI และ runtime ไม่จำเป็นต้องเท่ากันเมื่อ API compatible
-ส่วน builtin dispatcher ไม่มี Foundation semantic version ของตัวเอง
+ส่วน builtin dispatcher negotiate ด้วย protocol 1 ไม่ได้บังคับ semantic version
+ให้เท่ากัน
 
 ## สิ่งที่ยังใช้ชื่อ opencode โดยเจตนา (Phase 3)
 
