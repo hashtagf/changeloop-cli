@@ -25,10 +25,11 @@ const suites = [
 // Each critical case passes only when at least one JUnit test case whose name
 // contains the pattern exists and none of the matching cases failed.
 const criticalCases = [
-  { id: "CC-injected", pattern: "injects all eight loop commands" },
+  { id: "CC-canonical-dispatch", pattern: "dispatches each command to its matching canonical project instruction" },
+  { id: "CC-partial-install", pattern: "fails closed when the Foundation installation is missing or partial" },
   { id: "CC-precedence", pattern: "never overwrites a user-defined command" },
   { id: "CC-optout", pattern: "disables injection entirely" },
-  { id: "CC-config-compat", pattern: "v1 to v2 migration of a document with foundation_workflow" },
+  { id: "CC-version-docs", pattern: "documents the dispatcher, CLI, project runtime, and runtime API separately" },
 ]
 
 const resultsDir = path.join(root, "test-results")

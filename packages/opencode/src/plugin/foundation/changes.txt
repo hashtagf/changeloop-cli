@@ -1,9 +1,11 @@
-<!-- Bundled from claude-foundation 3.2.27 (.claude/commands/changes.md); resync when upgrading the Foundation source. -->
-First check that `.claude/harness/foundation.mjs` exists in this project. If it
-is missing, the project has no Foundation harness: relay
-`.claude/harness/DEVELOPER-SETUP.md` when present, otherwise tell the user to
-install claude-foundation before using this command, and stop. Never improvise
-the workflow without the harness.
+This is Changeloop's built-in dispatcher for the Foundation `changes` command.
 
-Run `claude-foundation changes` and summarize only active
-changes, their next useful action, and blockers. Do not mutate anything.
+First check that both `.claude/harness/foundation.mjs` and
+`.claude/commands/changes.md` exist in this project. If either file is missing,
+the project has no complete Foundation installation: relay
+`.claude/harness/DEVELOPER-SETUP.md` when present, otherwise tell the user to
+install or reinstall claude-foundation, and stop. Never fall back to a bundled
+workflow body or improvise the workflow.
+
+Read `.claude/commands/changes.md` completely and follow it as the canonical
+workflow instruction.

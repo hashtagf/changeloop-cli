@@ -1,26 +1,11 @@
-<!-- Bundled from claude-foundation 3.2.27 (.claude/commands/build.md); resync when upgrading the Foundation source. -->
-First check that `.claude/harness/foundation.mjs` exists in this project. If it
-is missing, the project has no Foundation harness: relay
+This is Changeloop's built-in dispatcher for the Foundation `build` command.
+
+First check that both `.claude/harness/foundation.mjs` and
+`.claude/commands/build.md` exist in this project. If either file is missing,
+the project has no complete Foundation installation: relay
 `.claude/harness/DEVELOPER-SETUP.md` when present, otherwise tell the user to
-install claude-foundation before using this command, and stop. Never improvise
-the workflow without the harness.
+install or reinstall claude-foundation, and stop. Never fall back to a bundled
+workflow body or improvise the workflow.
 
-Build **$ARGUMENTS**.
-
-Validate; `sandbox create <change>` or `sandbox sync`; read `packet <change>
---phase build`. `--unattended` requires the runtime guard. Use `agents plan`
-only for multi-repo work.
-
-Edit only allowed sandbox paths. Update `tasks.md` after focused checks. Move
-unauthorized infrastructure operations to `handoffs.yaml`; relay `handoff
-packet` once and never ask for credentials. Time long commands with `exec
-<change> -- <command>`.
-
-The host owns leases. Give workers only `packet --task <task>`. Declare new files
-in the owning task's `[paths:]`.
-
-Auto-repair findings inside the locked contract. Provider and permission
-failures follow typed recovery. Ask again only if behavior, compatibility,
-security, data, or rollout must change. Run `proof readiness <change>` before
-fresh Prove. Never replay history, expose raw JSON, archive, commit, or Land.
-Translate readiness for the user; ask only for structured decisions.
+Read `.claude/commands/build.md` completely and follow it as the canonical
+workflow instruction for **$ARGUMENTS**.

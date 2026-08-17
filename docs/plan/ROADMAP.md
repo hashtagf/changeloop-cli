@@ -36,7 +36,7 @@ service tags `@opencode/v2/*` — mechanical แต่ทำให้ merge upst
 | # | งาน | รายละเอียด | Effort |
 |---|------|-----------|--------|
 | 1.1 | ✅ **Model Router (plugin)** — land 2026-08-16 | ส่งจริงเป็น built-in v1 plugin + config field `router` (tiers/agents/small_model) ปัก model ตอน boot; warn+fallback เมื่อ provider ไม่พร้อม; pin ผู้ใช้ชนะเสมอ **หมายเหตุจากการ investigate: insertion point เดิมที่วางไว้ผิดทั้งคู่** — `chat.params` เปลี่ยน model ไม่ได้ และ v2 catalog transform ยัง dormant ใน live path; lever จริงคือ v1 `config` hook (boot) ส่วน `chat.message` เก็บไว้เป็น lever ของ Router v2 (สเปกอยู่ที่ `openspec/specs/model-router/`, ทดลองได้ที่ `~/Desktop/Work/changeloop-lab`) | ~~M~~ done |
-| 1.2 | **Foundation loop builtin (commands)** | มติผู้ใช้ 2026-08-17: workflow ต้องเป็น change loop ของ claude-foundation ฝังใน binary ไม่ใช่ agents generic — built-in v1 plugin (pattern เดียวกับ 1.1) ฉีด `/investigate /change /build /prove /land /changes /feature /dev` เข้า `config.command` ตอน boot; เปิด default + opt-out `foundation_workflow: false`; user command ชื่อซ้ำชนะ; template guard กรณี project ไม่มี harness; **commands อย่างเดียว ไม่ฉีด agents** (per-phase model routing เลื่อนไปคู่ Router v2) | M |
+| 1.2 | ✅ **Foundation loop builtin (commands)** — land 2026-08-17 | workflow เป็น change loop ของ claude-foundation ฝังใน binary ไม่ใช่ agents generic — built-in v1 plugin (pattern เดียวกับ 1.1) ฉีด `/investigate /change /build /prove /land /changes /feature /dev` เข้า `config.command` ตอน boot; เปิด default + opt-out `foundation_workflow: false`; user command ชื่อซ้ำชนะ; builtin เป็น thin dispatcher ไปยัง canonical `.claude/commands` ของ project และ fail closed เมื่อ harness ติดตั้งไม่ครบ; **commands อย่างเดียว ไม่ฉีด agents** (per-phase model routing เลื่อนไปคู่ Router v2) | ~~M~~ done |
 | 1.3 | **Verify step** | ครึ่งที่หายของ loop: review agent + pass/fail receipt (ไฟล์ JSON ต่อ task) — พอสำหรับ V1 ไม่ต้องมี eval system | S–M |
 | 1.4 | **OpsX plugin skeleton** | Hook เดียว end-to-end (แนะนำ GitHub) เพื่อพิสูจน์ boundary Core↔OpsX; RBAC/Audit ยังไม่ทำ (upstream ไม่มีให้ต่อยอด ต้อง build เองทั้งหมด — ยังไม่คุ้มใน V1) | M |
 
@@ -90,9 +90,13 @@ OpsX เปิด PR ได้ — โดยไม่แก้ engine code น�
   reset โควต้า infra-retry, `sandbox apply --refresh` ไม่มี CLI) — hotfix
   เฉพาะ copy ที่ติดตั้งใน repo นี้แล้ว (commit `54af4f8`) ต้องแก้จริง+เทส
   ที่ upstream ก่อน install รอบหน้าจะทับ
-- **2026-08-17** 1.2 ปรับ scope ตามมติผู้ใช้เป็น foundation loop builtin
-  (commands); change `foundation-workflow-commands-builtin` ดำเนินการ
-- **ถัดไป:** 1.2 (กำลังทำ) → 1.3 Verify → 1.4 OpsX
+- **2026-08-17** 1.2 Foundation loop builtin (commands) land แล้ว (commit
+  `4a62d9d8a`); ฉีด 8 Foundation commands ผ่าน built-in v1 plugin พร้อม opt-out
+  `foundation_workflow: false`
+- **2026-08-17** ปิด version drift ของ 1.2: builtin templates เป็น thin
+  dispatcher ไปยัง project-owned canonical commands จึงเดินพร้อม harness
+  revision และหยุดพร้อม setup guidance เมื่อ installation ไม่ครบ
+- **ถัดไป:** 1.3 Verify → 1.4 OpsX
 
 ## สรุป dependency
 

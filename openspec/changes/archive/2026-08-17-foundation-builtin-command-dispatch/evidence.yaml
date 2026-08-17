@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "fnd-canonical-dispatch",
+      "scenario": "Each of the eight builtin Foundation commands directs the agent to read its matching project-owned canonical command file completely and preserves $ARGUMENTS for commands that accept arguments.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "fnd-partial-install-fail-closed",
+      "scenario": "When the project harness or matching canonical command file is missing, the builtin command stops, relays setup/reinstall guidance, and contains no stale full workflow fallback.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "fnd-command-contract-preserved",
+      "scenario": "The same eight commands remain enabled by default, foundation_workflow false disables all of them, and a user-defined colliding command still wins unchanged.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "fnd-version-model-documented",
+      "scenario": "Configuration documentation distinguishes the builtin dispatcher from the PATH-selected CLI, project runtime version, and runtime API compatibility without claiming semantic-version equality is enforced.",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,282 @@
+{
+  "version": 2,
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "User approved the recommendation in openspec/investigations/foundation-builtin-version-compatibility.md on 2026-08-17",
+    "mode": "single-batch",
+    "lockedAt": "2026-08-17T17:19:57+07:00",
+    "decisions": [
+      {
+        "id": "canonical-dispatch",
+        "question": "How should builtin commands stay compatible with the installed project harness?",
+        "answer": "Use thin dispatchers to the matching project-owned .claude/commands files.",
+        "source": "user-batch"
+      },
+      {
+        "id": "partial-install",
+        "question": "What should happen when the harness or canonical command file is missing?",
+        "answer": "Fail closed, point to setup/reinstall guidance, and do not fall back to stale embedded instructions.",
+        "source": "user-batch"
+      },
+      {
+        "id": "diagnostic-scope",
+        "question": "Should this change add a new Changeloop diagnostic command?",
+        "answer": "No; document the existing CLI/runtime/API inspection paths and keep the change focused.",
+        "source": "user-batch"
+      },
+      {
+        "id": "reviewer-selection",
+        "question": "Which reviewer should Prove use?",
+        "answer": "Use the configured claude-opus reviewer in a fresh review session.",
+        "source": "user-batch"
+      }
+    ]
+  },
+  "risk": {
+    "tier": "medium",
+    "classes": [
+      "public-command-contract"
+    ],
+    "rationale": "The diff is isolated to command templates, tests, and docs, but the templates are a default-on agent-facing command contract whose stale or incorrect instructions can alter lifecycle and recovery behavior. No data, network, service, migration, or privilege boundary changes."
+  },
+  "productionEntry": {
+    "status": "applicable",
+    "sourceReason": "FoundationWorkflowPlugin injects the templates into the live config command surface and the command service exposes them to users.",
+    "paths": [
+      {
+        "repository": "root",
+        "path": "packages/opencode/src/plugin/foundation.ts"
+      },
+      {
+        "repository": "root",
+        "path": "packages/opencode/src/command/index.ts"
+      }
+    ]
+  },
+  "realWire": {
+    "status": "applicable",
+    "sourceReason": "The default-on command template is the real agent-facing contract carried from config.command through the command service; the existing Foundation workflow spec and focused plugin test are its observable wire oracles.",
+    "contracts": [
+      {
+        "repository": "root",
+        "path": "openspec/specs/foundation-workflow/spec.md"
+      },
+      {
+        "repository": "root",
+        "path": "packages/opencode/test/plugin/foundation.test.ts"
+      }
+    ]
+  },
+  "activationSemantics": {
+    "status": "not-applicable",
+    "sourceReason": "No dormant runtime path is activated; the same default-on commands remain active and only their instruction source changes.",
+    "activatedPaths": [],
+    "failureSemanticChanges": []
+  },
+  "serviceInteractions": {
+    "status": "not-applicable",
+    "sourceReason": "No cross-service interaction is added.",
+    "rows": []
+  },
+  "observability": {
+    "status": "not-applicable",
+    "sourceReason": "No operated runtime boundary is changed; missing installation is presented directly in command output and covered deterministically.",
+    "rows": []
+  },
+  "readSet": [
+    {
+      "repository": "root",
+      "path": "openspec/specs/foundation-workflow/spec.md",
+      "role": "contract",
+      "mode": "full",
+      "sha256": "0f702b2c869c7a67be65ae6aad8ca31148c2b13cac521f24b76329f2c89872c2"
+    },
+      {
+        "repository": "root",
+        "path": "packages/opencode/src/plugin/foundation.ts",
+        "role": "production-path",
+        "mode": "full",
+        "sha256": "a26d210cf33c69384a090c914d2a2df0d1b5fe3bfbabe6cc58bfc595dc74c2e6"
+      },
+      {
+        "repository": "root",
+        "path": "packages/opencode/src/plugin/foundation/change.txt",
+        "role": "production-path",
+        "mode": "full",
+        "sha256": "d615c1334ca32ac927124d02224aa489aadf584fccae9803dcc32a7285e812ab"
+      },
+    {
+      "repository": "root",
+      "path": "packages/opencode/src/command/index.ts",
+      "role": "production-path",
+      "mode": "full",
+      "sha256": "172cfbee8a14e8b8a37b5993e4ffb4b7ce43b67e8ea27c2b3ad579d350ea99d9"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/test/plugin/foundation.test.ts",
+      "role": "test-topology",
+      "mode": "full",
+      "sha256": "bd588a3c1ca9077740d2c461eadef5552fda0b483fe3b0539a05b89d7577ba31"
+    },
+    {
+      "repository": "root",
+      "path": "script/evidence-foundation-workflow-test.ts",
+      "role": "test-topology",
+      "mode": "full",
+      "sha256": "26bd7217ebb218bbe8f1b79b59214521385b1f03b54fe2f8dcc7fc21c38ffbcb"
+    },
+    {
+      "repository": "root",
+      "path": ".claude/commands/land.md",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "224d837478a8adb4fa769f3f3111b10493ab6619ce34092d8cc84320c248c032"
+    },
+    {
+      "repository": "root",
+      "path": ".claude/harness/protocol.json",
+      "role": "architecture",
+      "mode": "full",
+      "sha256": "4350cb52aab804dc307c3fc692b233a7c2046bae9c4514b2a319ec6011dab43a"
+    },
+    {
+        "repository": "root",
+        "path": "docs/CONFIGURATION.md",
+        "role": "production-path",
+      "mode": "full",
+      "sha256": "6eca234e6c7558c4fc05feb0df8d170bd9318bcfc78b3cc5eb777d0ac84189e5"
+    }
+  ],
+  "claims": [
+    {
+      "id": "fnd-canonical-dispatch",
+      "productionPath": [
+        {
+          "repository": "root",
+          "path": "packages/opencode/src/plugin/foundation.ts"
+        }
+      ],
+      "failurePaths": [
+        {
+          "repository": "root",
+          "path": "packages/opencode/src/plugin/foundation/change.txt",
+          "failure": "A command maps to the wrong canonical file, does not require a complete read, or loses invocation arguments."
+        }
+      ],
+      "evidenceClass": [
+        "test"
+      ],
+      "testDoubleGap": "none"
+    },
+    {
+      "id": "fnd-partial-install-fail-closed",
+      "productionPath": [
+        {
+          "repository": "root",
+          "path": "packages/opencode/src/plugin/foundation.ts"
+        }
+      ],
+      "failurePaths": [
+        {
+          "repository": "root",
+          "path": "packages/opencode/src/plugin/foundation/change.txt",
+          "failure": "The harness or canonical file is missing but the prompt continues with stale or improvised workflow instructions."
+        }
+      ],
+      "evidenceClass": [
+        "test"
+      ],
+      "testDoubleGap": "none"
+    },
+    {
+      "id": "fnd-command-contract-preserved",
+      "productionPath": [
+        {
+          "repository": "root",
+          "path": "packages/opencode/src/plugin/foundation.ts"
+        }
+      ],
+      "failurePaths": [
+        {
+          "repository": "root",
+          "path": "packages/opencode/src/plugin/foundation.ts",
+          "failure": "Command names, default enablement, opt-out, or user precedence change while replacing template content."
+        }
+      ],
+      "evidenceClass": [
+        "test"
+      ],
+      "testDoubleGap": "none"
+    },
+    {
+      "id": "fnd-version-model-documented",
+      "productionPath": [
+        {
+          "repository": "root",
+          "path": "docs/CONFIGURATION.md"
+        }
+      ],
+      "failurePaths": [
+        {
+          "repository": "root",
+          "path": "docs/CONFIGURATION.md",
+          "failure": "Documentation still claims a release-specific full template bundle or conflates CLI semantic version with project runtime/API compatibility."
+        }
+      ],
+      "evidenceClass": [
+        "test"
+      ],
+      "testDoubleGap": "none"
+    }
+  ],
+  "criticalCases": [
+    {
+      "id": "CC-canonical-dispatch",
+      "claimIds": [
+        "fnd-canonical-dispatch"
+      ],
+      "oracle": "contract-oracle"
+    },
+    {
+      "id": "CC-partial-install",
+      "claimIds": [
+        "fnd-partial-install-fail-closed"
+      ],
+      "oracle": "failure-path"
+    },
+    {
+      "id": "CC-precedence",
+      "claimIds": [
+        "fnd-command-contract-preserved"
+      ],
+      "oracle": "failure-path"
+    },
+      {
+        "id": "CC-optout",
+        "claimIds": [
+          "fnd-command-contract-preserved"
+        ],
+        "oracle": "failure-path"
+      },
+      {
+        "id": "CC-version-docs",
+        "claimIds": [
+          "fnd-version-model-documented"
+        ],
+        "oracle": "contract-oracle"
+      }
+  ],
+  "mutants": [],
+  "derivedFacts": [
+    {
+      "fact": "CLI 3.2.29 resolves the project root and executes the project-owned .claude/harness/foundation.mjs while enforcing runtime API 21 for write operations.",
+      "command": "claude-foundation version; claude-foundation runtime version; claude-foundation runtime api-version"
+    },
+    {
+      "fact": "FoundationWorkflowPlugin injects only missing command names, so project or user commands retain precedence.",
+      "command": "grep -n 'if (config.command[name]) continue' packages/opencode/src/plugin/foundation.ts"
+    }
+  ]
+}

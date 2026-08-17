@@ -1,23 +1,11 @@
-<!-- Bundled from claude-foundation 3.2.27 (.claude/commands/land.md); resync when upgrading the Foundation source. -->
-First check that `.claude/harness/foundation.mjs` exists in this project. If it
-is missing, the project has no Foundation harness: relay
+This is Changeloop's built-in dispatcher for the Foundation `land` command.
+
+First check that both `.claude/harness/foundation.mjs` and
+`.claude/commands/land.md` exist in this project. If either file is missing,
+the project has no complete Foundation installation: relay
 `.claude/harness/DEVELOPER-SETUP.md` when present, otherwise tell the user to
-install claude-foundation before using this command, and stop. Never improvise
-the workflow without the harness.
+install or reinstall claude-foundation, and stop. Never fall back to a bundled
+workflow body or improvise the workflow.
 
-Land **$ARGUMENTS** explicitly.
-
-Start fresh from `packet <change> --phase land`. Run `land check`; it is
-read-only. Resolve interrupted apply through authorized `land recover
---decision-ref`; a manual recovery also needs `--resolution keep-current` or
-`--resolution restore-backup`. For multi-repo work bind authorized child commits/CI with
-`land record`, then `land resume`; re-Prove when requested.
-
-Check `handoff status`. Accepted tracked `post-land` work may remain only when
-its claim proves `safe-before-activation`. Unresolved `pre-land` or
-`activation-coupled` work returns `WAITING_EXTERNAL`; send its packet to the
-named owner and resume after completion evidence. Store no credentials.
-
-Run `land archive` only when ready; `ALREADY ARCHIVED` is success. Explain
-visible effects before authority actions. Never commit, push, or open a PR
-without separate authority.
+Read `.claude/commands/land.md` completely and follow it as the canonical
+workflow instruction for **$ARGUMENTS**.
