@@ -81,6 +81,10 @@ export const Info = Schema.Struct({
   router: Schema.optional(ConfigRouterV1.Info).annotate({
     description: "Model routing table applied at boot: tier candidates and agent-to-tier assignments",
   }),
+  foundation_workflow: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Set to false to disable the built-in claude-foundation change-loop commands (investigate, change, build, prove, land, changes, feature, dev)",
+  }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
       "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",

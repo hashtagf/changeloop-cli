@@ -90,6 +90,28 @@ config.json → opencode.json → opencode.jsonc → changeloop.json → changel
   ไว้แล้วไม่ถูก router ทับ
 - ทำงานครั้งเดียวตอน boot; แก้ตารางแล้วต้องเริ่ม session ใหม่
 
+## Foundation workflow commands (`foundation_workflow`)
+
+changeloop ฝัง change-loop commands ของ claude-foundation มาในตัว —
+`/investigate /change /build /prove /land /changes /feature /dev` — โผล่ทุก
+project โดยไม่ต้องตั้งอะไร (template bundle จาก Foundation 3.2.27):
+
+```jsonc
+{
+  // ปิดทั้งชุดเมื่อไม่ต้องการ loop commands ใน project นี้
+  "foundation_workflow": false
+}
+```
+
+กติกา:
+
+- **เปิดเป็น default** — ไม่มี field นี้ = commands ทั้ง 8 ถูกฉีดตอน boot
+- **Command ผู้ใช้ชนะเสมอ** — `command.<name>` ที่ define เองชื่อชนกันไม่ถูกทับ
+- **ต้องมี harness ใน project** — ตัว command จะตรวจ
+  `.claude/harness/foundation.mjs` ก่อน; project ที่ยังไม่ติดตั้ง
+  claude-foundation จะได้คำแนะนำติดตั้งแทนการ improvise workflow
+- แก้ field แล้วต้องเริ่ม session ใหม่ (อ่านครั้งเดียวตอน boot)
+
 ## สิ่งที่ยังใช้ชื่อ opencode โดยเจตนา (Phase 3)
 
 npm scope `@opencode-ai/*`, service tags, URL `opencode.ai` (config `$schema`,

@@ -1,0 +1,9 @@
+<!-- Bundled from claude-foundation 3.2.27 (.claude/commands/changes.md); resync when upgrading the Foundation source. -->
+First check that `.claude/harness/foundation.mjs` exists in this project. If it
+is missing, the project has no Foundation harness: relay
+`.claude/harness/DEVELOPER-SETUP.md` when present, otherwise tell the user to
+install claude-foundation before using this command, and stop. Never improvise
+the workflow without the harness.
+
+Run `claude-foundation changes` and summarize only active
+changes, their next useful action, and blockers. Do not mutate anything.

@@ -1,0 +1,23 @@
+<!-- Bundled from claude-foundation 3.2.27 (.claude/commands/dev.md); resync when upgrading the Foundation source. -->
+First check that `.claude/harness/foundation.mjs` exists in this project. If it
+is missing, the project has no Foundation harness: relay
+`.claude/harness/DEVELOPER-SETUP.md` when present, otherwise tell the user to
+install claude-foundation before using this command, and stop. Never improvise
+the workflow without the harness.
+
+Execute **$ARGUMENTS**.
+
+With `--resume`, continue the first incomplete operation; never replay work.
+With `--plan-only`, run `/change` and stop after validation.
+
+For all fresh work use `/change`; only that intake may run
+`change start --template` after its complete read and Decision Sheet. Then run `/build` and
+finish `/prove`.
+
+Use contracts. Do not reread framework files unless a command reports a blocker.
+
+Workflow is mandatory. Never edit product files directly. Code/test success
+without Foundation runtime state is a failed `/dev` invocation.
+
+Never Land, commit, push, open a PR, create `.workflow/` state, lifecycle agents,
+phase mirrors, or another ledger.

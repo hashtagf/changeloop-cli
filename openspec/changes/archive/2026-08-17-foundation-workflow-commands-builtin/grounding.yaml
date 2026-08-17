@@ -1,0 +1,152 @@
+{
+  "version": 2,
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "chat 2026-08-17 AskUserQuestion batches (scope + decision sheet), recorded in design.md Decisions",
+    "mode": "single-batch",
+    "lockedAt": "2026-08-17T01:20:00+07:00",
+    "decisions": [
+      {
+        "id": "scope-two-phase",
+        "question": "Builtin foundation workflow ลึกแค่ไหน — commands/agents เท่านั้น หรือ embed harness ทั้งก้อน?",
+        "answer": "แบ่งสองเฟส: change นี้ทำ commands builtin; embed harness + changeloop foundation init เป็น roadmap item ใหม่",
+        "source": "user-batch"
+      },
+      {
+        "id": "default-on-optout",
+        "question": "เปิดใช้งาน default หรือ opt-in?",
+        "answer": "เปิด default ทุก project; ปิดด้วย config field foundation_workflow: false",
+        "source": "user-batch"
+      },
+      {
+        "id": "commands-only-no-agents",
+        "question": "ฉีด workflow agents ด้วยหรือเอาแค่ commands?",
+        "answer": "commands อย่างเดียว; per-phase model routing ผ่าน router เลื่อนไปคู่ Router v2",
+        "source": "user-batch"
+      },
+      {
+        "id": "reviewer-selection",
+        "question": "Reviewer ของ change นี้?",
+        "answer": "claude-opus (default reviewer ใน foundation.json)",
+        "source": "user-batch"
+      }
+    ]
+  },
+  "risk": {
+    "tier": "medium",
+    "classes": ["none"],
+    "rationale": "Additive command-surface work: plugin ใหม่ + config field optional; ไม่มี trust boundary, wire, migration, หรือ dormant path ถูก activate — ความเสี่ยงหลักคือ precedence/regression บน command list ซึ่งครอบด้วย deterministic tests"
+  },
+  "productionEntry": {
+    "status": "applicable",
+    "sourceReason": "commands ปรากฏต่อผู้ใช้ผ่าน command service ที่อ่าน cfg.command ซึ่ง plugin ฉีดตอน boot; registration คือจุดเข้า",
+    "paths": [
+      { "repository": "root", "path": "packages/opencode/src/plugin/index.ts" },
+      { "repository": "root", "path": "packages/opencode/src/command/index.ts" }
+    ]
+  },
+  "realWire": {
+    "status": "not-applicable",
+    "sourceReason": "ไม่มี network/process boundary ใหม่ — template คงที่ใน binary และ config hook รันใน process เดียว",
+    "contracts": []
+  },
+  "activationSemantics": {
+    "status": "not-applicable",
+    "sourceReason": "ไม่ activate dormant path ใด — v2 command transform ไม่ถูกแตะ; เส้นทาง cfg.command เป็น live path ที่ใช้อยู่แล้ว",
+    "activatedPaths": [],
+    "failureSemanticChanges": []
+  },
+  "serviceInteractions": {
+    "status": "not-applicable",
+    "sourceReason": "งานอยู่ใน process เดียวของ CLI ไม่มี cross-service interaction",
+    "rows": []
+  },
+  "observability": {
+    "status": "not-applicable",
+    "sourceReason": "ไม่มี operated runtime boundary ใหม่; failure mode เดียวคือ command ไม่ปรากฏ ซึ่งเห็นตรงใน TUI และครอบด้วย test",
+    "rows": []
+  },
+  "readSet": [
+    { "repository": "root", "path": "docs/plan/ROADMAP.md", "role": "production-path", "mode": "full", "sha256": "2e5c6d7302ba1c0dd976cb10176c3510f6de7eb3f23ef051e9f5e90ff9e79326" },
+    { "repository": "root", "path": ".claude/commands/investigate.md", "role": "requirement", "mode": "full", "sha256": "cbcc3f2c01490314b848804f5c43636703f5ae47cd4991b79b3ec426835a3355" },
+    { "repository": "root", "path": ".claude/commands/change.md", "role": "requirement", "mode": "full", "sha256": "8ad8ce4728ea362ce571f17e58639b45a94b643259a357ab1a5b601931de9cc6" },
+    { "repository": "root", "path": ".claude/commands/build.md", "role": "requirement", "mode": "full", "sha256": "5568f412151b3c892a2993df21cd1b43d9855d4595cb641e7928fff597475804" },
+    { "repository": "root", "path": ".claude/commands/prove.md", "role": "requirement", "mode": "full", "sha256": "0d37fb167b04266ff9e121d6829a836fc61ccff64a77da4ae71e445b5285e38b" },
+    { "repository": "root", "path": ".claude/commands/land.md", "role": "requirement", "mode": "full", "sha256": "d2a0078b480cc24c8d44970a0ff16293db747ad6e9db92877e5afa555fb73947" },
+    { "repository": "root", "path": ".claude/commands/changes.md", "role": "requirement", "mode": "full", "sha256": "f84bacbd93ad887271123505246db8eb759288932ed0167407d2ceabef69c80c" },
+    { "repository": "root", "path": ".claude/commands/feature.md", "role": "requirement", "mode": "full", "sha256": "457d72f817ca494bf86c35e270a2dc6a9627fcc54b44a2ff33b8ae1a9e4c0f8b" },
+    { "repository": "root", "path": ".claude/commands/dev.md", "role": "requirement", "mode": "full", "sha256": "b49dbfcd68f7066156ea62893e3d4f8337eb6a01ab40753ed2502a38a17a8615" },
+    { "repository": "root", "path": "packages/opencode/src/command/index.ts", "role": "production-path", "mode": "full", "sha256": "172cfbee8a14e8b8a37b5993e4ffb4b7ce43b67e8ea27c2b3ad579d350ea99d9" },
+    { "repository": "root", "path": "packages/opencode/src/plugin/index.ts", "role": "production-path", "mode": "full", "sha256": "73cdc992090d88cc14865aca70aa65fe85c2e7ff845b8a3353a55171cb34f535" },
+    { "repository": "root", "path": "packages/opencode/src/plugin/router.ts", "role": "architecture", "mode": "full", "sha256": "325c554b6a15881697ef6787feeee138c103352fe777282088653b7057f8ce48" },
+    { "repository": "root", "path": "packages/opencode/src/agent/agent.ts", "role": "runtime-path", "mode": "targeted", "sha256": "e781c571d584fa996200e320f14c2735e32968256b8db194391e7c06aed7433e" },
+    { "repository": "root", "path": "packages/opencode/src/skill/index.ts", "role": "runtime-path", "mode": "targeted", "sha256": "91dce57f590e1ad3103e0555b893500e098a95cde2739422b699233889b205e6" },
+    { "repository": "root", "path": "packages/core/src/v1/config/config.ts", "role": "production-path", "mode": "targeted", "sha256": "4ca6f4b1962eb31e998e7b914b86a50e658d62b7366b4f0c56b4557cfdbef030" },
+    { "repository": "root", "path": "packages/opencode/test/plugin/router.test.ts", "role": "test-topology", "mode": "full", "sha256": "49acd9df3b07de1c957e2186fd34987e22e512d965b7be0634deca0171811c36" }
+  ],
+  "claims": [
+    {
+      "id": "fnd-commands-injected",
+      "productionPath": [
+        { "repository": "root", "path": "packages/opencode/src/plugin/index.ts" },
+        { "repository": "root", "path": "packages/opencode/src/command/index.ts" }
+      ],
+      "failurePaths": [
+        { "repository": "root", "path": "packages/opencode/src/command/index.ts", "failure": "plugin ไม่ถูก register หรือ template import พัง ทำให้ command list ไม่มี loop commands" }
+      ],
+      "evidenceClass": ["test"],
+      "testDoubleGap": "none"
+    },
+    {
+      "id": "fnd-user-precedence",
+      "productionPath": [
+        { "repository": "root", "path": "packages/opencode/src/command/index.ts" }
+      ],
+      "failurePaths": [
+        { "repository": "root", "path": "packages/opencode/src/command/index.ts", "failure": "การฉีดทับ entry ใน cfg.command ที่ผู้ใช้ define ชื่อเดียวกัน" }
+      ],
+      "evidenceClass": ["test"],
+      "testDoubleGap": "none"
+    },
+    {
+      "id": "fnd-optout",
+      "productionPath": [
+        { "repository": "root", "path": "packages/opencode/src/command/index.ts" }
+      ],
+      "failurePaths": [
+        { "repository": "root", "path": "packages/opencode/src/command/index.ts", "failure": "foundation_workflow: false แต่ commands ยังถูกฉีด หรือ builtin init/review หายไปด้วย" }
+      ],
+      "evidenceClass": ["test"],
+      "testDoubleGap": "none"
+    },
+    {
+      "id": "fnd-config-compat",
+      "productionPath": [
+        { "repository": "root", "path": "packages/core/src/v1/config/config.ts" }
+      ],
+      "failurePaths": [
+        { "repository": "root", "path": "packages/core/src/v1/config/config.ts", "failure": "config ที่มี field ใหม่ decode ไม่ผ่าน v1 หรือ migrate v1→v2 ล้ม" }
+      ],
+      "evidenceClass": ["test"],
+      "testDoubleGap": "none"
+    }
+  ],
+  "criticalCases": [
+    { "id": "CC-injected", "claimIds": ["fnd-commands-injected"], "oracle": "production-entry" },
+    { "id": "CC-precedence", "claimIds": ["fnd-user-precedence"], "oracle": "failure-path" },
+    { "id": "CC-optout", "claimIds": ["fnd-optout"], "oracle": "failure-path" },
+    { "id": "CC-config-compat", "claimIds": ["fnd-config-compat"], "oracle": "contract-oracle" }
+  ],
+  "mutants": [],
+  "derivedFacts": [
+    {
+      "fact": "v1 config hook คือ lever ที่ live สำหรับ boot-time config mutation — ModelRouterPlugin ใช้อยู่จริง (ยืนยันโดย openspec/investigations/phase-1-1-model-router.md)",
+      "command": "grep -n 'config: async' packages/opencode/src/plugin/router.ts"
+    },
+    {
+      "fact": "commands จาก skill source เติมเฉพาะชื่อที่ยังว่าง จึงแพ้ entry ใน cfg.command ที่ plugin ฉีด",
+      "command": "grep -n 'if (commands\\[item.name\\]) continue' packages/opencode/src/command/index.ts"
+    }
+  ]
+}

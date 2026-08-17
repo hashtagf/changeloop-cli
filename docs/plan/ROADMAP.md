@@ -36,7 +36,7 @@ service tags `@opencode/v2/*` — mechanical แต่ทำให้ merge upst
 | # | งาน | รายละเอียด | Effort |
 |---|------|-----------|--------|
 | 1.1 | ✅ **Model Router (plugin)** — land 2026-08-16 | ส่งจริงเป็น built-in v1 plugin + config field `router` (tiers/agents/small_model) ปัก model ตอน boot; warn+fallback เมื่อ provider ไม่พร้อม; pin ผู้ใช้ชนะเสมอ **หมายเหตุจากการ investigate: insertion point เดิมที่วางไว้ผิดทั้งคู่** — `chat.params` เปลี่ยน model ไม่ได้ และ v2 catalog transform ยัง dormant ใน live path; lever จริงคือ v1 `config` hook (boot) ส่วน `chat.message` เก็บไว้เป็น lever ของ Router v2 (สเปกอยู่ที่ `openspec/specs/model-router/`, ทดลองได้ที่ `~/Desktop/Work/changeloop-lab`) | ~~M~~ done |
-| 1.2 | **Workflow agents + commands** | `understand / plan / code / test / review / debug` เป็น markdown agents + `command/*.md` แต่ละตัว pin model ผ่าน router — งาน authoring ไม่ใช่งาน engine | M |
+| 1.2 | **Foundation loop builtin (commands)** | มติผู้ใช้ 2026-08-17: workflow ต้องเป็น change loop ของ claude-foundation ฝังใน binary ไม่ใช่ agents generic — built-in v1 plugin (pattern เดียวกับ 1.1) ฉีด `/investigate /change /build /prove /land /changes /feature /dev` เข้า `config.command` ตอน boot; เปิด default + opt-out `foundation_workflow: false`; user command ชื่อซ้ำชนะ; template guard กรณี project ไม่มี harness; **commands อย่างเดียว ไม่ฉีด agents** (per-phase model routing เลื่อนไปคู่ Router v2) | M |
 | 1.3 | **Verify step** | ครึ่งที่หายของ loop: review agent + pass/fail receipt (ไฟล์ JSON ต่อ task) — พอสำหรับ V1 ไม่ต้องมี eval system | S–M |
 | 1.4 | **OpsX plugin skeleton** | Hook เดียว end-to-end (แนะนำ GitHub) เพื่อพิสูจน์ boundary Core↔OpsX; RBAC/Audit ยังไม่ทำ (upstream ไม่มีให้ต่อยอด ต้อง build เองทั้งหมด — ยังไม่คุ้มใน V1) | M |
 
@@ -55,11 +55,15 @@ OpsX เปิด PR ได้ — โดยไม่แก้ engine code น�
    session เมื่อเจอ error อย่าง 402 (token/cost tracking ต่อ turn มีอยู่แล้ว
    แค่เอามาใช้ตัดสินใจ) — V1 ตั้งใจไม่ทำตาม non-goals ของ change
    model-router-v1
-2. **Context/Knowledge เสริม** — ต่อยอด `reference` system (named dirs/repos)
+2. **Embed harness ทั้งก้อน** — เฟสสองของมติ 1.2: bundle harness runtime +
+   installer เข้า binary (`changeloop foundation init` seed `.claude/harness`,
+   openspec scaffolding) ให้ loop ใช้ได้ทุก project โดยไม่ต้องติดตั้ง
+   claude-foundation แยก; ต้อง sync สำเนา harness ทุก foundation release
+3. **Context/Knowledge เสริม** — ต่อยอด `reference` system (named dirs/repos)
    ก่อนทำ RAG จริง; cross-session memory ยังไม่มี upstream
-3. **RAG** — greenfield ทั้งก้อน (upstream ไม่มี embeddings/vector store);
+4. **RAG** — greenfield ทั้งก้อน (upstream ไม่มี embeddings/vector store);
    เริ่มเมื่อ workflow ใช้งานจริงแล้วเจอ limit ของ ripgrep+LSP
-4. **Multi-agent ขยาย** — subagent + background task มีแล้ว; เพิ่มแค่ pattern
+5. **Multi-agent ขยาย** — subagent + background task มีแล้ว; เพิ่มแค่ pattern
    ที่ workflow ต้องใช้ ยังไม่ต้องมี DAG engine
 
 ## Phase 3 — Scale (P2, ยังไม่ commit วันเวลา)
@@ -86,8 +90,9 @@ OpsX เปิด PR ได้ — โดยไม่แก้ engine code น�
   reset โควต้า infra-retry, `sandbox apply --refresh` ไม่มี CLI) — hotfix
   เฉพาะ copy ที่ติดตั้งใน repo นี้แล้ว (commit `54af4f8`) ต้องแก้จริง+เทส
   ที่ upstream ก่อน install รอบหน้าจะทับ
-- **ถัดไป:** 1.2 Workflow agents (ยิ่งมี agent ครบ ตาราง router ยิ่งครอบ
-  งานกว้าง) → 1.3 Verify → 1.4 OpsX
+- **2026-08-17** 1.2 ปรับ scope ตามมติผู้ใช้เป็น foundation loop builtin
+  (commands); change `foundation-workflow-commands-builtin` ดำเนินการ
+- **ถัดไป:** 1.2 (กำลังทำ) → 1.3 Verify → 1.4 OpsX
 
 ## สรุป dependency
 
