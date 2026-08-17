@@ -204,6 +204,10 @@ binds the workspace minus the change packet, so editing `proposal.md`,
 `design.md`, `tasks.md`, or a spec delta after proving re-finalizes the proof
 without re-executing anything. `review` and `acceptance` bind the whole
 workspace including the packet — a reviewer read it — and cannot narrow that.
+In a multi-repository snapshot, both hashes compose repository content rather
+than recorded Git base commits. Base heads remain explicit sandbox/Land state,
+so an unreconciled target is still blocked while a history-only base movement
+with byte-identical content does not expire evidence.
 
 Narrow it further with workspace-relative `inputs`, and an edit outside them
 rebinds the receipt instead of re-earning it:

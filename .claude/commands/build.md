@@ -14,11 +14,12 @@ unauthorized infrastructure operations to `handoffs.yaml`; relay `handoff
 packet` once and never ask for credentials. Time long commands with `exec
 <change> -- <command>`.
 
-The host owns leases. Give workers only `packet --task <task>`. Declare new files
+Host owns leases; workers receive only `packet --task <task>`. Declare new files
 in the owning task's `[paths:]`.
 
 Auto-repair findings inside the locked contract. Provider and permission
 failures follow typed recovery. Ask again only if behavior, compatibility,
 security, data, or rollout must change. Run `proof readiness <change>` before
 fresh Prove. Never replay history, expose raw JSON, archive, commit, or Land.
-Translate readiness for the user; ask only for structured decisions.
+Translate readiness; finish with behavior, checks, remaining risk, and next
+action. Ask only for structured decisions.

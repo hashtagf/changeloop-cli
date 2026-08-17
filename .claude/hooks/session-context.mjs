@@ -46,6 +46,7 @@ function workflowDigest() {
     .map((entry) => entry.name).sort();
 
   const lines = [];
+  lines.push("Agent note: translate this machine digest into the user's language; never paste it verbatim.");
   if (!active.length)
     lines.push(
       "Foundation: no active change.",

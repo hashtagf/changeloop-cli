@@ -5,17 +5,18 @@ argument-hint: <change>
 
 Land **$ARGUMENTS** explicitly.
 
-Start fresh from `packet <change> --phase land`. Run `land check`; it is
-read-only. Resolve interrupted apply through authorized `land recover
---decision-ref`; a manual recovery also needs `--resolution keep-current` or
-`--resolution restore-backup`. For multi-repo work bind authorized child commits/CI with
-`land record`, then `land resume`; re-Prove when requested.
+Start from `packet <change> --phase land`; run read-only `land check`. Execute returned
+`automaticRecovery`, explain the blocker and repair in plain language,
+then continue. For `control-head-moved`, run `sandbox sync`, `proof
+run`, and check again; never restart Change or ask. Stop on replay conflict or
+no automatic route; translate the choice, never raw JSON or hashes.
 
-Check `handoff status`. Accepted tracked `post-land` work may remain only when
-its claim proves `safe-before-activation`. Unresolved `pre-land` or
-`activation-coupled` work returns `WAITING_EXTERNAL`; send its packet to the
-named owner and resume after completion evidence. Store no credentials.
+Resolve interrupted apply with authorized `land recover --decision-ref`; manual
+recovery also needs `--resolution`. For multi-repo work, bind authorized child
+commits/CI with `land record`, resume, and re-Prove.
 
-Run `land archive` only when ready; `ALREADY ARCHIVED` is success. Explain
-visible effects before authority actions. Never commit, push, or open a PR
-without separate authority.
+Check `handoff status`; only accepted, proven-safe `post-land` work may remain.
+On `WAITING_EXTERNAL`, send its packet and resume after evidence. Store no credentials.
+
+Archive only when ready; `ALREADY ARCHIVED` succeeds. Explain visible effects.
+Never commit, push, or open a PR without separate authority.

@@ -125,7 +125,8 @@ glob_targets_secret() {
 }
 
 block() {
-  jq -n --arg reason "$1" '{decision: "block", reason: $reason}'
+  jq -n --arg reason "$1 No secret contents were read; use a template, public key, or metadata-only search instead." \
+    '{decision: "block", reason: $reason}'
   exit 0
 }
 

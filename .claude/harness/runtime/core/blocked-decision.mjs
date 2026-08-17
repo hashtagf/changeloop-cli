@@ -25,16 +25,25 @@ export function createBlockedDecision({ fail }) {
       throw new Error(`blocked decision '${code}' must preserve a 'pause' outcome`);
     if (!ids.includes(decision.recommended))
       throw new Error(`blocked decision '${code}' recommends an option it does not offer`);
+    if (decision.automaticRecovery && !ids.includes(decision.automaticRecovery))
+      throw new Error(`blocked decision '${code}' names an automatic recovery it does not offer`);
+    if (decision.automaticRecovery && decision.automaticRecovery !== decision.recommended)
+      throw new Error(`blocked decision '${code}' must recommend its automatic recovery`);
     return decision;
   }
 
   function blockedDecisionValue(changeId, code, decision) {
+    const validatedDecision = assertDecision(code, decision);
     return {
       version: 1,
       changeId: changeId || null,
       status: "BLOCKED",
+      // Hosts must not turn deterministic recovery into a user interview.
+      // Additive metadata keeps the decision envelope machine-readable while
+      // letting every adapter apply the same human-interaction boundary.
+      userActionRequired: !validatedDecision.automaticRecovery,
       code,
-      decision: assertDecision(code, decision)
+      decision: validatedDecision
     };
   }
 

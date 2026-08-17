@@ -112,10 +112,11 @@ export function createCommandRegistry({ path, readJson, fail }) {
         console.log(JSON.stringify([...loop, ...entries], null, 2)); return;
       }
       if (loop.length) {
-        console.log("Change loop (host commands, not CLI routes):\n");
+      console.log("Change loop (host commands, not CLI routes):\n");
         for (const entry of loop)
           console.log(`  ${entry.name.padEnd(22)} ${entry.description}`);
-        console.log("");
+      console.log("");
+      console.log("Describe the outcome to your coding agent; it runs routine commands and safe recovery.\n");
       }
       console.log("Commands (describe <command> for one):\n");
       for (const entry of entries)

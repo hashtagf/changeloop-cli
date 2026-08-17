@@ -270,6 +270,12 @@ verified in a throwaway worktree first, so a hunk that no longer applies leaves
 the sandbox untouched and names each rejected file as a `CONFLICT` — merge the
 target's version in the sandbox worktree and sync again.
 
+For a **multi-repository worktree**, sync stages every moved writable
+repository before replacing any live sandbox. A conflict is reported as
+`CONFLICT <repository>:<path>` and leaves every repository sandbox and recorded
+base unchanged. A clean sync reports one `rebased <repository>:` line per moved
+repository and advances the complete set together.
+
 For an **isolated copy**, files another change landed that this sandbox never
 touched fast-forward into the sandbox (baseline included), and a file both sides
 edited is named as a `CONFLICT` at sync rather than discovered at Land. Merge

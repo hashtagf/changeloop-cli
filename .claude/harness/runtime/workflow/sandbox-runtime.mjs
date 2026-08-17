@@ -570,49 +570,60 @@ export function createSandboxRuntime({
   // `baseHead`, which is exactly what apply projects, and no contract downstream
   // reads sandbox commit history. Flattening it into working-tree changes costs
   // nothing that is ever consulted.
-  function rebaseWorktree(id, state) {
-    const workspace = state.workspace;
-    const currentHead = gitHead(root);
-    if (workspace.mode !== "worktree" || !currentHead || !workspace.baseHead ||
-        currentHead === workspace.baseHead) return null;
+  function replayCandidates(state) {
+    if (!state.repositories || Object.keys(state.repositories).length === 0)
+      return [{ repository: "root", record: state.workspace, targetPath: root }];
+    return Object.entries(state.repositories)
+      .filter(([, record]) => record.access === "write" && record.mode === "worktree")
+      .map(([repository, record]) => ({
+        repository, record,
+        targetPath: record.targetPath || (repository === "root" ? root : null)
+      }));
+  }
+
+  function prepareReplay(id, state, candidate) {
+    const { repository, record, targetPath } = candidate;
+    const currentHead = targetPath ? gitHead(targetPath) : null;
+    if (!targetPath || !currentHead || !record.baseHead ||
+        currentHead === record.baseHead) return null;
     const movement = {
-      from: workspace.baseHead, to: currentHead, rebased: false, conflicts: []
+      repository, from: record.baseHead, to: currentHead,
+      rebased: false, conflicts: []
     };
-    // A multi-repository change holds one worktree per repository and this sync
-    // reconciles only the root. Advancing the root's base alone would leave the
-    // others describing a different world, so report the movement and leave the
-    // resolution to the multi-repository Land decision.
-    if (Object.keys(state.repositories || {}).length > 1) return movement;
-    const pathspec = sandboxCodePathspec(id, selectedRepositories(id, state)
-      .filter((repository) => repository.type === "submodule")
-      .map((repository) => repository.relativePath));
+    const nested = repository === "root"
+      ? selectedRepositories(id, state)
+        .filter((entry) => entry.type === "submodule")
+        .map((entry) => entry.relativePath)
+      : [];
+    const pathspec = sandboxCodePathspec(id, nested);
     // A real `add`, not the intent-to-add the apply path uses: the three-way
     // fallback below needs the sandbox's blobs to exist in the object database
     // before it can merge against them. Staging is invisible downstream —
     // everything that reads this sandbox diffs the working tree against a
     // commit, which ignores the index.
-    git(["add", "-A"], workspace.path);
+    git(["add", "-A"], record.path);
     // gitBuffer, not git: the binary diff is bytes, and a UTF-8 decode
     // replaces invalid sequences with U+FFFD — corrupting the replayed patch
     // and surfacing phantom conflicts on files nobody double-edited.
-    const diff = gitBuffer(["diff", "--binary", workspace.baseHead, "--", ...pathspec],
-      workspace.path);
+    const diff = gitBuffer(["diff", "--binary", record.baseHead, "--", ...pathspec],
+      record.path);
     if (diff.status !== 0)
-      fail(`cannot read the sandbox diff to replay: ${String(diff.stderr).trim()}`);
+      fail(`cannot read the '${repository}' sandbox diff to replay: ${
+        String(diff.stderr).trim()}`);
     // Verified in a throwaway worktree before the real one is touched: a
     // rejected hunk has to leave the sandbox exactly as it was, because merging
     // the target's version is only possible there.
-    const staging = `${workspace.path}.rebase`;
-    const patch = `${workspace.path}.rebase.patch`;
+    const staging = `${record.path}.rebase`;
+    const patch = `${record.path}.rebase.patch`;
     rmSync(staging, { recursive: true, force: true });
     // A worktree directory removed out from under git stays registered, and
     // `worktree add` then refuses the same path — dead-ending the retry.
-    git(["worktree", "prune"]);
-    const staged = git(["worktree", "add", "--detach", staging, currentHead]);
+    git(["worktree", "prune"], targetPath);
+    const staged = git(["worktree", "add", "--detach", staging, currentHead], targetPath);
     if (staged.status !== 0)
-      fail(`cannot stage the rebase worktree: ${staged.stderr.trim()}`);
+      fail(`cannot stage the '${repository}' rebase worktree: ${staged.stderr.trim()}`);
     const discardStaging = () => {
-      git(["worktree", "remove", "--force", staging]);
+      git(["worktree", "remove", "--force", staging], targetPath);
       rmSync(staging, { recursive: true, force: true });
       rmSync(patch, { force: true });
     };
@@ -635,23 +646,65 @@ export function createSandboxRuntime({
         movement.conflicts = rejectedPaths(
           `${replayed.stderr || ""}\n${replayed.stdout || ""}`);
         if (!movement.conflicts.length) movement.conflicts.push(".");
-        discardStaging();
-        return movement;
+        return { movement, record, targetPath, staging, patch, discardStaging };
       }
     }
-    const removed = git(["worktree", "remove", "--force", workspace.path]);
-    if (removed.status !== 0) {
-      discardStaging();
-      fail(`cannot replace the sandbox worktree: ${removed.stderr.trim()}`);
-    }
-    const moved = git(["worktree", "move", staging, workspace.path]);
+    return { movement, record, targetPath, staging, patch, discardStaging };
+  }
+
+  function commitReplay(state, prepared) {
+    const { movement, record, targetPath, staging, patch } = prepared;
+    const removed = git(["worktree", "remove", "--force", record.path], targetPath);
+    if (removed.status !== 0)
+      fail(`cannot replace the '${movement.repository}' sandbox worktree: ${
+        removed.stderr.trim()}. Prepared replay remains at '${staging}' with patch '${patch}'.`);
+    const moved = git(["worktree", "move", staging, record.path], targetPath);
     if (moved.status !== 0)
-      fail(`the sandbox worktree was removed and its replacement could not be moved into place: ${
+      fail(`the '${movement.repository}' sandbox worktree was removed and its replacement could not be moved into place: ${
         moved.stderr.trim()}. The replayed work is at '${staging}' and the patch at '${patch}'.`);
-    rmSync(patch, { force: true });
-    workspace.baseHead = currentHead;
-    if (state.repositories?.root) state.repositories.root.baseHead = currentHead;
+    record.baseHead = movement.to;
+    if (movement.repository === "root") state.workspace.baseHead = movement.to;
     movement.rebased = true;
+  }
+
+  function rebaseWorktree(id, state) {
+    if (state.workspace.mode !== "worktree") return null;
+    const multiRepository = Object.keys(state.repositories || {}).length > 1;
+    const prepared = [];
+    try {
+      for (const candidate of replayCandidates(state)) {
+        const replay = prepareReplay(id, state, candidate);
+        if (!replay) continue;
+        prepared.push(replay);
+        if (replay.movement.conflicts.length) {
+          prepared.forEach((entry) => entry.discardStaging());
+          return {
+            rebased: false, multiRepository,
+            repositories: prepared.map((entry) => entry.movement),
+            conflicts: prepared.flatMap((entry) =>
+              entry.movement.conflicts.map((path) => ({
+                repository: entry.movement.repository, path
+              })))
+          };
+        }
+      }
+    } catch (error) {
+      prepared.forEach((entry) => entry.discardStaging());
+      throw error;
+    }
+    if (!prepared.length) return null;
+    prepared.forEach((entry) => commitReplay(state, entry));
+    prepared.forEach((entry) => rmSync(entry.patch, { force: true }));
+    const repositories = prepared.map((entry) => entry.movement);
+    const movement = {
+      rebased: true, multiRepository, repositories, conflicts: []
+    };
+    if (repositories.length === 1)
+      Object.assign(movement, {
+        repository: repositories[0].repository,
+        from: repositories[0].from,
+        to: repositories[0].to
+      });
     return movement;
   }
 
@@ -770,19 +823,23 @@ export function createSandboxRuntime({
     // sandbox that silently kept building against the old base is the failure
     // this line exists to make impossible.
     const movementLine = !movement ? ""
-      : movement.rebased
-        ? `\n  rebased: ${shortHead(movement.from)} -> ${shortHead(movement.to)} (sandbox commits flattened into the replayed diff)`
-        : `\n  target moved: ${shortHead(movement.from)} -> ${shortHead(movement.to)} (sandbox NOT rebased)`;
+      : !movement.multiRepository && movement.repositories.length === 1
+        ? movement.rebased
+          ? `\n  rebased: ${shortHead(movement.from)} -> ${shortHead(movement.to)} (sandbox commits flattened into the replayed diff)`
+          : `\n  target moved: ${shortHead(movement.repositories[0].from)} -> ${shortHead(movement.repositories[0].to)} (sandbox NOT rebased)`
+        : movement.repositories.map((repository) => repository.rebased
+          ? `\n  rebased ${repository.repository}: ${shortHead(repository.from)} -> ${shortHead(repository.to)} (sandbox commits flattened into the replayed diff)`
+          : `\n  target moved ${repository.repository}: ${shortHead(repository.from)} -> ${shortHead(repository.to)} (sandbox NOT rebased)`).join("");
     console.log(`SYNCED ${id}\n  revision: ${state.revision}\n  workspace: ${relevantHash(id)}${
       movementLine}${
       forwarded ? `\n  fast-forwarded: ${forwarded} file(s) the target moved and the sandbox left alone` : ""
     }`);
     for (const rel of conflicts)
       console.log(`CONFLICT ${rel}: the target and the sandbox both changed this file since the baseline; merge the target's version into the sandbox copy, then rerun sandbox sync with --resolve ${rel} (comma-separate several paths). Land stays blocked until every conflict is resolved.`);
-    for (const rel of movement?.conflicts || [])
-      console.log(`CONFLICT ${rel}: the sandbox diff no longer applies to the moved target; merge the target's version into the sandbox worktree, then rerun sandbox sync. Land stays blocked until the sandbox replays onto the current commit.`);
+    for (const conflict of movement?.conflicts || [])
+      console.log(`CONFLICT ${movement.multiRepository ? `${conflict.repository}:` : ""}${conflict.path}: the sandbox diff no longer applies to the moved target; merge the target's version into the named repository sandbox worktree, then rerun sandbox sync. Land stays blocked until every repository sandbox replays onto its current commit.`);
     if (movement && !movement.rebased && !movement.conflicts.length)
-      console.log(`TARGET MOVED ${id}: a multi-repository sandbox reconciles only through Land; run 'claude-foundation land plan ${id}' to see how the recorded base compares.`);
+      console.log(`TARGET MOVED ${id}: rerun 'claude-foundation sandbox sync ${id}' after repairing the named repository replay.`);
   }
 
   return {

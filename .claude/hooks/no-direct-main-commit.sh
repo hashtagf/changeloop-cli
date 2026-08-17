@@ -166,7 +166,7 @@ main() {
   if is_git_commit "$cmd" && on_default_branch; then
     local branch
     branch="$(git symbolic-ref --short -q HEAD 2>/dev/null || printf 'main')"
-    block "BLOCKED by no-direct-main-commit guard: you're on \"$branch\" — don't commit straight to the default branch. Create a feature branch first (e.g. git checkout -b feat/<slug>) and commit there. To intentionally commit on \"$branch\", re-run with ALLOW_MAIN_COMMIT=1."
+    block "COMMIT BLOCKED: the current branch is \"$branch\", so this would write directly to the default branch. Your files are unchanged. Create a feature branch and retry. Only use ALLOW_MAIN_COMMIT=1 after the user explicitly authorizes a direct default-branch commit."
   fi
 
   exit 0

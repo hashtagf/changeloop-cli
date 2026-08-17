@@ -1,6 +1,6 @@
 # Foundation workflow
 
-**Version 3.2.27**
+**Version 3.2.29**
 
 Foundation is an OpenSpec-native harness for safe, economical software changes
 in brownfield repositories.
@@ -131,6 +131,11 @@ reconciled, and the answer is the same command in either sandbox mode:
   diff. If a hunk no longer applies, the sandbox is left untouched and each
   rejected file is named as a `CONFLICT` — merge the target's version in the
   sandbox worktree and sync again.
+  For a multi-repository change, sync prepares every moved writable repository
+  before replacing any live sandbox. A conflict is reported as
+  `CONFLICT <repository>:<path>` and leaves every repository sandbox and
+  recorded base unchanged; a clean replay reports one `rebased <repository>:`
+  line per moved repository.
 - An **isolated copy** fast-forwards files the target moved while the sandbox
   left them alone, names any double-edited file as a `CONFLICT` immediately, and
   accepts `--resolve <path,path>` once the target's version has been merged into
@@ -149,6 +154,11 @@ in the target — a packet file edited only in the sandbox blocks the sync; only
 Proof validates artifacts, hashes relevant inputs, resolves claims to providers,
 reuses valid receipts, executes missing/stale evidence, and writes a proof bound
 to the workspace hash.
+
+Composite hashes bind repository content and agreement revision, not Git commit
+identity. Recorded base heads remain explicit recovery and Land state: an
+unsynchronized target still stops at `control-head-moved`, while rebasing onto a
+history-only commit with identical content does not charge another review.
 
 ```bash
 claude-foundation proof readiness <change>
@@ -374,9 +384,10 @@ how to restore or quarantine them.
 Subjective acceptance or a genuine contract contradiction returns
 `NEEDS_USER_DECISION`. Its `decision` envelope is a
 machine handoff for the agent, not text to paste to the user. The agent explains
-the outcome in the user's language, presents honest choices (including reject,
-inconclusive, or pause), and owns all commands and metadata after the user
-answers. Decision recovery never embeds a preselected passing receipt.
+the outcome in the user's language and owns routine commands and metadata. It
+never asks the user to run a safe authorized operation it can perform. Genuine
+decisions present honest choices (including reject, inconclusive, or pause) and
+wait for the answer. Decision recovery never embeds a preselected passing receipt.
 
 Run `claude-foundation proof advance <change>` once as the normal path. It
 collects executable evidence, creates or reuses the authority request, and
@@ -491,9 +502,10 @@ multi-repository Land, submodule pointers reset after staging, and an apply that
 could not finish rolling back.
 
 Each emits the same decision envelope readiness recovery uses — a stop code, at
-least two honest options, a recommendation, and a preserved `pause`. Agents
-translate those options into the user's language; they never present a stop as a
-dead end, and they never infer the answer. Retiring the change with
+least two honest options, a recommendation, and a preserved `pause`. A marked
+`automaticRecovery` is performed and explained by the agent without opening a
+user interview. Agents translate every other option into the user's language;
+they never present a stop as a dead end or infer the answer. Retiring with
 `change abandon` is one of the offered options wherever it applies.
 
 Foundation also stops on an unresolved apply transaction instead of opening a

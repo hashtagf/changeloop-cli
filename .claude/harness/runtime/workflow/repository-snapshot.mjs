@@ -42,7 +42,10 @@ export function createRepositorySnapshot({
       control: control[field],
       repositories: Object.entries(repositories).sort(([left], [right]) =>
         left.localeCompare(right)).map(([repository, value]) => ({
-        repository, workspaceHash: value[field], baseHead: value.baseHead
+        // Commit identity is Land/recovery state, not content identity. The
+        // snapshot already hashes every tracked byte and the contract revision;
+        // explicit target-head guards separately refuse an unreconciled base.
+        repository, workspaceHash: value[field]
       }))
     });
     const workspaceHash = composite("workspaceHash");

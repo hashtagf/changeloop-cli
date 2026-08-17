@@ -66,7 +66,8 @@ if (!phase) {
 
 if (violations.length === 0) process.exit(0);
 
-const reason = `phase guard (${phase || "unknown"}/${tool}): ${violations.join("; ")}`;
+const reason = `BLOCKED: phase guard (${phase || "unknown"}/${tool}): ${violations.join("; ")}. ` +
+  "No mutation ran. Continue inside the active phase workspace, or ask the user only if scope or authority must change.";
 recordAudit({ phase: phase || "unknown", tool, mode, reason });
 
 if (mode === "block") {

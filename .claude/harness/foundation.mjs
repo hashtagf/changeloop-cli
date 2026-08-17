@@ -89,7 +89,7 @@ import {
 } from "./runtime/evidence/provider-catalog.mjs";
 import { SECURITY_TERMS } from "./runtime/workflow/security-policy.mjs";
 
-const VERSION = "3.2.27";
+const VERSION = "3.2.29";
 const RUNTIME_API_VERSION = "21";
 // Checked here, at load, rather than only inside `doctor`: a torn install —
 // this file from one revision, runtime/** from another — otherwise passed
@@ -101,9 +101,9 @@ if (RUNTIME_MODULE_API !== RUNTIME_API_VERSION) {
     "is a mixture of two revisions. Reinstall it with 'claude-foundation init <project>'.");
   process.exit(1);
 }
-const PROVIDER_PROTOCOL_VERSION = "8";
+const PROVIDER_PROTOCOL_VERSION = "9";
 const ADAPTER_PROTOCOL_VERSION = "5";
-const PROOF_PROTOCOL_VERSION = "5";
+const PROOF_PROTOCOL_VERSION = "6";
 const PACKET_SCHEMA_VERSION = "6";
 const AGENT_PLAN_SCHEMA_VERSION = "3";
 const CONTEXT_EVENT_SCHEMA_VERSION = "2";

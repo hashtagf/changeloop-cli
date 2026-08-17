@@ -23,3 +23,5 @@ discover an unnamed operator.
 Complete artifacts/tasks, validate, run Build doctor, and sync. Offer
 `change abandon` for an unprovable contract; never retire one unasked, infer
 acceptance from silence, or expose harness fields.
+Summarize outcome, boundaries, proof, completed work, and next action in
+the user's language; keep lifecycle fields internal.

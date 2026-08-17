@@ -39,14 +39,11 @@ export function targetHeadMovedDecision({
     summary: `The target repository moved to a different commit after this change's sandbox was created. ${
       action} now would project work proven against a base the target no longer has.`,
     options: [
-      // A multi-repository sandbox holds a worktree per repository, and a sync
-      // reconciles only the root; offering it here would advertise a partial
-      // fix as a whole one.
-      ...(multiRepository ? [] : [{
+      {
         id: "sync",
-        outcome: `Replay the sandbox onto the current commit and re-prove it: 'claude-foundation sandbox sync ${
+        outcome: `Replay ${multiRepository ? "every moved repository sandbox" : "the sandbox"} onto the current commit and re-prove it: 'claude-foundation sandbox sync ${
           changeId}', then 'claude-foundation proof run ${changeId}'.`
-      }]),
+      },
       {
         id: "inspect",
         outcome: "Compare the recorded base with the current target history before choosing."
@@ -57,7 +54,11 @@ export function targetHeadMovedDecision({
       },
       { id: "pause", outcome: "Change nothing and leave both workspaces as they are." }
     ],
-    recommended: multiRepository ? "inspect" : "sync",
+    recommended: "sync",
+    // Replay preserves the user's work and stays inside the Land authority
+    // already given. Multi-repository sync prepares every replay before it
+    // replaces a live sandbox, so this route is deterministic in both modes.
+    automaticRecovery: "sync",
     recordedBase: recordedBase || null,
     currentHead: currentHead || null
   };

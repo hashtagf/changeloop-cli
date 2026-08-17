@@ -327,12 +327,7 @@ export function createConfiguredReviewerRuntime({
       maxBuffer: 64 * 1024 * 1024,
       env: environment
     });
-    // Newer Claude Code headless builds emit a JSON array of events; the
-    // terminal "result" event carries the envelope fields expected below.
-    const parsedStdout = parseJson(result.stdout);
-    const envelope = Array.isArray(parsedStdout)
-      ? [...parsedStdout].reverse().find((event) => event?.type === "result")
-      : parsedStdout;
+    const envelope = parseJson(result.stdout);
     const sessionId = text(envelope?.session_id);
     if (result.error || result.status !== 0 || envelope?.is_error === true ||
         envelope?.subtype && envelope.subtype !== "success")
