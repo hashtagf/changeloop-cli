@@ -3,6 +3,8 @@ import {
   renameSync, rmSync, writeFileSync
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { conflictKeysOverlap } from "../core/graph-execution.mjs";
+import { acquireProcessLock } from "../core/process-lock.mjs";
 
 export function createLeaseRuntime({
   leases,
@@ -12,6 +14,7 @@ export function createLeaseRuntime({
   readJson,
   writeJson,
   now,
+  observedTaskSurface = () => [],
   fail
 }) {
   function leasePath(resource) {
@@ -65,6 +68,31 @@ export function createLeaseRuntime({
     }
   }
 
+  function withAcquisitionLock(action) {
+    const path = join(leases, "acquire.lock");
+    const lock = acquireProcessLock(path, { now });
+    if (!lock.acquired) fail("lease acquisition is busy; retry the same command");
+    try { return action(); }
+    finally { lock.release(); }
+  }
+
+  function resourceDescriptors() {
+    const root = join(leases, "resources");
+    if (!existsSync(root)) return [];
+    const rows = [];
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      const path = join(root, entry.name);
+      const current = readJson(path, {});
+      if (!current.expiresAt || Date.parse(current.expiresAt) <= Date.now()) {
+        reapExpiredLease(path);
+        if (!existsSync(path)) continue;
+      }
+      rows.push({ path, descriptor: readJson(path, {}) });
+    }
+    return rows;
+  }
+
   function acquire(id, taskId, flags) {
     const owner = flags.owner;
     if (!taskId || !owner || !/^[a-zA-Z0-9._-]+$/.test(owner))
@@ -79,68 +107,83 @@ export function createLeaseRuntime({
       fail(`task '${task.id}' is blocked by pending task(s): ${blockedBy.join(", ")}`);
     const durationMs = Number(policy().execution.leaseMinutes) * 60 * 1000;
     const expiresAt = new Date(Date.now() + durationMs).toISOString();
-    const acquired = [];
-    const created = [];
-    try {
-      for (const resource of task.resources) {
-        const path = leasePath(resource);
-        mkdirSync(dirname(path), { recursive: true });
-        if (existsSync(path)) {
-          const current = readJson(path, {});
-          // A descriptor with no expiry is a lease nothing can ever release:
-          // the expiry branch never fires and every ownership-guarded delete
-          // needs a changeId an empty file cannot carry. It is the residue of
-          // a create that succeeded and a write that did not, so treat it the
-          // same as expired.
-          if (!current.expiresAt || Date.parse(current.expiresAt) <= Date.now())
-            reapExpiredLease(path);
-          else if (current.changeId === id && current.taskId === task.id &&
-                   current.owner === owner) {
-            writeJson(path, { ...current, expiresAt, renewedAt: now() });
-            acquired.push(path);
+    const keys = [...new Set(task.leaseKeys || task.resources || [])].sort();
+    const taskLeasePath = join(leases, "tasks", id, `${task.id}.json`);
+    const prior = existsSync(taskLeasePath) ? readJson(taskLeasePath, {}) : {};
+    const result = withAcquisitionLock(() => {
+      const descriptors = resourceDescriptors();
+      const renewal = descriptors.filter(({ descriptor }) =>
+        descriptor.changeId === id && descriptor.taskId === task.id && descriptor.owner === owner);
+      const conflicts = [];
+      for (const key of keys)
+        for (const { descriptor } of descriptors) {
+          if (descriptor.changeId === id && descriptor.taskId === task.id && descriptor.owner === owner)
             continue;
-          } else {
-            throw new Error(`resource '${resource}' is leased by ${current.changeId || "unknown"}/${current.taskId || "unknown"}`);
-          }
+          const held = descriptor.key || descriptor.resource;
+          if (conflictKeysOverlap(key, held)) conflicts.push({ key, held, descriptor });
         }
-        const descriptor = {
-          version: 1, resource, changeId: id, taskId: task.id, owner,
-          planDigest: plan.planDigest, acquiredAt: now(), expiresAt
-        };
-        // Record ownership before the write, not after: a write that fails
-        // here would otherwise leave a file this process created and no longer
-        // claims, and the rollback below would skip it.
-        let handle;
-        try {
-          handle = openSync(path, "wx");
-        } catch (error) {
-          if (error.code !== "EEXIST") throw error;
-          // A contender won the takeover between the expiry check and here.
-          const winner = readJson(path, {});
-          throw new Error(`resource '${resource}' is leased by ${
-            winner.changeId || "unknown"}/${winner.taskId || "unknown"}`);
+      if (conflicts.length) {
+        const conflict = conflicts[0];
+        throw new Error(`scope '${conflict.key}' conflicts with '${conflict.held}' held by ${
+          conflict.descriptor.changeId || "unknown"}/${conflict.descriptor.taskId || "unknown"}`);
+      }
+      const renewalKeys = renewal.map(({ descriptor }) => descriptor.key || descriptor.resource)
+        .sort();
+      const sameRenewalAuthority = JSON.stringify(renewalKeys) === JSON.stringify(keys) &&
+        prior.owner === owner && prior.graphRevision === plan.graphRevision &&
+        prior.graphIdentity === plan.graphIdentity &&
+        Number(prior.contractRevision) === Number(plan.contractRevision);
+      if (renewal.length && !sameRenewalAuthority)
+        throw new Error(`stale lease authority for '${id}/${task.id}'; release or take over the prior lease before reacquiring`);
+      if (sameRenewalAuthority) {
+        for (const row of renewal) writeJson(row.path, {
+          ...row.descriptor, expiresAt, renewedAt: now()
+        });
+        const renewed = { ...prior, expiresAt, renewedAt: now() };
+        writeJson(taskLeasePath, renewed);
+        return renewed;
+      }
+      const counterPath = join(leases, "fencing.json");
+      const fencingGeneration = Number(readJson(counterPath, { generation: 0 }).generation || 0) + 1;
+      writeJson(counterPath, { version: 1, generation: fencingGeneration, updatedAt: now() });
+      const executionAttempt = Number(prior.executionAttempt || 0) + 1;
+      const acquiredAt = now();
+      const leaseId = stableHash({ id, taskId: task.id, owner, fencingGeneration, acquiredAt });
+      const created = [];
+      try {
+        for (const key of keys) {
+          const path = leasePath(key);
+          mkdirSync(dirname(path), { recursive: true });
+          const descriptor = {
+            version: 2, key, resource: key, changeId: id, taskId: task.id, owner,
+            leaseId, fencingGeneration, executionAttempt,
+            graphRevision: plan.graphRevision, graphIdentity: plan.graphIdentity,
+            planDigest: plan.planDigest, acquiredAt, expiresAt
+          };
+          let handle = openSync(path, "wx");
+          created.push(path);
+          try { writeFileSync(handle, `${JSON.stringify(descriptor, null, 2)}\n`); }
+          finally { closeSync(handle); }
         }
-        created.push(path);
-        try { writeFileSync(handle, `${JSON.stringify(descriptor, null, 2)}\n`); }
-        finally { closeSync(handle); }
-        acquired.push(path);
+      } catch (error) {
+        for (const path of created) rmSync(path, { force: true });
+        throw error;
       }
-    } catch (error) {
-      for (const path of created) {
-        if (!existsSync(path)) continue;
-        const current = readJson(path, {});
-        // An empty descriptor is one this loop created and failed to fill in.
-        if (!current.changeId ||
-            (current.changeId === id && current.taskId === task.id && current.owner === owner))
-          rmSync(path);
-      }
-      fail(error.message);
-    }
-    writeJson(join(leases, "tasks", id, `${task.id}.json`), {
-      version: 1, changeId: id, taskId: task.id, owner,
-      resources: task.resources, planDigest: plan.planDigest, expiresAt
+      const lease = {
+        version: 2, changeId: id, taskId: task.id, owner, leaseId,
+        fencingGeneration, executionAttempt,
+        graphRevision: plan.graphRevision, graphIdentity: plan.graphIdentity,
+        planDigest: plan.planDigest, contractRevision: plan.contractRevision,
+        workspaceHash: plan.workspaceHash, repository: task.repository,
+        paths: task.paths || [], claimIds: task.claims || [],
+        outputSchema: plan.graph?.nodes?.find((entry) => entry.id === `task:${task.id}`)?.outputSchema,
+        resources: keys, baselineSurface: observedTaskSurface(id, task),
+        acquiredAt, expiresAt
+      };
+      writeJson(taskLeasePath, lease);
+      return lease;
     });
-    console.log(`LEASE ACQUIRED ${id}/${task.id}\n  owner: ${owner}\n  expires: ${expiresAt}`);
+    console.log(`LEASE ACQUIRED ${id}/${task.id}\n  owner: ${owner}\n  lease: ${result.leaseId}\n  generation: ${result.fencingGeneration}\n  attempt: ${result.executionAttempt}\n  expires: ${expiresAt}`);
   }
 
   function release(id, taskId, flags) {
@@ -165,17 +208,47 @@ export function createLeaseRuntime({
       if (!expired && !String(flags["decision-ref"] || "").trim())
         fail(`lease '${id}/${taskLease.taskId}' has not expired (expires ${taskLease.expiresAt}); forcing it requires --decision-ref <host-user-decision> because another worker may still be running it`);
     }
-    for (const resource of taskLease.resources || []) {
-      const path = leasePath(resource);
-      if (!existsSync(path)) continue;
-      const current = readJson(path, {});
-      if (!current.expiresAt ||
-          (current.changeId === id && current.taskId === taskLease.taskId &&
-            (current.owner === owner || force))) rmSync(path);
+    let observedWrites = [];
+    if (!force) {
+      const currentPlan = agentPlanValue(id);
+      if (currentPlan.graphRevision !== taskLease.graphRevision ||
+          currentPlan.graphIdentity !== taskLease.graphIdentity ||
+          Number(currentPlan.contractRevision) !== Number(taskLease.contractRevision))
+        fail(`stale result authority for '${id}/${taskLease.taskId}': graph or contract changed after lease acquisition`);
+      const baseline = new Map((taskLease.baselineSurface || []).map((row) => [row.path, row.identity]));
+      const currentRows = observedTaskSurface(id, taskLease);
+      const current = new Map(currentRows.map((row) => [row.path, row.identity]));
+      observedWrites = [...new Set([...baseline.keys(), ...current.keys()])]
+        .filter((path) => baseline.get(path) !== current.get(path)).sort();
+      const allowed = taskLease.paths || [];
+      const outside = observedWrites.filter((path) => !allowed.some((scope) => {
+        const prefix = String(scope).replace(/\/\*\*?$/, "").replace(/\/$/, "");
+        return scope === "*" || path === prefix || path.startsWith(`${prefix}/`);
+      }));
+      if (outside.length)
+        fail(`task '${taskLease.taskId}' changed outside granted scope: ${outside.join(", ")}; result and proof were not accepted`);
     }
-    rmSync(index);
+    withAcquisitionLock(() => {
+      for (const resource of taskLease.resources || []) {
+        const path = leasePath(resource);
+        if (!existsSync(path)) continue;
+        const current = readJson(path, {});
+        if (!force && (current.leaseId !== taskLease.leaseId ||
+            Number(current.fencingGeneration) !== Number(taskLease.fencingGeneration)))
+          fail(`stale lease result for '${id}/${taskLease.taskId}': generation ${
+            taskLease.fencingGeneration} no longer owns '${resource}'`);
+        if (!current.expiresAt ||
+            (current.changeId === id && current.taskId === taskLease.taskId &&
+              (current.owner === owner || force))) rmSync(path);
+      }
+      if (!force) writeJson(join(leases, "results", id, `${taskLease.taskId}.json`), {
+        version: 1, ...taskLease, status: "observed", observedWrites, acceptedAt: now()
+      });
+      rmSync(index);
+    });
     console.log(`LEASE RELEASED ${id}/${taskLease.taskId}${
-      taskLease.owner === owner ? "" : `\n  taken over from: ${taskLease.owner}`}`);
+      taskLease.owner === owner ? "" : `\n  taken over from: ${taskLease.owner}`}${
+      observedWrites.length ? `\n  observed writes: ${observedWrites.join(", ")}` : ""}`);
   }
 
   function active(id) {
@@ -197,6 +270,8 @@ export function createLeaseRuntime({
       }
     const tasks = join(leases, "tasks", id);
     if (existsSync(tasks)) rmSync(tasks, { recursive: true });
+    const results = join(leases, "results", id);
+    if (existsSync(results)) rmSync(results, { recursive: true });
   }
 
   return { leasePath, acquire, release, active, cleanup };

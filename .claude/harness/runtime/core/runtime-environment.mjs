@@ -26,7 +26,8 @@ const DEFAULT_POLICY = {
   workflow: {
     grounding: "optional",
     reviewCircuit: "legacy",
-    reviewPolicy: "legacy"
+    reviewPolicy: "legacy",
+    handoffDefaultOwner: "devops-team"
   }
 };
 
@@ -143,9 +144,18 @@ export function createRuntimeEnvironment({
       fail("foundation.json workflow.reviewCircuit must be legacy|full-delta");
     if (!["legacy", "risk-tiered"].includes(policy.workflow.reviewPolicy))
       fail("foundation.json workflow.reviewPolicy must be legacy|risk-tiered");
+    if (typeof policy.workflow.handoffDefaultOwner !== "string" ||
+        !policy.workflow.handoffDefaultOwner.trim())
+      fail("foundation.json workflow.handoffDefaultOwner must be a non-empty team name");
     if (policy.review.defaultReviewer &&
         !policy.review.reviewers[policy.review.defaultReviewer])
       fail("foundation.json review.defaultReviewer must name a configured reviewer");
+    if (policy.review.fallbackReviewer !== undefined &&
+        policy.review.fallbackReviewer !== "main-session")
+      fail("foundation.json review.fallbackReviewer must be main-session");
+    if (policy.review.fallbackReviewer === "main-session" &&
+        policy.review.independence !== "self")
+      fail("foundation.json review.fallbackReviewer main-session requires review.independence self");
     for (const [name, reviewer] of Object.entries(policy.review.reviewers)) {
       if (!["codex-cli", "claude-cli"].includes(reviewer.adapter))
         fail(`foundation.json review.reviewers.${name}.adapter must be codex-cli|claude-cli`);

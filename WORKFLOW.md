@@ -1,6 +1,6 @@
 # Foundation workflow
 
-**Version 3.2.29**
+**Version 3.3.0**
 
 Foundation is an OpenSpec-native harness for safe, economical software changes
 in brownfield repositories.
@@ -99,7 +99,14 @@ claude-foundation packet <change> --task <task-id> [--pretty]
 ```
 
 The plan permits parallel workers only across independent repositories and
-resources. The full plan is persisted while stdout stays below 4 KiB; workers
+resources. It compiles the task, provider, repository, and Land declarations
+into one derived graph; OpenSpec and `tasks.md` remain authoritative. Versioned
+edge schemas are checked before dispatch. Scoped path, contract, and resource
+leases are acquired all-or-none and carry a fencing generation, so a late
+worker result cannot advance after takeover. Actual worktree writes, rather
+than worker-reported paths alone, must remain inside the granted scope.
+
+The full plan is persisted while stdout stays below 4 KiB; workers
 receive only an 8 KiB task packet. A one-repository change with at most two
 ordinary tasks stays with one agent. It routes mechanical inventory to the configured Haiku/fast tier,
 normal implementation to Sonnet/standard, and architecture, security,
@@ -109,6 +116,16 @@ configuration.
 Resume planning considers completed tasks as satisfied dependencies and returns
 `proof-ready` when no implementation remains. Dispatch is denied when a task
 claims behavior outside its repository authority or has no evidence provider.
+Failure blocks only the dependent graph closure; independent completed nodes
+and valid receipts remain reusable. Aggregate proof still covers every locked
+required node and edge, and multi-remote Land revalidates its preparation
+snapshot immediately before each mutation wave.
+Providers may distinguish their execution cwd (`repository`) from the complete
+repository set they consume (`repositories`). Git-backed `mode: read`
+dependencies are pinned in detached worktrees, included in provider and
+aggregate proof identity, exposed through `FOUNDATION_REPOSITORIES_FILE`, and
+must remain unchanged. They never produce Land nodes; target drift requires
+sandbox sync and fresh proof.
 Load one primary construction skill per task; add only the security and
 observability cross-cutting skills whose triggers apply.
 
@@ -451,6 +468,15 @@ live only in the committed policy file; neither is a command flag. The shipped
 `codex-sol` as the default, and also ships `claude-opus`. Codex-only teams select
 `codex-sol`; Claude-Code-only teams select `claude-opus`; either team commits
 only the `single-model` diversity waiver while keeping independence required.
+Set `review.fallbackReviewer` to `main-session` to hand the exact bounded packet
+back to the calling agent after the primary records an infrastructure `error`.
+The failed attempt remains in the review hash chain. Foundation binds the
+ambient host session to matching implementation provenance, current-session
+telemetry, or explicit `--main-session-*` values, reserves the fallback attempt, and pre-fills the
+response provenance; it refuses the handback rather than guessing missing
+identity/model metadata.
+This explicit self-review fallback requires `review.independence: "self"`.
+`fail` and `inconclusive` are delivered verdicts and never trigger fallback.
 Both adapters create a separate read-only, non-persistent session; the Claude
 adapter also removes the parent Claude Code nesting marker before launch.
 Whichever way the file reads, the receipt records what was observed, not what
@@ -471,7 +497,9 @@ Workspace edits stale prior review.
 unresolved `pre-land` or `activation-coupled` operation, but permits an accepted
 tracked `post-land` operation only when a declared claim proves the merged
 artifact remains safe before activation. Operator records carry names, tickets,
-and evidence references—never credentials.
+and evidence references—never credentials. An operation without `owner` inherits
+`foundation.json > workflow.handoffDefaultOwner` (`devops-team` by default), so
+the workflow asks for a specific owner only when that team route cannot proceed.
 
 Human acceptance is separate from review. New standard changes keep this choice
 `undecided` until `/change` explicitly records whether subjective product or
@@ -663,6 +691,22 @@ Apply creates migration candidates, not authoritative specs. Only statements
 corroborated by code, tests, or accepted contracts may be promoted.
 
 ## Native CLI
+
+Host integrations can resolve the canonical workflow instruction owned by the
+installed release without locating or reading a Foundation project:
+
+```bash
+claude-foundation host instruction <command> --protocol 1 --format json --arguments <text>
+```
+
+Protocol 1 supports `investigate`, `change`, `build`, `prove`, `land`,
+`changes`, `feature`, and `dev`. It returns the command, description, rendered
+instruction, argument mode, protocol, and Foundation version as JSON. Argument
+text is opaque; `changes` accepts none. Unsupported protocols, unknown commands,
+unexpected arguments, and unavailable package instructions fail closed with a
+stable JSON error code. The endpoint is additive and ships before a host adopts
+it; a host that cannot obtain protocol 1 must request a compatible Foundation
+release instead of reading project command files or using a bundled copy.
 
 `claude-foundation` is the stable public control surface. It searches upward
 from the working directory, or from `--project <path>`, and forwards to the

@@ -4,6 +4,9 @@ import { spawnSync } from "node:child_process";
 import { validateSignedCiEnvelope } from "../evidence/signed-ci.mjs";
 import { validityRecovery } from "../evidence/receipt-validity.mjs";
 import { targetHeadMovedDecision } from "./apply-recovery.mjs";
+import {
+  compileLandPreparation, landPreparationMatches
+} from "../core/graph-execution.mjs";
 
 const OPENSPEC_REQUIRED_MAJOR = 1;
 const OPENSPEC_TESTED_MINOR = 7;
@@ -88,11 +91,13 @@ export function createLandRuntime({
   receiptPath,
   handoffReadiness,
   verifyAppliedProjection,
-  selectedRepositories,
+  selectedRepositories = () => [],
   repositoryById,
   git,
   gitHead,
   ciEvidenceProtocolVersion,
+  stableHash = (value) => JSON.stringify(value),
+  agentPlanValue = null,
   now,
   blockWithDecision,
   fail
@@ -158,6 +163,20 @@ export function createLandRuntime({
         multiRepository: Object.keys(state.repositories || {}).length > 1,
         action: "Landing"
       }));
+    for (const repository of selectedRepositories(id, state)) {
+      if (repository.mode !== "read") continue;
+      const runtime = state.repositories?.[repository.id] || {};
+      if (runtime.mode !== "worktree")
+        fail(`read-only dependency '${repository.id}' is not isolated; recreate the sandbox before Land`);
+      const dirty = git(["status", "--porcelain"], runtime.path);
+      if (dirty.status !== 0 || dirty.stdout.trim())
+        fail(`read-only dependency '${repository.id}' changed inside its sandbox: ${
+          dirty.stdout.trim() || dirty.stderr.trim() || "git status failed"}`);
+      const targetHead = gitHead(repository.path);
+      if (targetHead !== runtime.baseHead)
+        fail(`read-only dependency '${repository.id}' moved after sandbox creation (${
+          String(runtime.baseHead || "").slice(0, 8)} -> ${String(targetHead || "").slice(0, 8)}); run sandbox sync and prove again`);
+    }
     const proof = existsSync(proofPath(id)) ? readJson(proofPath(id)) : null;
     if (!proof || proof.status !== "pass") fail(`change '${id}' has no passing proof`);
     const audit = proofAudit(id, true);
@@ -166,6 +185,22 @@ export function createLandRuntime({
     const hash = relevantHash(id, null, true);
     if (proof.workspaceHash !== hash)
       fail(`proof is stale (${proof.workspaceHash.slice(0, 8)} != ${hash.slice(0, 8)}) — the workspace changed after Prove; finish contract and code edits first, sync, then run one fresh prove: claude-foundation proof run ${id}`);
+    const graph = agentPlanValue?.(id)?.graph || null;
+    if (graph) {
+      const aggregate = proof.aggregateGraphProof;
+      if (!aggregate || aggregate.status !== "pass")
+        fail(`aggregate graph proof is missing; finalize one fresh proof for graph ${graph.revision}`);
+      if (aggregate.graphIdentity !== graph.identity ||
+          aggregate.graphRevision !== graph.revision || aggregate.workspaceHash !== hash)
+        fail(`aggregate graph proof is stale for ${graph.revision}; run one fresh prove`);
+      const missingNodes = (aggregate.requiredNodes || []).filter((node) =>
+        !(aggregate.coveredNodes || []).includes(node));
+      const missingEdges = (aggregate.requiredEdges || []).filter((edge) =>
+        !(aggregate.coveredEdges || []).includes(edge));
+      if (missingNodes.length || missingEdges.length)
+        fail(`aggregate graph proof is incomplete: nodes ${missingNodes.join(", ") || "none"}; edges ${
+          missingEdges.join(", ") || "none"}`);
+    }
     for (const provider of requiredProviders(id)) {
       const check = receiptValidity(id, provider, hash);
       // Land is the last place a person finds out, and it used to be the least
@@ -201,6 +236,7 @@ export function createLandRuntime({
           row.taskKind || "ambiguous"}): requested ${row.requestedTier}, ran ${
           row.actualModel || "unreported"} — ${row.reason}`).join("\n")}`);
     const multiRepository = state.repositories && Object.keys(state.repositories).length > 1;
+    if (multiRepository) persistLandPreparation(id, state, proof, graph, hash);
     // A waived gate must be visible in the same breath as the word READY:
     // landing with a withdrawn requirement is legitimate, hiding it is not.
     const waived = (state.waivers || []).map((row) =>
@@ -297,7 +333,16 @@ export function createLandRuntime({
         repositoryCommitLanded(repository, commit);
       const sandboxGitlink = rootGitlink(state.workspace?.path || root, repository);
       const targetGitlink = rootGitlink(root, repository);
-      let status = repository.mode === "read" ? "read-only" :
+      const targetHead = gitHead(repository.path);
+      const sandboxHead = gitHead(runtime.path || repository.workspacePath);
+      const readDirty = repository.mode === "read" && runtime.mode === "worktree"
+        ? git(["status", "--porcelain"], runtime.path).stdout.trim() : "";
+      let status = repository.mode === "read"
+        ? runtime.mode !== "worktree" ? "read-not-isolated"
+          : readDirty ? "read-sandbox-dirty"
+            : targetHead !== (runtime.baseHead || repository.baseHead)
+              ? "read-dependency-drift" : "read-only"
+        :
         repository.id === "root" ? "control-plane-last" :
         !runtime.path ? "sandbox-missing" :
         !commit ? "awaiting-explicit-commit" :
@@ -316,8 +361,8 @@ export function createLandRuntime({
         targetPath: repository.path,
         sandboxPath: runtime.path || repository.workspacePath,
         baseHead: runtime.baseHead || repository.baseHead,
-        targetHead: gitHead(repository.path),
-        sandboxHead: gitHead(runtime.path || repository.workspacePath),
+        targetHead,
+        sandboxHead,
         commit,
         ci: runtime.land?.ci || null,
         rootGitlink: sandboxGitlink,
@@ -337,6 +382,52 @@ export function createLandRuntime({
         ["read-only", "child-landed", "control-plane-last"].includes(repository.status)),
       updatedAt: now()
     };
+  }
+
+  function landPreparationValue(id, state = loadRuntime(id), proof = null, graph = null, hash = null) {
+    const currentProof = proof || (existsSync(proofPath(id)) ? readJson(proofPath(id), {}) : null);
+    const currentGraph = graph || agentPlanValue?.(id)?.graph || null;
+    const plan = landPlanValue(id);
+    const repositories = plan.repositories.map((repository) => ({
+      id: repository.id,
+      mode: repository.mode,
+      dependsOn: repository.dependsOn,
+      authorizedCommit: repository.id === "root"
+        ? repository.sandboxHead : repository.commit,
+      ci: repository.ci,
+      targetHead: repository.targetHead,
+      status: repository.status,
+      recoveryDisposition: state.land?.recovery?.[repository.id] || "forward-fix"
+    }));
+    return compileLandPreparation({
+      changeId: id,
+      graphRevision: currentGraph?.revision || null,
+      graphIdentity: currentGraph?.identity || null,
+      aggregateProofRunId: currentProof?.proofRunId || null,
+      aggregateProofIdentity: currentProof?.aggregateGraphProof?.graphIdentity || null,
+      workspaceHash: hash || relevantHash(id),
+      repositories,
+      stableHash,
+      preparedAt: now()
+    });
+  }
+
+  function persistLandPreparation(id, state, proof, graph, hash) {
+    const value = landPreparationValue(id, state, proof, graph, hash);
+    writeJson(join(transactions, id, "land-preparation.json"), value);
+    return value;
+  }
+
+  function requirePreparedLand(id) {
+    const state = loadRuntime(id);
+    const proof = existsSync(proofPath(id)) ? readJson(proofPath(id), {}) : null;
+    const graph = agentPlanValue?.(id)?.graph || null;
+    const current = landPreparationValue(id, state, proof, graph, relevantHash(id));
+    const path = join(transactions, id, "land-preparation.json");
+    const prepared = existsSync(path) ? readJson(path, {}) : null;
+    if (!landPreparationMatches(prepared, current))
+      fail(`Land preparation changed before mutation (${current.incomplete.join(", ") || "identity drift"}); re-run land check after resolving it`);
+    return current;
   }
 
   function showLandPlan(id) {
@@ -478,6 +569,10 @@ export function createLandRuntime({
       binding: repository.type === "submodule" ? "root-gitlink" : "runtime-state-only"
     };
     saveRuntime(state);
+    persistLandPreparation(id, state,
+      existsSync(proofPath(id)) ? readJson(proofPath(id), {}) : null,
+      agentPlanValue?.(id)?.graph || null,
+      relevantHash(id));
     if (repository.type !== "submodule")
       console.error(
         `WARNING: '${repositoryId}' is a ${repository.type} repository, so nothing versioned in the ` +
@@ -488,6 +583,7 @@ export function createLandRuntime({
 
   function stageRootPointers(id) {
     landCheck(id);
+    requirePreparedLand(id);
     const state = loadRuntime(id);
     if (!state.repositories || Object.keys(state.repositories).length <= 1)
       fail(`change '${id}' is not multi-repository`);
@@ -669,6 +765,8 @@ export function createLandRuntime({
     repositoryCommitLanded,
     rootGitlink,
     landPlanValue,
+    landPreparationValue,
+    requirePreparedLand,
     showLandPlan,
     recordRepositoryLand,
     stageRootPointers,

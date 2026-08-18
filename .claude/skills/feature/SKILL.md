@@ -4,6 +4,6 @@ description: Run the repository's end-to-end Foundation feature workflow for a P
 ---
 
 Treat the text after `$feature` as the command arguments. Read
-`../../commands/feature.md` completely and follow it as the canonical workflow.
+`references/workflow.md` completely and follow it as the canonical workflow.
 Translate host-specific wording without changing its lifecycle or authority
 boundaries.

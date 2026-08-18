@@ -438,8 +438,11 @@ export function createProofExecutionRuntime({
     return requests.map((request) => ({
       requestId: request.requestId,
       provider: request.provider,
-      command: stage === "review" && request.status === "requested"
-        ? `claude-foundation authority run ${id} --request ${request.requestId} --subject-actor <implementer> [AI subject provenance options]`
+      command: stage === "review" && request.status === "requested" &&
+          request.mainSessionFallback
+        ? `claude-foundation authority run ${id} --request ${request.requestId} --subject-actor ${request.mainSessionFallback.subject?.identity || "<implementer>"} --main-session-model-family <family> --main-session-model <model>`
+        : stage === "review" && request.status === "requested"
+          ? `claude-foundation authority run ${id} --request ${request.requestId} --subject-actor <implementer> [AI subject provenance options]`
         : `claude-foundation authority status ${id} --request ${request.requestId} --template`
     }));
   }

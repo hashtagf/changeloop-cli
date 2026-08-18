@@ -48,6 +48,7 @@ export function createHandoffRuntime({
   readJson,
   writeJson,
   stableHash,
+  defaultOwner = () => "devops-team",
   now,
   fail
 }) {
@@ -104,9 +105,12 @@ export function createHandoffRuntime({
       const unknown = taskIds.filter((value) => !context.taskIds.has(value));
       if (unknown.length) fail(`${label} references unknown task(s): ${unknown.join(", ")}`);
     }
+    const owner = cleanString(raw.owner) || cleanString(defaultOwner());
+    if (!owner) fail(`${label}.owner is required`);
+    if (owner.length > 1000) fail(`${label}.owner is too long`);
     const operation = {
       id,
-      owner: string("owner"),
+      owner,
       environment: string("environment"),
       authority: string("authority"),
       operation: string("operation"),

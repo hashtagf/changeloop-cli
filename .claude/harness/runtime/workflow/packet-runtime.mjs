@@ -2,11 +2,12 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 export function createPacketRuntime({
-  ROOT, PACKET_SCHEMA_VERSION, REVIEW_PACKET_SCHEMA_VERSION, loadRuntime,
+  ROOT, PACKET_SCHEMA_VERSION, REVIEW_PACKET_SCHEMA_VERSION, leasesRoot = null, loadRuntime,
   readJson, activeChangePath, canonicalChangedSurface,
   evidence, taskBlocks, taskMetadata, repositoryById, claimsForProvider,
   relevantSnapshot, snapshotPath, singleRelevantSnapshot, requiredProviders,
   receiptValidity, providerConfig, adapterResources, stableHash, compactStrings,
+  providerRepositories,
   modelForTask, compactList, fileDigest, directoryHash, ensureBudgetState,
   budgetDecision, scopedReviewClaims, relevantHash, providerCapability,
   receiptPath, contractFingerprint, reviewPolicy, resolvedAcceptance,
@@ -65,11 +66,12 @@ export function createPacketRuntime({
       return {
         provider, adapter: config?.adapter || "external",
         repository: config?.repository || null,
+        repositories: providerRepositories(id, provider, config)
+          .map((row) => row.id),
         resources: config ? adapterResources(provider, config) : [],
         validity: check.validity, status: check.status || check.receipt?.status || null
       };
-    }).filter((provider) => !repository ||
-      !provider.repository || provider.repository === repository.id)
+    }).filter((provider) => !repository || provider.repositories.includes(repository.id))
       .filter((provider) => {
         const covered = claimsForProvider(id, provider.provider).map((claim) => claim.id);
         return covered.length === 0 || covered.some((claim) => claimIds.has(claim));
@@ -186,6 +188,32 @@ export function createPacketRuntime({
         reference: "evidence.yaml#invariants"
       } : invariantValues.map((value) => value.slice(0, 300)).slice(0, 10),
       references: artifactReferences,
+      ...(selectedTask ? (() => {
+        const leasePath = leasesRoot
+          ? join(leasesRoot, "tasks", id, `${selectedTask.id}.json`) : null;
+        const lease = leasePath && existsSync(leasePath) ? readJson(leasePath, {}) : null;
+        return {
+          executionAuthority: lease ? {
+            status: "leased",
+            graphRevision: lease.graphRevision,
+            graphIdentity: lease.graphIdentity,
+            planDigest: lease.planDigest,
+            contractRevision: lease.contractRevision,
+            workspaceHash: lease.workspaceHash,
+            leaseId: lease.leaseId,
+            fencingGeneration: lease.fencingGeneration,
+            executionAttempt: lease.executionAttempt,
+            repository: lease.repository,
+            paths: lease.paths,
+            claimIds: lease.claimIds,
+            outputSchema: lease.outputSchema,
+            expiresAt: lease.expiresAt
+          } : {
+            status: "unleased",
+            instruction: `Acquire the host lease, then regenerate this task packet before execution.`
+          }
+        };
+      })() : {}),
       budget: ensureBudgetState(state),
       budgetDecision: budgetDecision(state)
     };
@@ -365,7 +393,7 @@ export function createPacketRuntime({
     };
     return { ...packet, packetDigest: stableHash(packet) };
   }
-  
+
   
   function showPacket(id, flags = {}) {
     if (flags.phase === "review" && flags.task)
@@ -390,6 +418,9 @@ export function createPacketRuntime({
       requestedModel: manifest.execution?.requestedModel || null
     };
     if (flags.planDigest) value.planDigest = flags.planDigest;
+    if (flags.graphRevision) value.graphRevision = flags.graphRevision;
+    if (flags.graphIdentity) value.graphIdentity = flags.graphIdentity;
+    if (flags.graphNode) value.graphNode = flags.graphNode;
     const priorDigest = value.packetDigest;
     delete value.packetDigest;
     value.packetDigest = stableHash(value);

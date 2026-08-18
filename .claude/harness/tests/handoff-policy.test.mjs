@@ -62,6 +62,7 @@ try {
     readJson,
     writeJson,
     stableHash,
+    defaultOwner: () => "devops-team",
     now: () => "2026-08-14T12:00:00.000Z",
     fail
   });
@@ -72,6 +73,13 @@ try {
   });
   assert.equal(validated.operations.length, 1);
   assert.deepEqual(runtime.handoffReadiness(changeId).blocking, ["H001"]);
+
+  writeJson(join(change, "handoffs.yaml"), {
+    version: 1, operations: [operation({ owner: undefined })]
+  });
+  assert.equal(runtime.handoffContract(changeId).operations[0].owner, "devops-team",
+    "an omitted owner defaults to the configured team identity");
+  writeJson(join(change, "handoffs.yaml"), { version: 1, operations: [operation()] });
 
   const lockPath = join(fixture, ".foundation", "handoffs", changeId,
     ".mutation.lock");

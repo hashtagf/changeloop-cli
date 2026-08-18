@@ -45,27 +45,55 @@ export function taskMetadata(task) {
     paths: list("paths"),
     resources: list("resources"),
     claims: list("claims"),
+    inputSchema: list("input-schema")[0] || null,
+    outputSchema: list("output-schema")[0] || null,
     text: value.replace(/\s+/g, " ").trim().slice(0, 1000)
   };
 }
 
-export function parseSpecRequirements(text) {
+const SPEC_HEADING = /^(#{1,6})\s+(.*?)\s*$/;
+const DELTA_SECTION = /^(ADDED|MODIFIED|REMOVED|RENAMED)\b/i;
+
+export function specDeltaOperation(section) {
+  return DELTA_SECTION.exec(section || "")?.[1]?.toUpperCase() || null;
+}
+
+// Parses both canonical specifications and change deltas. Keeping section,
+// scenarios, and the complete body together lets pre-Build validation and the
+// post-archive oracle apply exactly the same grammar.
+export function parseSpecDocument(text) {
   const requirements = [];
   let section = null;
   let current = null;
-  for (const line of text.split("\n")) {
-    const requirement = line.match(/^###\s+Requirement:\s*(.+?)\s*$/);
-    const scenario = line.match(/^####\s+Scenario:\s*(.+?)\s*$/);
-    const heading = line.match(/^##\s+(.+?)\s*$/);
-    if (requirement) {
-      current = { section, name: requirement[1].trim(), scenarios: [] };
-      requirements.push(current);
-    } else if (scenario) {
-      if (current) current.scenarios.push(scenario[1].trim());
-    } else if (heading) {
-      section = heading[1].trim();
-      current = null;
+  for (const line of String(text ?? "").split("\n")) {
+    const heading = line.match(SPEC_HEADING);
+    if (heading) {
+      const level = heading[1].length;
+      const title = heading[2];
+      if (level <= 3) {
+        const name = level === 3
+          ? title.match(/^Requirement:\s*(.+?)$/)?.[1]?.trim()
+          : null;
+        if (level === 2) section = title.trim();
+        current = name
+          ? { section, name, scenarios: [], lines: [line] }
+          : null;
+        if (current) requirements.push(current);
+        continue;
+      }
+      const scenario = level === 4
+        ? title.match(/^Scenario:\s*(.+?)$/)?.[1]?.trim()
+        : null;
+      if (scenario && current) current.scenarios.push(scenario);
     }
+    if (current) current.lines.push(line);
   }
-  return requirements;
+  return requirements.map(({ lines, ...requirement }) => ({
+    ...requirement,
+    body: lines.join("\n").replace(/\s+$/, "")
+  }));
+}
+
+export function parseSpecRequirements(text) {
+  return parseSpecDocument(text).map(({ body, ...requirement }) => requirement);
 }

@@ -7,14 +7,113 @@ export function createProofRuntime({
   activeChangeLeases, pendingTasks, clearSnapshotCache, relevantSnapshot,
   requiredProviders, advisoryCapabilities, receiptValidity, proofRunRoot, receiptPath, fileDigest,
   protocolDescriptor, contractFingerprint, executionFingerprint, proofPath,
-  writeJson, readJson, pathInside, validateArtifact, instructionProvenance, now, fail
+  writeJson, readJson, pathInside, validateArtifact, instructionProvenance,
+  agentPlanValue = null, savedAgentPlan = null, taskResult = null,
+  taskPacketWasPrecompleted = null, legacyExecutionPolicy = null,
+  selectedRepositories = () => [], git = null, now, fail
 }) {
+  function assertReadRepositoriesUnchanged(id, state) {
+    if (!git) return;
+    for (const repository of selectedRepositories(id, state)) {
+      if (repository.mode !== "read" || state.repositories?.[repository.id]?.mode !== "worktree")
+        continue;
+      const changed = git(["status", "--porcelain"], repository.workspacePath);
+      if (changed.status !== 0 || changed.stdout.trim())
+        fail(`read-only repository '${repository.id}' changed inside its sandbox: ${
+          changed.stdout.trim() || changed.stderr.trim() || "git status failed"}`);
+    }
+  }
+
+  function pathCovered(path, scopes) {
+    return (scopes || []).some((scope) => {
+      const prefix = String(scope).replace(/\/\*\*?$/, "").replace(/\/$/, "");
+      return scope === "*" || path === prefix || path.startsWith(`${prefix}/`);
+    });
+  }
+
+  function taskNodeProof(id, node, graph, state, runRoot) {
+    const taskId = node.id.replace(/^task:/, "");
+    if (!state.graphExecutionVersion) return {
+      nodeId: node.id, lifecycle: node.lifecycle, status: "pass",
+      source: "legacy-upgrade", claims: node.claims
+    };
+    if (legacyExecutionPolicy?.()) return {
+      nodeId: node.id, lifecycle: node.lifecycle, status: "pass",
+      source: "legacy-policy", claims: node.claims
+    };
+    if (taskPacketWasPrecompleted?.(id)) return {
+      nodeId: node.id, lifecycle: node.lifecycle, status: "pass",
+      source: "precompleted-at-isolation", claims: node.claims
+    };
+    const resultRecord = taskResult?.(id, taskId) || null;
+    const result = resultRecord?.value || null;
+    if (result) {
+      const mismatches = [];
+      const expect = (field, actual, expected) => {
+        if (String(actual ?? "") !== String(expected ?? "")) mismatches.push(field);
+      };
+      expect("taskId", result.taskId, taskId);
+      expect("repository", result.repository, node.repository);
+      expect("graphRevision", result.graphRevision, graph.revision);
+      expect("graphIdentity", result.graphIdentity, graph.identity);
+      expect("contractRevision", result.contractRevision, state.contractRevision);
+      if (JSON.stringify([...(result.paths || [])].sort()) !==
+          JSON.stringify([...(node.paths || [])].sort())) mismatches.push("paths");
+      if (JSON.stringify([...(result.claimIds || [])].sort()) !==
+          JSON.stringify([...(node.claims || [])].sort())) mismatches.push("claimIds");
+      if (JSON.stringify(result.outputSchema || null) !==
+          JSON.stringify(node.outputSchema || null)) mismatches.push("outputSchema");
+      if (result.status !== "observed") mismatches.push("status");
+      for (const field of ["planDigest", "workspaceHash", "leaseId"])
+        if (!String(result[field] || "")) mismatches.push(field);
+      for (const field of ["fencingGeneration", "executionAttempt"])
+        if (!Number.isInteger(Number(result[field])) || Number(result[field]) < 1)
+          mismatches.push(field);
+      const unexpectedWrites = (result.observedWrites || [])
+        .filter((path) => !pathCovered(path, node.paths));
+      if (unexpectedWrites.length) mismatches.push("observedWrites");
+      if (mismatches.length)
+        fail(`task node '${node.id}' has stale or invalid result authority: ${[
+          ...new Set(mismatches)].join(", ")}`);
+      const destination = join(runRoot, "nodes", `${taskId}.json`);
+      mkdirSync(dirname(destination), { recursive: true });
+      cpSync(resultRecord.path, destination);
+      return {
+        nodeId: node.id, lifecycle: node.lifecycle, status: "pass",
+        source: "accepted-lease-result", claims: node.claims,
+        resultAuthority: {
+          planDigest: result.planDigest, workspaceHash: result.workspaceHash,
+          leaseId: result.leaseId, fencingGeneration: result.fencingGeneration,
+          executionAttempt: result.executionAttempt,
+          path: relative(root, destination).replaceAll("\\", "/"),
+          sha256: fileDigest(destination), size: statSync(destination).size
+        }
+      };
+    }
+    const execution = savedAgentPlan?.(id)?.taskExecution?.[taskId];
+    const taskNodes = graph.nodes.filter((entry) => entry.kind === "task");
+    const singleAgentEligible = new Set(taskNodes.map((entry) => entry.repository)).size === 1 &&
+      taskNodes.length <= 2 &&
+      !graph.claims.some((claim) => (claim.repositories || []).length > 1) &&
+      !taskNodes.some((entry) => (entry.resources || [])
+        .some((resource) => !resource.startsWith("workspace:")));
+    const savedSingleAgent = execution?.mode === "single-agent-observed" &&
+      execution.graphRevision === graph.revision && execution.graphIdentity === graph.identity;
+    if (!savedSingleAgent && !singleAgentEligible)
+      fail(`task node '${node.id}' lacks an accepted lease result; resume /build for its bounded repair scope`);
+    return {
+      nodeId: node.id, lifecycle: node.lifecycle, status: "pass",
+      source: "single-agent-observed", claims: node.claims
+    };
+  }
+
   function finalize(id, requestedProofRunId = null, options = {}) {
     const stateBefore = loadRuntime(id);
     if (stateBefore.status === "archived") fail(`change '${id}' is already archived`);
     validate(id, "active", { quiet: true });
     const surfaceIssues = changedSurfaceIssues(id);
     if (surfaceIssues.length) fail(`changed-surface authority failed: ${surfaceIssues.join("; ")}`);
+    assertReadRepositoriesUnchanged(id, stateBefore);
     const leases = activeChangeLeases(id);
     if (leases.length)
       fail(`active agent leases block proof: ${leases.map((lease) => lease.taskId).join(", ")}`);
@@ -57,11 +156,35 @@ export function createProofRuntime({
       return {
         provider: row.provider,
         repositoryId: row.receipt?.repositoryId || null,
+        repositoryIds: row.receipt?.repositoryIds || [],
         path: relative(root, destination).replaceAll("\\", "/"),
         sha256: fileDigest(destination),
         size: statSync(destination).size
       };
     });
+    const graph = agentPlanValue?.(id)?.graph || null;
+    const proofNodes = (graph?.nodes || []).filter((node) =>
+      node.required && node.lifecycle !== "land");
+    const nodeProofs = proofNodes.map((node) => node.kind === "task"
+      ? taskNodeProof(id, node, graph, stateBefore, runRoot)
+      : {
+          nodeId: node.id, lifecycle: node.lifecycle, status: "pass",
+          source: "provider-receipt", claims: node.claims,
+          repositories: node.repositories || (node.repository ? [node.repository] : [])
+        });
+    const proofEdges = (graph?.edges || []).filter((edge) =>
+      proofNodes.some((node) => node.id === edge.to));
+    const aggregateGraphProof = graph ? {
+      version: 1,
+      status: "pass",
+      graphRevision: graph.revision,
+      graphIdentity: graph.identity,
+      workspaceHash: hash,
+      requiredNodes: proofNodes.map((node) => node.id),
+      coveredNodes: proofNodes.map((node) => node.id),
+      requiredEdges: proofEdges.map((edge) => edge.id),
+      coveredEdges: proofEdges.map((edge) => edge.id)
+    } : null;
     const proof = {
       version: 2,
       proofProtocolVersion: protocolVersion,
@@ -74,12 +197,11 @@ export function createProofRuntime({
       repositories: snapshot.repositories || null,
       contractFingerprint: contractFingerprint(id),
       executionFingerprint: executionFingerprint(id),
+      graphRevision: graph?.revision || null,
+      graphIdentity: graph?.identity || null,
+      nodeProofs,
+      aggregateGraphProof,
       providers: checks.map((row) => row.provider),
-      // Additive and optional, so it carries no protocol bump: a reader that
-      // ignores it behaves exactly as before, and an older proof simply lacks
-      // it. Bumping `proofProtocol` for an informational field would invalidate
-      // every in-flight proof on upgrade — the same class of stuck state this
-      // field exists to document.
       advisories: advisoryCapabilities?.(id) || [],
       receipts: receiptEntries,
       // The execute path carries service logs on activeProofRun; the collect →
@@ -113,6 +235,32 @@ export function createProofRuntime({
       return { valid: false, reason: "proof-version-stale" };
     if (!Array.isArray(proof.receipts) || proof.receipts.length === 0)
       return { valid: false, reason: "missing-receipt-manifest" };
+    if (proof.aggregateGraphProof) {
+      const aggregate = proof.aggregateGraphProof;
+      if (aggregate.status !== "pass" || aggregate.graphIdentity !== proof.graphIdentity ||
+          aggregate.graphRevision !== proof.graphRevision ||
+          aggregate.workspaceHash !== proof.workspaceHash)
+        return { valid: false, reason: "aggregate-graph-proof-identity" };
+      if ((aggregate.requiredNodes || []).some((id) =>
+        !(aggregate.coveredNodes || []).includes(id)) ||
+          (aggregate.requiredEdges || []).some((id) =>
+            !(aggregate.coveredEdges || []).includes(id)))
+        return { valid: false, reason: "aggregate-graph-proof-incomplete" };
+      const nodeProofs = new Map((proof.nodeProofs || []).map((row) => [row.nodeId, row]));
+      if ((aggregate.requiredNodes || []).some((id) =>
+        nodeProofs.get(id)?.status !== "pass"))
+        return { valid: false, reason: "aggregate-node-proof-missing" };
+      for (const row of nodeProofs.values()) {
+        if (row.source !== "accepted-lease-result") continue;
+        const authority = row.resultAuthority || {};
+        const path = resolve(root, authority.path || "");
+        if (!pathInside(proofRunRoot(id, proof.proofRunId), path) ||
+            !existsSync(path) || !statSync(path).isFile() ||
+            fileDigest(path) !== authority.sha256 ||
+            statSync(path).size !== Number(authority.size))
+          return { valid: false, reason: `node-result-tampered:${row.nodeId || "unknown"}` };
+      }
+    }
     for (const entry of proof.receipts) {
       const path = resolve(root, entry.path || "");
       if (!pathInside(proofRunRoot(id, proof.proofRunId), path) ||

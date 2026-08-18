@@ -108,11 +108,57 @@ export function createAdapterRuntime({
   providerCapability, providerConfig, parseFlags, providerWorkspace,
   recordReceipt, startServiceSession, evidence, resultAdapterResources,
   loadRuntime, providerRepository, repositoryById, configuredCommand,
+  providerRepositories,
   fileDigest, pathInside, stableHash, runCommand,
   providerWorkspaceHash, providerClaims, parseJsonOutput, parseTapOutput,
   numericReportValue, playwrightReportSummary, requiredProviders,
   mutationProtocolResult, now, die
 }) {
+  function repositoryStatus(repository) {
+    const result = spawnSync("git", ["status", "--porcelain"], {
+      cwd: repository.workspacePath, encoding: "utf8"
+    });
+    return result.status === 0 ? result.stdout.trim() : null;
+  }
+
+  function providerRepositoryManifest(id, provider, config, proofRunId) {
+    const state = loadRuntime(id);
+    const rows = providerRepositories(id, provider, config);
+    const repositories = {};
+    for (const repository of rows) {
+      if (!existsSync(repository.workspacePath))
+        die(`provider '${provider}' repository '${repository.id}' workspace is missing`);
+      const runtime = state.repositories?.[repository.id] ||
+        (repository.id === "root" ? state.workspace : null) || {};
+      if (runtime.setup?.status === "failed")
+        die(`provider '${provider}' repository '${repository.id}' setup failed`);
+      if (repository.mode === "read") {
+        const changed = repositoryStatus(repository);
+        if (changed)
+          die(`provider '${provider}' read-only repository '${repository.id}' changed inside its sandbox: ${changed}`);
+      }
+      repositories[repository.id] = {
+        path: repository.workspacePath,
+        access: repository.mode,
+        baseHead: runtime.baseHead || repository.baseHead || null
+      };
+    }
+    const path = join(LOGS, id, `${proofRunId}-${provider}-repositories.json`);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${JSON.stringify({
+      version: 1, changeId: id, proofRunId, provider, repositories
+    }, null, 2)}\n`, { mode: 0o600 });
+    return { path, rows };
+  }
+
+  function assertReadRepositoriesUnchanged(provider, rows) {
+    for (const repository of rows.filter((row) => row.mode === "read")) {
+      const changed = repositoryStatus(repository);
+      if (changed)
+        die(`provider '${provider}' modified read-only repository '${repository.id}': ${changed}`);
+    }
+  }
+
   function runProvider(id, provider, values) {
     const configured = providerConfig(id, provider);
     const capability = providerCapability(provider, configured);
@@ -252,12 +298,20 @@ export function createAdapterRuntime({
     const state = loadRuntime(id);
     const repository = providerRepository(id, provider, config);
     const cwd = repository?.workspacePath || state.workspace?.path || ROOT;
+    const repositoryManifest = providerRepositoryManifest(id, provider, config, proofRunId);
+    const repositoryExecutionScope = repositoryManifest.rows.map((row) => ({
+      id: row.id,
+      access: row.mode,
+      baseHead: state.repositories?.[row.id]?.baseHead || row.baseHead || null
+    }));
     const built = configuredCommand(provider, config);
     const envFrom = Object.fromEntries((config.envFrom || [])
       .filter((name) => process.env[name] !== undefined)
       .map((name) => [name, process.env[name]]));
     const dedupKey = stableHash({
       cwd, command: built.command, args: built.args,
+      repositoryId: repository?.id || "root",
+      repositories: repositoryExecutionScope,
       env: config.env || {},
       // Part of the receipt's envFingerprint, so it has to be part of the
       // identity of the execution being reused. Omitting it let a deduped
@@ -275,6 +329,7 @@ export function createAdapterRuntime({
         FOUNDATION_CHANGE_ID: id,
         FOUNDATION_CONTROL_ROOT: ROOT,
         FOUNDATION_REPOSITORY_ID: repository?.id || "root",
+        FOUNDATION_REPOSITORIES_FILE: repositoryManifest.path,
         FOUNDATION_PROOF_RUN_ID: proofRunId,
         FOUNDATION_COMMAND_EXECUTION_ID: commandExecutionId,
         FOUNDATION_EXECUTION_ID: commandExecutionId
@@ -289,6 +344,7 @@ export function createAdapterRuntime({
     }
     const cached = commandCache.get(dedupKey);
     const result = await cached.result;
+    assertReadRepositoriesUnchanged(provider, repositoryManifest.rows);
     const commandExecutionId = cached.commandExecutionId;
     const logArtifact = executionLog(id, provider, commandExecutionId, result);
     const artifacts = [logArtifact];

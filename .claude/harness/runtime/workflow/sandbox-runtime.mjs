@@ -223,6 +223,13 @@ export function createSandboxRuntime({
     // sandbox would operate on directories outside it.
     if (carriesGit)
       rmSync(join(path, ".git", "worktrees"), { recursive: true, force: true });
+    const carriedPreexisting = {};
+    for (const rel of Object.keys(state.workspace?.preexisting || {})) {
+      const copied = join(path, rel);
+      try {
+        if (existsSync(copied)) carriedPreexisting[rel] = fileDigest(copied);
+      } catch {}
+    }
     state.workspace = {
       // What the tree already carried at `change new` is still not this
       // change's surface once a sandbox exists; replacing the workspace record
@@ -235,6 +242,12 @@ export function createSandboxRuntime({
       baseHead: carriesGit ? gitHead(root) : null,
       git: carriesGit ? "carried" : "absent",
       baseline: workspaceManifest(root, id, true),
+      // Snapshot the bytes that actually reached the copy. A dirty target file
+      // can still be growing while the sandbox command is being redirected to
+      // it; comparing only with the earlier control-tree digest makes that
+      // carried file look like a write performed inside the sandbox.
+      sandboxBaseline: workspaceManifest(path, id, true),
+      sandboxPreexisting: carriedPreexisting,
       changeSourceHash: directoryHash(changePath(id)),
       packetSnapshot: packetManifest(join(path, "openspec", "changes", id))
     };
@@ -489,15 +502,8 @@ export function createSandboxRuntime({
           continue;
         }
         const baseHead = gitHead(repository.path);
-        if (!baseHead && repository.mode === "write")
-          throw new Error(`repository '${repository.id}' is not an initialized Git repository`);
-        if (repository.mode === "read" || repository.type === "external") {
-          state.repositories[repository.id] = {
-            mode: "reference", path: repository.path, targetPath: repository.path,
-            baseHead, access: "read"
-          };
-          continue;
-        }
+        if (!baseHead)
+          throw new Error(`repository '${repository.id}' cannot be isolated because it is not an initialized Git repository`);
         const requestedPath = join(root, ".foundation", "repository-sandboxes", id, repository.id);
         if (existsSync(requestedPath)) throw new Error(`repository sandbox already exists: ${requestedPath}`);
         mkdirSync(dirname(requestedPath), { recursive: true });
@@ -509,7 +515,7 @@ export function createSandboxRuntime({
         const path = canonicalPath(requestedPath);
         state.repositories[repository.id] = {
           mode: "worktree", path, targetPath: repository.path,
-          baseHead, access: "write", applied: false
+          baseHead, access: repository.mode, applied: false
         };
       }
     } catch (error) {
@@ -532,10 +538,18 @@ export function createSandboxRuntime({
     // sandbox and is reported per repository.
     for (const repository of repositories) {
       const record = state.repositories[repository.id];
-      if (!repository.setupCommand || !record || record.access !== "write" ||
-          record.mode !== "worktree") continue;
+      if (!repository.setupCommand || !record || record.mode !== "worktree") continue;
       runSetupCommand(record, repository.setupCommand,
         policy().sandbox?.setupTimeoutMs, record.path, repository.id);
+      if (record.access === "read") {
+        const changed = git(["status", "--porcelain"], record.path);
+        if (changed.status !== 0 || changed.stdout.trim()) {
+          record.setup.status = "failed";
+          record.setup.reason = "setup modified a read-only repository";
+          console.error(`WARNING: sandbox setup modified read-only repository '${repository.id}': ${
+            changed.stdout.trim() || changed.stderr.trim() || "git status failed"}`);
+        }
+      }
     }
     state.status = "building";
     saveRuntime(state);
@@ -574,7 +588,7 @@ export function createSandboxRuntime({
     if (!state.repositories || Object.keys(state.repositories).length === 0)
       return [{ repository: "root", record: state.workspace, targetPath: root }];
     return Object.entries(state.repositories)
-      .filter(([, record]) => record.access === "write" && record.mode === "worktree")
+      .filter(([, record]) => record.mode === "worktree")
       .map(([repository, record]) => ({
         repository, record,
         targetPath: record.targetPath || (repository === "root" ? root : null)
@@ -583,6 +597,12 @@ export function createSandboxRuntime({
 
   function prepareReplay(id, state, candidate) {
     const { repository, record, targetPath } = candidate;
+    if (record.access === "read") {
+      const dirty = git(["status", "--porcelain"], record.path);
+      if (dirty.status !== 0 || dirty.stdout.trim())
+        fail(`read-only repository '${repository}' changed inside its sandbox: ${
+          dirty.stdout.trim() || dirty.stderr.trim() || "git status failed"}`);
+    }
     const currentHead = targetPath ? gitHead(targetPath) : null;
     if (!targetPath || !currentHead || !record.baseHead ||
         currentHead === record.baseHead) return null;
@@ -596,6 +616,20 @@ export function createSandboxRuntime({
         .map((entry) => entry.relativePath)
       : [];
     const pathspec = sandboxCodePathspec(id, nested);
+    if (record.access === "read") {
+      const staging = `${record.path}.rebase`;
+      const patch = `${record.path}.rebase.patch`;
+      rmSync(staging, { recursive: true, force: true });
+      git(["worktree", "prune"], targetPath);
+      const staged = git(["worktree", "add", "--detach", staging, currentHead], targetPath);
+      if (staged.status !== 0)
+        fail(`cannot stage the '${repository}' read-only worktree refresh: ${staged.stderr.trim()}`);
+      const discardStaging = () => {
+        git(["worktree", "remove", "--force", staging], targetPath);
+        rmSync(staging, { recursive: true, force: true });
+      };
+      return { movement, record, targetPath, staging, patch, discardStaging };
+    }
     // A real `add`, not the intent-to-add the apply path uses: the three-way
     // fallback below needs the sandbox's blobs to exist in the object database
     // before it can merge against them. Staging is invisible downstream —
@@ -652,7 +686,7 @@ export function createSandboxRuntime({
     return { movement, record, targetPath, staging, patch, discardStaging };
   }
 
-  function commitReplay(state, prepared) {
+  function commitReplay(id, state, prepared) {
     const { movement, record, targetPath, staging, patch } = prepared;
     const removed = git(["worktree", "remove", "--force", record.path], targetPath);
     if (removed.status !== 0)
@@ -664,15 +698,30 @@ export function createSandboxRuntime({
         moved.stderr.trim()}. The replayed work is at '${staging}' and the patch at '${patch}'.`);
     record.baseHead = movement.to;
     if (movement.repository === "root") state.workspace.baseHead = movement.to;
+    const repository = selectedRepositories(id, state)
+      .find((entry) => entry.id === movement.repository);
+    if (repository?.setupCommand && movement.repository !== "root") {
+      runSetupCommand(record, repository.setupCommand,
+        policy().sandbox?.setupTimeoutMs, record.path, repository.id);
+      if (record.access === "read") {
+        const changed = git(["status", "--porcelain"], record.path);
+        if (changed.status !== 0 || changed.stdout.trim()) {
+          record.setup.status = "failed";
+          record.setup.reason = "setup modified a read-only repository";
+        }
+      }
+    }
     movement.rebased = true;
   }
 
   function rebaseWorktree(id, state) {
-    if (state.workspace.mode !== "worktree") return null;
+    const candidates = replayCandidates(state)
+      .filter((candidate) => candidate.record.mode === "worktree");
+    if (!candidates.length) return null;
     const multiRepository = Object.keys(state.repositories || {}).length > 1;
     const prepared = [];
     try {
-      for (const candidate of replayCandidates(state)) {
+      for (const candidate of candidates) {
         const replay = prepareReplay(id, state, candidate);
         if (!replay) continue;
         prepared.push(replay);
@@ -693,7 +742,7 @@ export function createSandboxRuntime({
       throw error;
     }
     if (!prepared.length) return null;
-    prepared.forEach((entry) => commitReplay(state, entry));
+    prepared.forEach((entry) => commitReplay(id, state, entry));
     prepared.forEach((entry) => rmSync(entry.patch, { force: true }));
     const repositories = prepared.map((entry) => entry.movement);
     const movement = {

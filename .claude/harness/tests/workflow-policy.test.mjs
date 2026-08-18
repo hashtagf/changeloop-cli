@@ -51,6 +51,8 @@ try {
   };
   let configuredReviewSession = "actual-codex-thread";
   let lastConfiguredReviewArgs = null;
+  let configuredReviewResults = {};
+  let configuredReviewCalls = 0;
   const attemptStore = createReviewAttemptStore({
     receiptsRoot: join(fixture, "receipts"),
     evidenceVault: join(fixture, "evidence"),
@@ -145,7 +147,10 @@ try {
       modelFamily: "gpt-5.6", modelId: "gpt-5.6-sol"
     }),
     runConfiguredReview: (args) => {
+      configuredReviewCalls += 1;
       lastConfiguredReviewArgs = args;
+      const configuredResult = configuredReviewResults[args.reviewer];
+      if (configuredResult) return configuredResult;
       return {
         status: "pass", summary: "configured review passed", findings: [],
         verifiedFindingIds: [], reportReference: "report.json",
@@ -196,6 +201,9 @@ try {
   }));
   assert.equal(state.reviewHistory.aiAttempts, 1,
     "aborting after dispatch must not refund an attempt");
+  assert.equal(attemptStore.reviewAttemptByDigest("change-a",
+    state.reviewHistory.chainHead).resultStatus, "error",
+  "aborting a dispatched request must durably finalize the attempt as infrastructure error");
 
   const secondRequest = quiet(() => authority.requestAuthority("change-a", { type: "review" }));
   assert.throws(() => quiet(() => authority.dispatchAuthority("change-a", {
@@ -304,6 +312,193 @@ try {
   assert.equal(completedCodex.reviewerSessionId, "actual-codex-thread",
     "configured review completion binds the real thread.started session");
 
+  state = { version: 2, changeId: "change-fallback", reviewHistory: null };
+  reviewSettings = {
+    ...reviewSettings, independence: "self", diversity: "single-model",
+    fallbackReviewer: "main-session"
+  };
+  configuredReviewResults = {
+    "codex-sol": {
+      status: "error", summary: "Codex authentication failed", findings: [],
+      verifiedFindingIds: [], reportReference: "codex-error.json",
+      reviewer: { sessionId: null }
+    }
+  };
+  const fallbackRequest = quiet(() => authority.requestAuthority(
+    "change-fallback", { type: "review" }));
+  const priorCodexThread = process.env.CODEX_THREAD_ID;
+  process.env.CODEX_THREAD_ID = "main-session-thread";
+  const handback = quiet(() => authority.runAuthorityReviewer("change-fallback", {
+    request: fallbackRequest.requestId,
+    "subject-actor": "main-agent",
+    "subject-session": "main-session-thread",
+    "subject-provider-family": "openai",
+    "subject-model-family": "gpt-5.6",
+    "subject-model": "gpt-5.6-sol"
+  }));
+  if (priorCodexThread === undefined) delete process.env.CODEX_THREAD_ID;
+  else process.env.CODEX_THREAD_ID = priorCodexThread;
+  const fallbackAttempts = attemptStore.reviewAttempts("change-fallback",
+    state.reviewHistory);
+  assert.equal(fallbackAttempts.filter((attempt) =>
+    attempt.status === "completed").length, 1,
+  "the failed configured reviewer must be completed before handback");
+  const primaryFailure = fallbackAttempts.find((attempt) =>
+    attempt.status === "completed" && attempt.resultStatus === "error");
+  assert.equal(primaryFailure.reviewerIdentity, "codex-sol");
+  assert.equal(handback.status, "needs-main-session-review");
+  assert.equal(handback.reviewer.identity, "main-agent");
+  assert.equal(handback.reviewer.sessionId, "main-session-thread");
+  assert.equal(handback.responseTemplate.evidence["subject-actor"], "main-agent");
+  assert.equal(handback.responseTemplate.evidence["subject-session"],
+    "main-session-thread");
+  const fallbackProtocol = createReviewProtocol({ stableHash, fail });
+  const fallbackProvenance = fallbackProtocol.provenanceResult({
+    reviewer: {
+      type: "ai", identity: handback.reviewer.identity,
+      sessionId: handback.reviewer.sessionId,
+      providerFamily: handback.reviewer.providerFamily,
+      modelFamily: handback.reviewer.modelFamily,
+      modelId: handback.reviewer.modelId
+    },
+    subjects: [{
+      type: "ai", identity: "main-agent", sessionId: "main-session-thread",
+      providerFamily: "openai", modelFamily: "gpt-5.6",
+      modelId: "gpt-5.6-sol"
+    }]
+  });
+  assert.equal(fallbackProvenance.complete, true);
+  assert.equal(fallbackProvenance.independent, false,
+    "the receipt must truthfully preserve that main-session fallback is self-review");
+  assert.equal(fallbackProvenance.diverse, false,
+    "the receipt must truthfully preserve that main-session fallback is same-family");
+  const fallbackAuthority = authorityStore.list("change-fallback")
+    .find((row) => row.value.requestId === fallbackRequest.requestId).value;
+  assert.equal(fallbackAuthority.fallbackAttempts.length, 1,
+    "the failed primary reviewer must remain visible on the authority request");
+  assert.equal(fallbackAuthority.status, "dispatched");
+  assert.equal(fallbackAuthority.mainSessionFallback.status, "awaiting-response");
+  assert.equal(fallbackAuthority.dispatch.reviewer.identity, "main-agent");
+  assert.equal(fallbackAuthority.dispatch.reviewer.sessionId,
+    "main-session-thread");
+  assert.throws(() => quiet(() => authority.runAuthorityReviewer(
+    "change-fallback", {
+      request: fallbackRequest.requestId,
+      "subject-actor": "human-implementer"
+    })), /complete the reserved main-session fallback/,
+  "the handback must not relaunch the failed configured reviewer");
+  const mainResponsePath = join(fixture, "main-session-response.json");
+  writeJson(mainResponsePath, {
+    ...handback.responseTemplate,
+    status: "pass",
+    evidence: {
+      ...handback.responseTemplate.evidence,
+      observed: "Main session inspected the bounded packet and found no defect",
+      reference: ["https://example.test/main-session-review"]
+    }
+  });
+  quiet(() => authority.recordAuthority("change-fallback", {
+    request: fallbackRequest.requestId, response: mainResponsePath
+  }));
+  const mainSessionCompletion = attemptStore.reviewAttemptByDigest(
+    "change-fallback", state.reviewHistory.chainHead);
+  assert.equal(mainSessionCompletion.resultStatus, "pass");
+  assert.equal(attemptStore.reviewAttempts("change-fallback",
+    state.reviewHistory).filter((attempt) =>
+      attempt.status === "completed").length, 2,
+  "the main-session verdict must append a second truthful completion");
+  assert.equal(readJson(join(fixture, "change-fallback-receipt.json")).status,
+    "pass", "the main-session response must cross the real authority receipt gate");
+
+  state = { version: 2, changeId: "change-fallback-missing", reviewHistory: null };
+  const hostProvenanceKeys = [
+    "FOUNDATION_CLAUDE_SESSION_ID", "FOUNDATION_SESSION_ID", "CODEX_THREAD_ID",
+    "FOUNDATION_MAIN_SESSION_ID", "FOUNDATION_MAIN_IDENTITY",
+    "FOUNDATION_MAIN_PROVIDER_FAMILY", "FOUNDATION_MAIN_MODEL_FAMILY",
+    "FOUNDATION_MODEL_ID"
+  ];
+  const priorHostProvenance = Object.fromEntries(hostProvenanceKeys.map((key) =>
+    [key, process.env[key]]));
+  for (const key of hostProvenanceKeys) delete process.env[key];
+  const missingRequest = quiet(() => authority.requestAuthority(
+    "change-fallback-missing", { type: "review" }));
+  const missingHandback = quiet(() => authority.runAuthorityReviewer(
+    "change-fallback-missing", {
+      request: missingRequest.requestId,
+      "subject-actor": "human-implementer"
+    }));
+  for (const key of hostProvenanceKeys) {
+    if (priorHostProvenance[key] === undefined) delete process.env[key];
+    else process.env[key] = priorHostProvenance[key];
+  }
+  assert.equal(missingHandback.status,
+    "main-session-provenance-unavailable");
+  assert(missingHandback.missing.includes("sessionId"));
+  assert(missingHandback.missing.includes("modelId"));
+  const missingAuthority = authorityStore.list("change-fallback-missing")
+    .find((row) => row.value.requestId === missingRequest.requestId).value;
+  assert.equal(missingAuthority.status, "requested");
+  assert.equal(missingAuthority.mainSessionFallback.status,
+    "provenance-unavailable");
+  const callsBeforeResume = configuredReviewCalls;
+  process.env.CODEX_THREAD_ID = "recovered-main-session";
+  const recoveredEvents = join(fixture, ".foundation", "logs",
+    "change-fallback-missing", "events.jsonl");
+  mkdirSync(dirname(recoveredEvents), { recursive: true });
+  writeFileSync(recoveredEvents, `${JSON.stringify({
+    runId: "recovered-main-session", sessionId: "recovered-main-session",
+    agentId: "telemetry-main-agent", modelId: "gpt-5.6-sol",
+    source: "codex"
+  })}\n`);
+  const resumedHandback = quiet(() => authority.runAuthorityReviewer(
+    "change-fallback-missing", {
+      request: missingRequest.requestId,
+      "subject-actor": "human-implementer"
+    }));
+  if (priorHostProvenance.CODEX_THREAD_ID === undefined)
+    delete process.env.CODEX_THREAD_ID;
+  else process.env.CODEX_THREAD_ID = priorHostProvenance.CODEX_THREAD_ID;
+  assert.equal(resumedHandback.status, "needs-main-session-review");
+  assert.equal(resumedHandback.reviewer.identity, "telemetry-main-agent");
+  assert.equal(resumedHandback.reviewer.sessionId, "recovered-main-session");
+  assert.equal(resumedHandback.reviewer.providerFamily, "openai");
+  assert.equal(resumedHandback.reviewer.modelFamily, "gpt-5.6-sol");
+  assert.equal(resumedHandback.reviewer.modelId, "gpt-5.6-sol");
+  assert.equal(configuredReviewCalls, callsBeforeResume,
+    "provenance recovery must not rerun the failed configured reviewer");
+
+  state = { version: 2, changeId: "change-verdict", reviewHistory: null };
+  configuredReviewResults = {
+    "codex-sol": {
+      status: "fail", summary: "Codex found a product defect", findings: [{
+        id: "F-PRODUCT", severity: "major", path: "app.txt", line: 1,
+        message: "The implementation violates the contract",
+        claimIds: ["claim-a"], verificationCaseIds: ["case-a"]
+      }],
+      verifiedFindingIds: [], reportReference: "codex-fail.json",
+      reviewer: { sessionId: "codex-verdict-thread" }
+    }
+  };
+  const verdictRequest = quiet(() => authority.requestAuthority(
+    "change-verdict", { type: "review" }));
+  quiet(() => authority.runAuthorityReviewer("change-verdict", {
+    request: verdictRequest.requestId,
+    "subject-actor": "human-implementer"
+  }));
+  const verdictAttempts = attemptStore.reviewAttempts("change-verdict",
+    state.reviewHistory);
+  assert.equal(verdictAttempts.filter((attempt) =>
+    attempt.status === "completed").length, 1,
+  "a delivered fail verdict must not trigger infrastructure fallback");
+  assert.equal(verdictAttempts.at(-1).reviewerIdentity, "codex-sol");
+  assert.equal(verdictAttempts.at(-1).resultStatus, "fail");
+
+  configuredReviewResults = {};
+  reviewSettings = {
+    ...reviewSettings, independence: "required", diversity: "required",
+    fallbackReviewer: undefined
+  };
+
   state = { version: 2, changeId: "change-d", reviewHistory: null };
   const changeDRequest = quiet(() => authority.requestAuthority("change-d", {
     type: "review"
@@ -342,8 +537,8 @@ try {
   "authority must pass the implementation session to the reviewer adapter as forbidden");
 
   const attempts = readdirSync(join(fixture, "evidence", "change-a", "review-attempts"));
-  assert.equal(attempts.length, 5,
-    "three dispatch journals plus two immutable completion journals are durable");
+  assert.equal(attempts.length, 6,
+    "three dispatch journals plus three immutable completion journals are durable");
 
   const protocol = createReviewProtocol({ stableHash, fail });
   const reviewAttempt = attemptStore.reviewAttemptByDigest(
@@ -600,14 +795,16 @@ try {
   const grill = readFileSync(join(root, ".claude/skills/grill-task-gu/SKILL.md"), "utf8");
   assert.match(grill, /Present one Decision[\s\S]*?every material choice/i);
   assert.match(grill, /Assignee and date are non-blocking unless `--schedule`/i);
-  const feature = readFileSync(join(root, ".claude/commands/feature.md"), "utf8");
-  assert.match(feature, /Low risk uses one full AI review/i);
+  const feature = readFileSync(join(root,
+    ".claude/skills/feature/references/workflow.md"), "utf8");
+  assert.match(feature, /Low risk uses one full AI\s+review/i);
   assert.match(feature, /Medium permits one correction[\s\S]*one fresh-session delta closure/i);
-  assert.match(feature, /High asks material risk decisions in the initial Decision Sheet/i);
-  assert.match(feature, /never dispatch a third AI/i);
+  assert.match(feature,
+    /High\s+asks material risk decisions in the initial Decision Sheet/i);
+  assert.match(feature, /never dispatch a\s+third AI/i);
   const agentContract = readFileSync(join(root, ".claude/harness/AGENT.md"), "utf8");
-  assert.match(agentContract, /Before the first packet on a developer machine/i);
-  assert.match(agentContract, /runtime API is `20`/);
+  assert.match(agentContract, /Before developer work, verify Foundation/i);
+  assert.match(agentContract, /runtime API `22`/);
   const developerSetup = readFileSync(
     join(root, ".claude/harness/DEVELOPER-SETUP.md"), "utf8");
   assert.match(developerSetup, /scripts\/install-foundation-runtime\.mjs/);
@@ -616,6 +813,7 @@ try {
   assert.equal(policy.workflow.grounding, "required");
   assert.equal(policy.workflow.reviewCircuit, "full-delta");
   assert.equal(policy.workflow.reviewPolicy, "risk-tiered");
+  assert.equal(policy.review.fallbackReviewer, "main-session");
   console.log("workflow policy tests: PASS");
 } finally {
   rmSync(fixture, { recursive: true, force: true });

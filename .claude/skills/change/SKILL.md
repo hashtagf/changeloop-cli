@@ -4,6 +4,6 @@ description: Create or complete a grounded Foundation OpenSpec change and eviden
 ---
 
 Treat the text after `$change` as the command arguments. Read
-`../../commands/change.md` completely and follow it as the canonical workflow.
+`references/workflow.md` completely and follow it as the canonical workflow.
 Translate host-specific wording without changing its lifecycle or authority
 boundaries.

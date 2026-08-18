@@ -3,6 +3,9 @@ import { join, relative } from "node:path";
 // Shared with drift classification: the same kinds that force a deep tier here
 // are the ones a silent downgrade must block at Land.
 import { DRIFT_BLOCKING_TASK_KINDS } from "../contracts/model-policy.mjs";
+import {
+  compileExecutionGraph, conflictKeysForTask, conflictKeysOverlap
+} from "../core/graph-execution.mjs";
 import { findCyclePath } from "../core/graph.mjs";
 
 export function createModelRouter({ loadRuntime, policy, fail }) {
@@ -36,6 +39,11 @@ export function createAgentPlanner({
   root, plans, runtime, schemaVersion, validate, loadRuntime, policy,
   selectedRepositories, safeSelectedRepositories, taskBlocks, taskMetadata,
   activeChangePath, evidence,
+  providerCapability = (provider) => provider,
+  claimsForProvider = null,
+  requiredProviders = null,
+  providerConfig = null,
+  providerRepositories = null,
   resourcesConflict, relevantHash, contractFingerprint, stableHash, now,
   readJson, writeJson, compactStrings, serializedJson, recordContextMetric,
   recordInstructionManifest, modelForTask, showPacket, fail
@@ -73,14 +81,24 @@ export function createAgentPlanner({
   // cannot run. Anything older than this is treated as abandoned.
   const PROOF_RUN_STALE_MS = 2 * 60 * 60 * 1000;
 
+  function changeConflictKeys(changeId, state, repositories) {
+    const writable = new Set(repositories.filter((repository) => repository.mode === "write")
+      .map((repository) => repository.id));
+    const path = join(activeChangePath(changeId, state), "tasks.md");
+    if (!existsSync(path)) return [...writable].map((repository) => `repo:${repository}`);
+    const tasks = taskBlocks(readFileSync(path, "utf8")).map(taskMetadata)
+      .filter((task) => writable.has(task.repository));
+    if (!tasks.length) return [...writable].map((repository) => `repo:${repository}`);
+    return [...new Set(tasks.flatMap(conflictKeysForTask))].sort();
+  }
+
   // `executing` narrows the scan to changes with a proof run in flight. Plan
   // time wants every change holding write scope; proof time wants only the
   // ones that would actually be running commands against the repository at the
   // same moment, or a project with two open changes could never prove either.
   function activeRepositoryConflicts(id, repositories, { executing = false } = {}) {
-    const wanted = new Set(repositories
-      .filter((repository) => repository.mode === "write")
-      .map((repository) => repository.id));
+    const current = loadRuntime(id);
+    const wanted = changeConflictKeys(id, current, repositories);
     const conflicts = [];
     if (!existsSync(runtime)) return conflicts;
     for (const entry of readdirSync(runtime, { withFileTypes: true })) {
@@ -102,9 +120,18 @@ export function createAgentPlanner({
       try { selected = safeSelectedRepositories(other.id, other); }
       catch { continue; }
       if (!selected) continue;
-      for (const repository of selected)
-        if (repository.mode === "write" && wanted.has(repository.id))
-          conflicts.push({ changeId: other.id, repository: repository.id, status: other.status });
+      const held = changeConflictKeys(other.id, other, selected);
+      for (const requestedKey of wanted)
+        for (const heldKey of held)
+          if (conflictKeysOverlap(requestedKey, heldKey)) {
+            conflicts.push({
+              changeId: other.id,
+              repository: requestedKey.match(/^(?:repo|path):([^:]+)/)?.[1] || null,
+              key: `${requestedKey} <> ${heldKey}`,
+              status: other.status
+            });
+            break;
+          }
     }
     return conflicts;
   }
@@ -116,7 +143,10 @@ export function createAgentPlanner({
     const repositories = selectedRepositories(id, state);
     const repositoryMap = new Map(repositories.map((repository) => [repository.id, repository]));
     const allTasks = taskBlocks(readFileSync(join(activeChangePath(id), "tasks.md"), "utf8"))
-      .map(taskMetadata);
+      .map((task) => ({
+        ...taskMetadata(task),
+        authorityDigest: stableHash(task.text.replace(/\s+/g, " ").trim())
+      }));
     const tasks = allTasks.filter((task) => !task.done);
     const ids = new Set(allTasks.map((task) => task.id));
     const completed = new Set(allTasks.filter((task) => task.done).map((task) => task.id));
@@ -139,6 +169,7 @@ export function createAgentPlanner({
             candidate.repository === dependencyRepository))
             if (!task.dependsOn.includes(dependencyTask.id)) task.dependsOn.push(dependencyTask.id);
       task.resources = [...new Set([`workspace:${task.repository}`, ...task.resources])].sort();
+      task.leaseKeys = conflictKeysForTask(task);
       task.model = modelForTask(id, task, selectedPolicy);
       task.packetCommand = `claude-foundation packet ${id} --task ${task.id}`;
     }
@@ -169,10 +200,18 @@ export function createAgentPlanner({
         completed.add(task.id);
       }
     }
-    const claims = evidence(id).claims;
+    const contract = evidence(id);
+    const claims = contract.claims;
     const singleAgent = tasks.length > 0 && repositories.length === 1 && tasks.length <= 2 &&
       !claims.some((claim) => (claim.repositories || []).length > 1) &&
       !tasks.some((task) => task.resources.some((resource) => !resource.startsWith("workspace:")));
+    const priorPlanPath = join(plans, `${id}.json`);
+    const priorPlan = existsSync(priorPlanPath) ? readJson(priorPlanPath, {}) : {};
+    const taskExecution = { ...(priorPlan.taskExecution || {}) };
+    for (const task of tasks) taskExecution[task.id] = {
+      mode: singleAgent ? "single-agent-observed" : "lease-result",
+      repository: task.repository
+    };
     const tierRank = { fast: 0, standard: 1, deep: 2 };
     const sessionTask = tasks.reduce((highest, task) =>
       !highest || tierRank[task.model.tier] > tierRank[highest.model.tier] ? task : highest, null);
@@ -180,18 +219,60 @@ export function createAgentPlanner({
     const blockingReasons = [
       ...(state.ambiguity === "unclear" ? ["ambiguity requires /investigate"] : []),
       ...conflicts.map((conflict) =>
-        `repository ${conflict.repository} is active in ${conflict.changeId}`)
+        `scope ${conflict.key} is active in ${conflict.changeId}`)
     ];
     const instructionManifest = recordInstructionManifest?.(id, "build", {
       scope: "plan",
       requestedModel: singleAgent ? sessionTask?.model?.tier || null : null
     });
+    const workspaceHash = relevantHash(id);
+    const graph = compileExecutionGraph({
+      changeId: id,
+      contractRevision: Number(state.contractRevision || 0),
+      workspaceHash,
+      repositories,
+      tasks: allTasks.map((task) => ({
+        ...task,
+        resources: [...new Set([`workspace:${task.repository}`, ...(task.resources || [])])]
+      })),
+      claims,
+      providers: (requiredProviders ? requiredProviders(id) : Object.keys(contract.providers || {}))
+        .map((provider) => {
+        const config = providerConfig?.(id, provider) || contract.providers?.[provider] || {};
+        return {
+        id: provider,
+        capability: providerCapability(provider, config),
+        repository: config.repository || null,
+        repositories: providerRepositories
+          ? providerRepositories(id, provider, config).map((repository) => repository.id)
+          : config.repositories || [],
+        dependsOn: config.dependsOn || [],
+        resources: config.resources || [],
+        claims: claimsForProvider ? claimsForProvider(id, provider).map((claim) => claim.id) : null,
+        inputSchema: config.inputSchema || null,
+        outputSchema: config.outputSchema || null,
+        configurationIdentity: stableHash(config),
+        required: true
+        };
+      }),
+      stableHash
+    });
+    for (const task of tasks) taskExecution[task.id] = {
+      ...taskExecution[task.id],
+      graphRevision: graph.revision,
+      graphIdentity: graph.identity
+    };
     const basePlan = {
       version: Number(schemaVersion),
       changeId: id,
       revision: Number(state.revision || 0),
       contractRevision: Number(state.contractRevision || 0),
-      workspaceHash: relevantHash(id),
+      workspaceHash,
+      graph,
+      graphVersion: graph.version,
+      graphRevision: graph.revision,
+      graphIdentity: graph.identity,
+      taskExecution,
       maxParallelAgents: selectedPolicy.execution.maxParallelAgents,
       repositories: repositories.map((repository) => ({
         id: repository.id, mode: repository.mode, workspacePath: repository.workspacePath,
@@ -306,6 +387,10 @@ export function createAgentPlanner({
         version: Number(schemaVersion),
         changeId: id,
         planDigest: output.planDigest,
+        graphRevision: output.graphRevision,
+        graphIdentity: output.graphIdentity,
+        graphNodes: output.graph.nodes.length,
+        graphEdges: output.graph.edges.length,
         planPath: relative(root, path).replaceAll("\\", "/"),
         dispatchable: output.dispatchable,
         blockingReasons: compactStrings(output.blockingReasons, 10),
@@ -356,7 +441,10 @@ export function createAgentPlanner({
     if (!task) fail(`unknown pending task '${taskId || ""}'`);
     showPacket(id, {
       repo: task.repository, task: task.id,
-      pretty: flags.pretty, planDigest: plan.planDigest
+      pretty: flags.pretty, planDigest: plan.planDigest,
+      graphRevision: plan.graphRevision,
+      graphIdentity: plan.graphIdentity,
+      graphNode: plan.graph.nodes.find((node) => node.id === `task:${task.id}`) || null
     });
   }
 

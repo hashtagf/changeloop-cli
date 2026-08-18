@@ -524,7 +524,7 @@ Commands:
   authority-request <change> --type review|acceptance
   authority-status <change> [--request <id>]
   authority-dispatch <change> --request <id> --scope full|delta --reviewer-type ai|human --reviewer-identity <id>
-  authority-run <change> --request <id> [--reviewer <configured-id>] [subject provenance options]
+  authority-run <change> --request <id> [--reviewer <configured-id>] [subject provenance options] [main-session provenance options]
   authority-abort <change> --request <id> --reason <reason>
   authority-record <change> --request <id> --response <file>
   handoff-status <change>

@@ -232,7 +232,10 @@ export async function routeRuntimeCommand(command, values, api) {
       const { flags, rest } = parseStrictCommandFlags(values, "authority run", {
         value: [
           "request", "reviewer", "subject-actor", "subject-session",
-          "subject-provider-family", "subject-model-family", "subject-model"
+          "subject-provider-family", "subject-model-family", "subject-model",
+          "main-session-identity", "main-session-id",
+          "main-session-provider-family", "main-session-model-family",
+          "main-session-model"
         ]
       });
       if (rest.length !== 1) die("authority run requires exactly one change");

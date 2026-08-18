@@ -1,6 +1,6 @@
 # Developer setup
 
-Foundation v3.2.29 front-loads material decisions so Build and Prove can run to a
+Foundation v3.3.0 front-loads material decisions so Build and Prove can run to a
 bounded conclusion without repeatedly interviewing the developer. The shipped
 workflow adds:
 
@@ -22,11 +22,11 @@ workflow adds:
 Before the first Foundation packet on a developer machine:
 
 1. Install Node.js 20.19 or later.
-2. Verify `claude-foundation version` is `3.2.29` and the repository runtime API
+2. Verify `claude-foundation version` is `3.3.0` and the repository runtime API
    is `21`.
-3. If the pinned source is absent, clone tag `v3.2.29` from
+3. If the pinned source is absent, clone tag `v3.3.0` from
    `Maximumsoft-Co-LTD/claude-foundation` into
-   `~/.local/share/claude-foundation/3.2.29`.
+   `~/.local/share/claude-foundation/3.3.0`.
 4. From that checkout run
    `node scripts/install-foundation-runtime.mjs <project-path>`.
 5. Add `~/.local/bin` to `PATH`, then run
@@ -36,7 +36,12 @@ Before the first Foundation packet on a developer machine:
    - Claude Code: `npm install -g @anthropic-ai/claude-code && claude auth login`
 7. Set the committed `foundation.json` review profile once. A Codex-only team
    uses `defaultReviewer: "codex-sol"`; a Claude-Code-only team uses
-   `defaultReviewer: "claude-opus"`. When coding and review use the same
+   `defaultReviewer: "claude-opus"`. Set `fallbackReviewer: "main-session"` to
+   return the bounded packet to the calling agent after an infrastructure
+   error, never after `fail` or `inconclusive`; this explicit self-review route
+   requires `independence: "self"`. Foundation automatically reuses complete AI
+   subject provenance only when its session matches the ambient host; otherwise
+   the caller supplies the `--main-session-*` provenance fields. When coding and review use the same
    provider/model family, also set `diversity: "single-model"`, but keep
    `independence: "required"` so Foundation still requires a distinct reviewer
    identity and fresh session.

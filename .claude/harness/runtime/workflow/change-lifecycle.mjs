@@ -54,7 +54,52 @@ export function createChangeLifecycle({
       fail("draft requires grounding.version 2 from the single Decision Sheet");
     if (draft.externalOperations !== undefined && !Array.isArray(draft.externalOperations))
       fail("draft externalOperations must be an array");
+    let warnedLegacySpecOperation = false;
+    for (const [index, spec] of draft.specs.entries()) {
+      const label = `draft specs[${index}]`;
+      for (const field of ["name", "requirement", "description"])
+        if (!String(spec?.[field] || "").trim()) fail(`${label}.${field} is required`);
+      const operation = String(spec.operation || "added").toLowerCase();
+      if (!spec.operation && !warnedLegacySpecOperation) {
+        console.error("WARNING: legacy draft specs without operation are treated as added; declare added|modified|removed after comparing the canonical spec");
+        warnedLegacySpecOperation = true;
+      }
+      if (!["added", "modified", "removed"].includes(operation))
+        fail(`${label}.operation must be added|modified|removed`);
+      const scenarios = Array.isArray(spec.scenarios)
+        ? spec.scenarios
+        : (spec.scenario || spec.when || spec.then)
+          ? [{ name: spec.scenario, when: spec.when, then: spec.then }]
+          : [];
+      if (operation !== "removed" && scenarios.length === 0)
+        fail(`${label}.scenarios must be non-empty for ${operation}`);
+      for (const [scenarioIndex, scenario] of scenarios.entries())
+        for (const field of ["name", "when", "then"])
+          if (!String(scenario?.[field] || "").trim())
+            fail(`${label}.scenarios[${scenarioIndex}].${field} is required`);
+      if (operation === "removed" && !String(spec.migration || "").trim())
+        fail(`${label}.migration is required for removed requirements`);
+    }
     return draft;
+  }
+
+  function normalizedDraftScenarios(spec) {
+    if (Array.isArray(spec.scenarios)) return spec.scenarios;
+    return (spec.scenario || spec.when || spec.then)
+      ? [{ name: spec.scenario, when: spec.when, then: spec.then }]
+      : [];
+  }
+
+  function renderDraftRequirement(spec) {
+    const scenarios = normalizedDraftScenarios(spec).map((scenario) =>
+      `#### Scenario: ${scenario.name}\n\n- **WHEN** ${scenario.when}\n` +
+      `- **THEN** ${scenario.then}`
+    ).join("\n\n");
+    const migration = String(spec.operation || "added").toLowerCase() === "removed"
+      ? `\n\n**Migration:** ${spec.migration}`
+      : "";
+    return `### Requirement: ${spec.requirement}\n\n${spec.description}${migration}` +
+      (scenarios ? `\n\n${scenarios}` : "");
   }
 
   function materializeDraft(id, draft) {
@@ -107,14 +152,25 @@ export function createChangeLifecycle({
     });
     if (state.schema === "foundation-standard") {
       rmSync(join(changePath(id), "specs"), { recursive: true, force: true });
+      const byCapability = new Map();
       for (const spec of draft.specs) {
-        const specDir = join(changePath(id), "specs", slugify(spec.name));
+        const capability = slugify(spec.name);
+        const entries = byCapability.get(capability) || [];
+        byCapability.set(capability, [...entries, spec]);
+      }
+      const operationOrder = ["added", "modified", "removed"];
+      for (const [capability, specs] of byCapability) {
+        const specDir = join(changePath(id), "specs", capability);
         mkdirSync(specDir, { recursive: true });
+        const sections = operationOrder.flatMap((operation) => {
+          const requirements = specs.filter((spec) =>
+            String(spec.operation || "added").toLowerCase() === operation);
+          if (!requirements.length) return [];
+          return [`## ${operation.toUpperCase()} Requirements\n\n` +
+            requirements.map(renderDraftRequirement).join("\n\n")];
+        });
         writeFileSync(join(specDir, "spec.md"),
-          `# ${spec.name}\n\n## ADDED Requirements\n\n` +
-          `### Requirement: ${spec.requirement}\n\n${spec.description}\n\n` +
-          `#### Scenario: ${spec.scenario}\n\n- **WHEN** ${spec.when}\n` +
-          `- **THEN** ${spec.then}\n`);
+          `# ${specs[0].name}\n\n${sections.join("\n\n")}\n`);
       }
     }
   }
@@ -188,6 +244,7 @@ export function createChangeLifecycle({
       groundingRequired: workflowPolicy().workflow.grounding === "required",
       groundingVersion: workflowPolicy().workflow.grounding === "required" ? 2 : null,
       externalOperationsVersion: 1,
+      graphExecutionVersion: 1,
       revision: 0, contractRevision: 0, executionRevision: 0,
       impact: schema === "foundation-rapid" ? "low" : null,
       coupling: schema === "foundation-rapid" ? "isolated" : null,
@@ -228,7 +285,17 @@ export function createChangeLifecycle({
       acceptance: { required: false, reason: null, claimIds: [] },
       tasks: [{ id: "T001", outcome: "Implement the bounded outcome", kind: "implementation", paths: ["replace-with-owned-path"], verify: "replace-with-focused-command" }],
       claims: [{ id: "replace-with-stable-claim-id", scenario: "Observable outcome passes", impact: "low", capabilities: ["test"] }],
-      specs: [{ name: "unused-by-rapid", requirement: "Bounded outcome", description: "The system SHALL provide the outcome.", scenario: "Focused behavior", when: "the bounded input occurs", then: "the expected result is returned" }],
+      specs: [{
+        name: "unused-by-rapid",
+        operation: "added",
+        requirement: "Bounded outcome",
+        description: "The system SHALL provide the outcome.",
+        scenarios: [{
+          name: "Focused behavior",
+          when: "the bounded input occurs",
+          then: "the expected result is returned"
+        }]
+      }],
       execution: {
         version: 1,
         providers: {

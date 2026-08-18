@@ -31,14 +31,22 @@ export function createChangePolicy({
     if (gitHead(workspace)) return gitFiles;
     if (state.workspace?.mode === "copy" && state.workspace.baseline) {
       const current = workspaceManifest(workspace, id, true);
+      const baseline = state.workspace.sandboxBaseline || state.workspace.baseline;
       return [...new Set([
-        ...Object.keys(state.workspace.baseline), ...Object.keys(current)
-      ])].filter((path) => state.workspace.baseline[path] !== current[path]).sort();
+        ...Object.keys(baseline), ...Object.keys(current)
+      ])].filter((path) => baseline[path] !== current[path]).sort();
     }
     return [];
   }
 
-  function carriedInUnchanged(workspace, preexisting, rel) {
+  function carriedInUnchanged(workspace, preexisting, rel, state = null) {
+    const copied = state?.workspace?.sandboxPreexisting;
+    if (copied && Object.prototype.hasOwnProperty.call(copied, rel)) {
+      const path = join(workspace, rel);
+      try {
+        if (existsSync(path) && copied[rel] === fileDigest(path)) return true;
+      } catch {}
+    }
     if (!preexisting || !Object.prototype.hasOwnProperty.call(preexisting, rel))
       return false;
     const path = join(workspace, rel);
@@ -98,11 +106,11 @@ export function createChangePolicy({
           committed.stdout.split("\0").filter(Boolean).forEach((path) => add(path, "committed"));
         }
         changedFilesInWorkspace(id, workspace, head)
-          .filter((path) => !carriedInUnchanged(workspace, preexisting, path))
+          .filter((path) => !carriedInUnchanged(workspace, preexisting, path, state))
           .forEach((path) => add(path, "dirty"));
       } else if (repository.id === "root") {
         changedFiles(id, state)
-          .filter((path) => !carriedInUnchanged(workspace, preexisting, path))
+          .filter((path) => !carriedInUnchanged(workspace, preexisting, path, state))
           .forEach((path) => add(path, "dirty"));
       }
       for (const [path, rowSources] of sources)

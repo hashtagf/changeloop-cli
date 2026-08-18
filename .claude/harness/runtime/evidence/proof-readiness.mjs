@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { dependentClosure } from "../core/graph-execution.mjs";
 
 export function createProofReadinessRuntime({
   markBlocked = () => {},
@@ -12,6 +13,12 @@ export function createProofReadinessRuntime({
   selectedRepositories,
   providerCapability,
   providerConfig,
+  providerRepositories = (id, provider, config = providerConfig(id, provider)) =>
+    config?.repository
+      ? selectedRepositories(id).filter((repository) => repository.id === config.repository)
+      : selectedRepositories(id),
+  requiredProviders = (id) => Object.keys(evidence(id).providers || {}),
+  git = () => ({ status: 0, stdout: "", stderr: "" }),
   advisoryCapabilities,
   evidenceDetectionValue,
   validate,
@@ -24,6 +31,7 @@ export function createProofReadinessRuntime({
   }),
   activeChangeLeases,
   activeRepositoryConflicts,
+  agentPlanValue = null,
   changePath,
   proofPath,
   readJson,
@@ -31,6 +39,33 @@ export function createProofReadinessRuntime({
   saveRuntime,
   fail
 }) {
+  function repositoryInfrastructureIssues(id) {
+    const state = loadRuntime(id);
+    const issues = [];
+    for (const provider of requiredProviders(id)) {
+      const config = providerConfig(id, provider) || {};
+      for (const repository of providerRepositories(id, provider, config)) {
+        const runtime = state.repositories?.[repository.id] ||
+          (repository.id === "root" ? state.workspace : null) || {};
+        if (!existsSync(repository.workspacePath)) {
+          issues.push(`provider '${provider}' repository '${repository.id}' workspace is missing`);
+          continue;
+        }
+        if (repository.mode === "read" && runtime.mode === "reference")
+          issues.push(`provider '${provider}' repository '${repository.id}' is a live reference, not an isolated workspace`);
+        if (runtime.setup?.status === "failed")
+          issues.push(`provider '${provider}' repository '${repository.id}' setup failed`);
+        if (repository.mode === "read" && runtime.mode === "worktree") {
+          const changed = git(["status", "--porcelain"], repository.workspacePath);
+          if (changed.status !== 0 || changed.stdout.trim())
+            issues.push(`provider '${provider}' read-only repository '${repository.id}' changed: ${
+              changed.stdout.trim() || changed.stderr.trim() || "git status failed"}`);
+        }
+      }
+    }
+    return [...new Set(issues)];
+  }
+
   function topologyIssues(id) {
     const contract = evidence(id);
     const providers = contract.providers || {};
@@ -88,18 +123,25 @@ export function createProofReadinessRuntime({
   // return stays as-is — proof-runtime consumes it verbatim.
   function changedSurfaceIssues(id, details = null) {
     const state = loadRuntime(id);
-    if (!state.repositories || Object.keys(state.repositories).length <= 1) return [];
     const tasks = taskBlocks(readFileSync(join(activeChangePath(id), "tasks.md"), "utf8"))
       .map(taskMetadata);
+    const generatedReports = Object.keys(evidence(id).providers || {}).map((provider) => {
+      const config = providerConfig(id, provider) || {};
+      return { repository: config.repository || "root", path: config.report || null };
+    }).filter((row) => row.path);
     const issues = [];
     const surface = canonicalChangedSurface(id, state);
     for (const repository of selectedRepositories(id, state)) {
       if (repository.mode !== "write") continue;
       const allowed = tasks.filter((task) => task.repository === repository.id)
         .flatMap((task) => task.paths);
+      const repositoryWide = tasks.some((task) => task.repository === repository.id &&
+        (!(task.paths || []).length || task.paths.includes("*")));
       const changed = surface.filter((row) => row.repositoryId === repository.id)
         .map((row) => row.path);
-      const outside = changed.filter((path) => !allowed.some((scope) => {
+      const outside = repositoryWide ? [] : changed.filter((path) =>
+        !generatedReports.some((report) => report.repository === repository.id &&
+          report.path === path) && !allowed.some((scope) => {
         const normalized = scope.replace(/\/\*\*?$/, "").replace(/\/$/, "");
         return scope === "*" || path === normalized || path.startsWith(`${normalized}/`);
       }));
@@ -369,7 +411,14 @@ export function createProofReadinessRuntime({
     if (stage === "prove") issues.push(...changedSurfaceIssues(id, surfaceFixits));
     const hash = relevantHash(id);
     const { unconfigured, unavailable } = executionNodes(id, hash);
+    const repositoryIssues = stage === "prove" ? repositoryInfrastructureIssues(id) : [];
     const pending = pendingTasks(id);
+    const plan = agentPlanValue?.(id) || null;
+    const pendingNodeIds = pending.map((task) => `task:${task.id}`).filter((nodeId) =>
+      plan?.graph?.nodes?.some((node) => node.id === nodeId));
+    const blockedNodes = plan?.graph ? dependentClosure(plan.graph, pendingNodeIds) : [];
+    const completedTaskNodes = (plan?.graph?.nodes || []).filter((node) =>
+      node.kind === "task" && !pendingNodeIds.includes(node.id)).map((node) => node.id);
     const externalOperations = handoffReadiness(id);
     const leases = stage === "prove" ? activeChangeLeases(id) : [];
     // The cross-change guard reached dispatch and lease acquisition but never
@@ -382,7 +431,7 @@ export function createProofReadinessRuntime({
     const status = pending.length ? "NEEDS_CODE_CHANGE"
       : issues.length ? "CONFIGURATION_ERROR"
         : leases.length || repositoryConflicts.length ? "BLOCKED_BY_ACTIVE_WORK"
-          : unavailable.length ? "INFRASTRUCTURE_ERROR"
+          : unavailable.length || repositoryIssues.length ? "INFRASTRUCTURE_ERROR"
           : unconfigured.length ? "NEEDS_USER_DECISION" : "READY";
     return {
       version: 1,
@@ -398,10 +447,21 @@ export function createProofReadinessRuntime({
       },
       externalProviders: unconfigured,
       unavailableProviders: unavailable,
+      repositoryIssues,
       activeLeases: leases.map((lease) => ({
         taskId: lease.taskId, owner: lease.owner, expiresAt: lease.expiresAt || null
       })),
       repositoryConflicts,
+      graph: plan?.graph ? {
+        version: plan.graph.version,
+        revision: plan.graph.revision,
+        identity: plan.graph.identity,
+        nodeCount: plan.graph.nodes.length,
+        edgeCount: plan.graph.edges.length,
+        pendingNodes: pendingNodeIds,
+        affectedNodes: blockedNodes,
+        preservedNodes: completedTaskNodes.filter((node) => !blockedNodes.includes(node))
+      } : null,
       issues,
       // Reported, never counted into `status`: these are the capabilities the
       // policy inferred from the diff and the project never wired. They are the

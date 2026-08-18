@@ -5,14 +5,10 @@ argument-hint: <PRD-ID or path> | --resume <change> | --group <n> | --schedule
 
 Deliver **$ARGUMENTS** through Foundation.
 
-Invoke `grill-task-gu`; read PRD/backlog and code/tests. Settle production,
-wire, activation, proof, and delivery authority before one Decision Sheet.
-Only `--schedule` asks dates. Choose one group.
+Read `.claude/skills/feature/references/workflow.md` completely and follow it as
+the selectively loaded canonical Feature workflow. Treat the text after
+`/feature` as its arguments. It owns PRD grounding, group selection, Change,
+isolated Build, Prove, review bounds, recovery, and handoffs.
 
-Run Change, isolated Build, and packet-based Prove. Low risk uses one full AI
-review; medium permits one correction and fresh-session delta; high asks risk
-decisions initially. Never dispatch a third AI. In-contract findings auto-repair; provider failures recover;
-missing permission becomes a DevOps handoff.
-
-`--resume` continues. Never Land, publish, weaken evidence, or reuse proof.
-Report progress and proven outcome in the user's language.
+Never Land or publish from Feature. Report progress and the proven outcome in
+the user's language.

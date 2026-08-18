@@ -162,6 +162,36 @@ try {
     "claude-cli");
   writeFileSync(policyPath, JSON.stringify({
     version: 1, review: {
+      diversity: "single-model", independence: "required",
+      defaultReviewer: "claude-opus",
+      fallbackReviewer: "codex-sol",
+      reviewers: { "claude-opus": reviewer }
+    }
+  }));
+  assert.throws(() => environment.foundationPolicy(),
+    /fallbackReviewer must be main-session/);
+  writeFileSync(policyPath, JSON.stringify({
+    version: 1, review: {
+      diversity: "single-model", independence: "self",
+      defaultReviewer: "claude-opus",
+      fallbackReviewer: "main-session",
+      reviewers: { "claude-opus": reviewer }
+    }
+  }));
+  assert.equal(environment.foundationPolicy().review.fallbackReviewer,
+    "main-session");
+  writeFileSync(policyPath, JSON.stringify({
+    version: 1, review: {
+      diversity: "single-model", independence: "required",
+      defaultReviewer: "claude-opus",
+      fallbackReviewer: "main-session",
+      reviewers: { "claude-opus": reviewer }
+    }
+  }));
+  assert.throws(() => environment.foundationPolicy(),
+    /main-session requires review.independence self/);
+  writeFileSync(policyPath, JSON.stringify({
+    version: 1, review: {
       defaultReviewer: "bad", reviewers: { bad: {
         ...reviewer, providerFamily: "openai"
       } }

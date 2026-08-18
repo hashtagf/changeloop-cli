@@ -427,6 +427,22 @@ export function createAuthorityRuntime({
       .find((row) => row.value.requestId === requestId);
     if (!entry) fail(`unknown authority request '${requestId}'`);
     const request = entry.value;
+    const dispatchedAttempt = request.dispatch?.attemptDigest
+      ? reviewAttemptByDigest(id, request.dispatch.attemptDigest) : null;
+    const attemptIsCurrent = dispatchedAttempt?.status === "dispatched" &&
+      reviewHistoryState(id, loadRuntime(id)).chainHead === dispatchedAttempt.digest;
+    if (attemptIsCurrent) {
+      completeReviewAttempt(id, dispatchedAttempt.digest, {
+        reviewerSessionId: dispatchedAttempt.reviewerSessionId || "",
+        resultStatus: "error",
+        findings: [],
+        verifiedFindingIds: []
+      });
+    }
+    if (request.status === "aborted" && attemptIsCurrent) {
+      console.log(JSON.stringify(request, null, 2));
+      return request;
+    }
     if (!["requested", "dispatched"].includes(request.status))
       fail(`authority request '${requestId}' is ${request.status}`);
     const updated = {
@@ -444,12 +460,111 @@ export function createAuthorityRuntime({
     return withAuthorityLock(id, () => abortAuthorityUnlocked(id, flags));
   }
 
+  function sessionTelemetryProvenance(id, sessionId) {
+    if (!sessionId) return {};
+    try {
+      const rows = readFileSync(join(root, ".foundation", "logs", id,
+        "events.jsonl"), "utf8").split(/\r?\n/).filter(Boolean)
+        .map((line) => {
+          try { return JSON.parse(line); } catch { return null; }
+        }).filter((row) => row && [row.sessionId, row.runId]
+          .some((value) => String(value || "").toLowerCase() ===
+            sessionId.toLowerCase()));
+      const row = rows.filter((candidate) => candidate.modelId).at(-1) ||
+        rows.at(-1) || null;
+      if (!row) return {};
+      const source = String(row.source || "").toLowerCase();
+      const modelId = String(row.modelId || "").trim();
+      const providerFamily = source.includes("claude") ? "anthropic"
+        : source.includes("codex") || source.includes("openai") ? "openai" : "";
+      return {
+        identity: String(row.agentId || "").trim(),
+        providerFamily,
+        // Telemetry does not currently expose a separate family field. The
+        // exact model ID is a conservative singleton family: it never claims
+        // diversity between two observations of the same model.
+        modelFamily: String(row.modelFamily || modelId).trim().toLowerCase(),
+        modelId
+      };
+    } catch { return {}; }
+  }
+
+  function mainSessionProvenance(id, flags, subject = {}) {
+    const claudeSession = String(process.env.FOUNDATION_CLAUDE_SESSION_ID || "").trim();
+    const codexSession = String(process.env.CODEX_THREAD_ID || "").trim();
+    const genericSession = String(process.env.FOUNDATION_SESSION_ID || "").trim();
+    const declaredMainSession = String(
+      process.env.FOUNDATION_MAIN_SESSION_ID || "").trim();
+    const ambientSession = claudeSession || genericSession || codexSession ||
+      declaredMainSession;
+    const requestedSession = String(flags["main-session-id"] || ambientSession).trim();
+    if (ambientSession && requestedSession && ambientSession !== requestedSession)
+      fail("main-session fallback session must match the calling host session");
+    const boundSession = ambientSession ? requestedSession : "";
+    const inheritsSubject = subject.sessionId && boundSession &&
+      String(subject.sessionId).toLowerCase() === boundSession.toLowerCase();
+    const telemetry = sessionTelemetryProvenance(id, boundSession);
+    const inferredProvider = claudeSession && ambientSession === claudeSession
+      ? "anthropic" : codexSession && ambientSession === codexSession ? "openai" : "";
+    const inferredIdentity = claudeSession && ambientSession === claudeSession
+      ? "claude-main-session"
+      : codexSession && ambientSession === codexSession ? "codex-main-session" : "";
+    const value = {
+      identity: String(flags["main-session-identity"] ||
+        process.env.FOUNDATION_MAIN_IDENTITY ||
+        (inheritsSubject ? subject.identity : telemetry.identity || inferredIdentity) || "").trim(),
+      sessionId: boundSession || null,
+      providerFamily: String(flags["main-session-provider-family"] ||
+        process.env.FOUNDATION_MAIN_PROVIDER_FAMILY ||
+        (inheritsSubject ? subject.providerFamily : telemetry.providerFamily ||
+          inferredProvider) || "").trim().toLowerCase(),
+      modelFamily: String(flags["main-session-model-family"] ||
+        process.env.FOUNDATION_MAIN_MODEL_FAMILY ||
+        (inheritsSubject ? subject.modelFamily : telemetry.modelFamily) || "").trim().toLowerCase(),
+      modelId: String(flags["main-session-model"] ||
+        process.env.FOUNDATION_MODEL_ID ||
+        (inheritsSubject ? subject.modelId : telemetry.modelId) || "").trim()
+    };
+    const missing = Object.entries(value)
+      .filter(([, fieldValue]) => !fieldValue).map(([name]) => name);
+    return { ...value, missing };
+  }
+
+  function mainSessionHandback(id, requestId, configuredIdentity,
+    infrastructureError, mainSession, mainDispatched, subject) {
+    const template = responseTemplate(mainDispatched);
+    template.evidence["subject-actor"] = subject.identity;
+    if (subject.sessionId) {
+      template.evidence["subject-session"] = subject.sessionId;
+      template.evidence["subject-provider-family"] = subject.providerFamily;
+      template.evidence["subject-model-family"] = subject.modelFamily;
+      template.evidence["subject-model"] = subject.modelId;
+    } else {
+      delete template.evidence["subject-session"];
+      delete template.evidence["subject-provider-family"];
+      delete template.evidence["subject-model-family"];
+      delete template.evidence["subject-model"];
+    }
+    return {
+      status: "needs-main-session-review",
+      changeId: id,
+      requestId,
+      failedReviewer: configuredIdentity,
+      infrastructureError,
+      reviewer: mainSession,
+      packet: mainDispatched.packet,
+      responseTemplate: template,
+      next: {
+        record: `claude-foundation authority record ${id} --request ${requestId} --response <response.json>`
+      }
+    };
+  }
+
   function runAuthorityReviewerUnlocked(id, flags = {}) {
     const requestId = String(flags.request || "");
     if (!requestId) fail("authority run requires --request <id>");
     const reviewerName = String(flags.reviewer || "").trim() ||
       foundationPolicy().review.defaultReviewer;
-    const configured = reviewerConfig(reviewerName);
     const subjectActor = String(flags["subject-actor"] || "").trim();
     if (!subjectActor) fail("authority run requires --subject-actor");
     const subjectSession = String(flags["subject-session"] || "").trim() || null;
@@ -462,6 +577,9 @@ export function createAuthorityRuntime({
       .some((value) => !value))
       fail("AI implementation provenance requires subject session, provider family, model family, and model");
     const reviewSettings = foundationPolicy().review || {};
+    if (!reviewerName)
+      fail("authority run requires --reviewer or review.defaultReviewer");
+    const configured = reviewerConfig(reviewerName);
     const configuredProvider = String(configured.providerFamily).toLowerCase();
     const configuredFamily = String(configured.modelFamily).toLowerCase();
     const sameFamily = aiSubject && subjectProvider === configuredProvider &&
@@ -474,6 +592,64 @@ export function createAuthorityRuntime({
     const requestEntry = authorityStore.list(id)
       .find((row) => row.value.requestId === requestId);
     if (!requestEntry) fail(`unknown authority request '${requestId}'`);
+    if (requestEntry.value.mainSessionFallback) {
+      const fallback = requestEntry.value.mainSessionFallback;
+      if (fallback.status !== "provenance-unavailable")
+        fail(`configured reviewer already failed; complete the reserved main-session fallback with authority status/record instead of rerunning authority run`);
+      const storedSubject = fallback.subject || {};
+      const mainSession = mainSessionProvenance(id, flags, storedSubject);
+      if (mainSession.missing.length) {
+        const blocked = {
+          status: "main-session-provenance-unavailable",
+          changeId: id,
+          requestId,
+          failedReviewer: requestEntry.value.fallbackAttempts?.at(-1)?.reviewer ||
+            configured.identity,
+          infrastructureError: requestEntry.value.fallbackAttempts?.at(-1)?.summary ||
+            "configured reviewer infrastructure failed",
+          missing: mainSession.missing,
+          action: "Expose the calling host session/model provenance and rerun authority run with --main-session-* fields; the failed reviewer will not run again."
+        };
+        console.log(JSON.stringify(blocked, null, 2));
+        return blocked;
+      }
+      const resumed = dispatchAuthorityUnlocked(id, {
+        request: requestId,
+        scope: fallback.scope,
+        ...(fallback.scope === "delta"
+          ? { "base-attempt": fallback.baseAttemptDigest } : {}),
+        "reviewer-type": "ai",
+        "reviewer-identity": mainSession.identity,
+        "reviewer-provider-family": mainSession.providerFamily,
+        "reviewer-model-family": mainSession.modelFamily,
+        "reviewer-model": mainSession.modelId,
+        "reviewer-session": mainSession.sessionId
+      });
+      const resumedEntry = authorityStore.list(id)
+        .find((row) => row.value.requestId === requestId);
+      authorityStore.replace(resumedEntry, {
+        ...resumedEntry.value,
+        mainSessionFallback: {
+          ...resumedEntry.value.mainSessionFallback,
+          status: "awaiting-response",
+          reviewer: {
+            identity: mainSession.identity,
+            providerFamily: mainSession.providerFamily,
+            modelFamily: mainSession.modelFamily,
+            modelId: mainSession.modelId,
+            sessionId: mainSession.sessionId
+          },
+          missingProvenance: []
+        }
+      });
+      const handback = mainSessionHandback(id, requestId,
+        requestEntry.value.fallbackAttempts?.at(-1)?.reviewer || configured.identity,
+        requestEntry.value.fallbackAttempts?.at(-1)?.summary ||
+          "configured reviewer infrastructure failed",
+        mainSession, resumed, storedSubject);
+      console.log(JSON.stringify(handback, null, 2));
+      return handback;
+    }
     if (requestEntry.value.status === "dispatched")
       fail(`configured review dispatch '${requestId}' is indeterminate; do not rerun it automatically. Abort it with a reason, then request the next bounded route or pause`);
     const state = loadRuntime(id);
@@ -487,6 +663,7 @@ export function createAuthorityRuntime({
     if (unrecordedDeliveredAiResponse(id, history, requestEntry.value.provider))
       fail("a completed AI response has no matching recorded receipt; repair that authority record or pause instead of starting another configured reviewer");
     const scope = deliveredAi.length === 0 ? "full" : "delta";
+    const workspace = loadRuntime(id).workspace?.path || root;
     const dispatched = dispatchAuthorityUnlocked(id, {
       request: requestId,
       scope,
@@ -498,7 +675,6 @@ export function createAuthorityRuntime({
       "reviewer-model": configured.modelId,
       "reviewer-session-deferred": true
     });
-    const workspace = loadRuntime(id).workspace?.path || root;
     const report = runConfiguredReview({
       changeId: id,
       reviewer: reviewerName,
@@ -509,6 +685,104 @@ export function createAuthorityRuntime({
         ...(scope === "delta" ? [deliveredAi.at(-1)?.reviewerSessionId] : [])
       ].filter(Boolean)
     });
+    if (report.status === "error" &&
+        reviewSettings.fallbackReviewer === "main-session") {
+      const failed = completeReviewAttempt(id,
+        dispatched.dispatch.attemptDigest, {
+          reviewerSessionId: String(report.reviewer?.sessionId || "").trim(),
+          resultStatus: "error", findings: [], verifiedFindingIds: []
+        });
+      const failedEntry = authorityStore.list(id)
+        .find((row) => row.value.requestId === requestId);
+      const { dispatch: _failedDispatch, ...retryableRequest } = failedEntry.value;
+      const mainSession = mainSessionProvenance(id, flags, aiSubject ? {
+        identity: subjectActor,
+        sessionId: subjectSession,
+        providerFamily: subjectProvider,
+        modelFamily: subjectFamily,
+        modelId: subjectModel
+      } : {});
+      authorityStore.replace(failedEntry, {
+        ...retryableRequest,
+        status: "requested",
+        fallbackAttempts: [
+          ...(failedEntry.value.fallbackAttempts || []),
+          {
+            attemptDigest: failed.digest,
+            reviewer: configured.identity,
+            reportReference: report.reportReference,
+            summary: report.summary
+          }
+        ],
+        mainSessionFallback: {
+          status: mainSession.missing.length
+            ? "provenance-unavailable" : "dispatching",
+          failedAttemptDigest: failed.digest,
+          scope,
+          baseAttemptDigest: scope === "delta" ? deliveredAi.at(-1).digest : null,
+          subject: {
+            identity: subjectActor,
+            sessionId: subjectSession,
+            providerFamily: subjectProvider,
+            modelFamily: subjectFamily,
+            modelId: subjectModel
+          },
+          reviewer: mainSession.missing.length ? null : {
+            identity: mainSession.identity,
+            providerFamily: mainSession.providerFamily,
+            modelFamily: mainSession.modelFamily,
+            modelId: mainSession.modelId,
+            sessionId: mainSession.sessionId
+          },
+          missingProvenance: mainSession.missing
+        }
+      });
+      if (mainSession.missing.length) {
+        const blocked = {
+          status: "main-session-provenance-unavailable",
+          changeId: id,
+          requestId,
+          failedReviewer: configured.identity,
+          infrastructureError: report.summary,
+          missing: mainSession.missing,
+          action: "Expose the calling host session/model provenance and rerun authority run with --main-session-* fields; the failed reviewer will not run again."
+        };
+        console.log(JSON.stringify(blocked, null, 2));
+        return blocked;
+      }
+      const mainDispatched = dispatchAuthorityUnlocked(id, {
+        request: requestId,
+        scope,
+        ...(scope === "delta" ? {
+          "base-attempt": deliveredAi.at(-1).digest
+        } : {}),
+        "reviewer-type": "ai",
+        "reviewer-identity": mainSession.identity,
+        "reviewer-provider-family": mainSession.providerFamily,
+        "reviewer-model-family": mainSession.modelFamily,
+        "reviewer-model": mainSession.modelId,
+        "reviewer-session": mainSession.sessionId
+      });
+      const mainEntry = authorityStore.list(id)
+        .find((row) => row.value.requestId === requestId);
+      authorityStore.replace(mainEntry, {
+        ...mainEntry.value,
+        mainSessionFallback: {
+          ...mainEntry.value.mainSessionFallback,
+          status: "awaiting-response"
+        }
+      });
+      const handback = mainSessionHandback(id, requestId, configured.identity,
+        report.summary, mainSession, mainDispatched, {
+          identity: subjectActor,
+          sessionId: subjectSession,
+          providerFamily: subjectProvider,
+          modelFamily: subjectFamily,
+          modelId: subjectModel
+        });
+      console.log(JSON.stringify(handback, null, 2));
+      return handback;
+    }
     const reviewerSession = String(report.reviewer?.sessionId || "").trim();
     const infrastructureError = report.status === "error";
     if (!reviewerSession && !infrastructureError)

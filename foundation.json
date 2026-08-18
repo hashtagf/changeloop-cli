@@ -84,7 +84,8 @@
         "sandbox": "read-only",
         "ephemeral": true
       }
-    }
+    },
+    "fallbackReviewer": "main-session"
   },
   "workflow": {
     "grounding": "required",

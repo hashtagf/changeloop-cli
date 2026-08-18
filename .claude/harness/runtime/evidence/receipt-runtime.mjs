@@ -72,6 +72,10 @@ export function createReceiptRuntime({
   writeJson, receiptPath, providerConfig, providerCapability, loadRuntime,
   resolvedAcceptance, evidence, claimsForProvider, providerWorkspaceHash,
   providerRepository, rejectPrototypeEvidenceInputs, durableArtifact,
+  providerRepositories = (id, provider, config) => {
+    const repository = providerRepository(id, provider, config);
+    return repository ? [repository] : [];
+  },
   providerInputIdentity, contractFingerprint, executionFingerprint, stableHash,
   adapterFingerprint, environmentDescriptor, reviewPolicy, subjectProvenance,
   reviewProvenanceResult, readJson, flagValues, reviewHistoryState,
@@ -273,6 +277,7 @@ export function createReceiptRuntime({
       // somebody made. `adapter` cannot answer that — the caller supplies it.
       execution: harnessExecuted ? "harness" : "manual",
       repositoryId: repository?.id || null,
+      repositoryIds: providerRepositories(id, provider, config).map((row) => row.id),
       adapterProtocolVersion: ADAPTER_PROTOCOL_VERSION,
       providerProtocolVersion: PROVIDER_PROTOCOL_VERSION,
       contractFingerprint: contractFingerprint(id),

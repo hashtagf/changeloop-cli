@@ -4,6 +4,6 @@ description: Produce content-bound evidence for an existing Foundation change. U
 ---
 
 Treat the text after `$prove` as the command arguments. Read
-`../../commands/prove.md` completely and follow it as the canonical workflow.
+`references/workflow.md` completely and follow it as the canonical workflow.
 Translate host-specific wording without changing its lifecycle or authority
 boundaries.

@@ -157,6 +157,16 @@ export function createEvidenceContract({
         die(`provider '${provider}' uses unknown adapter '${config.adapter || ""}'`);
       if (config.repository !== undefined)
         repositoryById(id, config.repository);
+      if (config.repositories !== undefined) {
+        if (!Array.isArray(config.repositories) || config.repositories.length === 0 ||
+            config.repositories.some((repository) =>
+              typeof repository !== "string" || !repository.trim()) ||
+            new Set(config.repositories).size !== config.repositories.length)
+          die(`provider '${provider}' repositories must be a non-empty array of unique repository IDs`);
+        for (const repository of config.repositories) repositoryById(id, repository);
+        if (config.repository && !config.repositories.includes(config.repository))
+          die(`provider '${provider}' cwd repository '${config.repository}' must appear in repositories`);
+      }
       if (!["external", "contract-digest"].includes(config.adapter) &&
           (!Array.isArray(config.command) || config.command.length === 0 ||
            config.command.some((part) => typeof part !== "string" || !part)))
@@ -175,6 +185,12 @@ export function createEvidenceContract({
         }
         if (config.repository !== undefined)
           die(`provider '${provider}' contract-digest spans repositories and cannot declare a single 'repository'`);
+        if (config.repositories !== undefined) {
+          const contractRepositories = Object.keys(sides).sort();
+          const declaredRepositories = [...config.repositories].sort();
+          if (JSON.stringify(contractRepositories) !== JSON.stringify(declaredRepositories))
+            die(`provider '${provider}' repositories must exactly match its contract repositories`);
+        }
       }
       // A report written inside the hashed surface expires the receipt it was
       // written to justify: the workspace hash is taken before providers run
@@ -220,6 +236,16 @@ export function createEvidenceContract({
            config.inputs.some((item) => typeof item !== "string" || !item ||
              isAbsolute(item) || item.split(/[\\/]/).includes(".."))))
         die(`provider '${provider}' inputs must be non-empty workspace-relative paths`);
+      if (config.inputs !== undefined) {
+        const scopedRepositories = new Set(config.repositories ||
+          (config.adapter === "contract-digest" ? Object.keys(config.contract || {}) :
+            config.repository ? [config.repository] : selectedRepositories(id).map((row) => row.id)));
+        for (const input of config.inputs) {
+          const scoped = input.match(/^([a-z0-9][a-z0-9._-]*):(.*)$/i);
+          if (scoped && !scopedRepositories.has(scoped[1]))
+            die(`provider '${provider}' input '${input}' references repository outside its repository scope`);
+        }
+      }
       if (["review", "acceptance"].includes(capability) && config.inputs !== undefined)
         die(`${capability} capability cannot declare reusable inputs; it is bound to the full workspace`);
       if (config.reportFormat !== undefined &&
@@ -370,9 +396,13 @@ export function createEvidenceContract({
           : claims.filter((claim) =>
             claim.capabilities.includes(capability) ||
             (capability === "discovery" && claim.capabilities.includes("test")));
-    if (config?.repository)
+    const scopedRepositories = config?.repositories ||
+      (config?.adapter === "contract-digest" ? Object.keys(config.contract || {}) :
+        config?.repository ? [config.repository] : null);
+    if (scopedRepositories)
       scoped = scoped.filter((claim) =>
-        !claim.repositories || claim.repositories.includes(config.repository));
+        !claim.repositories || claim.repositories.some((repository) =>
+          scopedRepositories.includes(repository)));
     return scoped;
   }
   
@@ -390,6 +420,13 @@ export function createEvidenceContract({
     const repositoryId = config?.repository || null;
     if (!repositoryId) return null;
     return repositoryById(id, repositoryId);
+  }
+
+  function providerRepositories(id, provider, config = providerConfig(id, provider)) {
+    const ids = config?.repositories ||
+      (config?.adapter === "contract-digest" ? Object.keys(config.contract || {}) :
+        config?.repository ? [config.repository] : selectedRepositories(id).map((row) => row.id));
+    return [...new Set(ids)].sort().map((repositoryId) => repositoryById(id, repositoryId));
   }
   
   function providerWorkspace(id, provider, config = providerConfig(id, provider)) {
@@ -416,14 +453,29 @@ export function createEvidenceContract({
 
   function providerWorkspaceHash(id, provider, fallback = null) {
     const field = packetBoundCapability(id, provider) ? "workspaceHash" : "codeHash";
-    const repository = providerRepository(id, provider);
-    if (!repository)
+    const config = providerConfig(id, provider);
+    const explicitlyScoped = Boolean(config?.repository || config?.repositories ||
+      config?.adapter === "contract-digest");
+    const repositories = providerRepositories(id, provider, config);
+    if (!explicitlyScoped)
       return field === "workspaceHash"
         ? fallback || relevantHash(id)
         : relevantSnapshot(id)[field] || fallback || relevantHash(id);
     const snapshot = relevantSnapshot(id);
-    return snapshot.repositories?.[repository.id]?.[field] ||
-      singleRelevantSnapshot(id, repository.workspacePath, true)[field];
+    if (repositories.length === 1) {
+      const repository = repositories[0];
+      return snapshot.repositories?.[repository.id]?.[field] ||
+        singleRelevantSnapshot(id, repository.workspacePath, true)[field];
+    }
+    return stableHash({
+      version: 1,
+      field,
+      repositories: repositories.map((repository) => ({
+        id: repository.id,
+        hash: snapshot.repositories?.[repository.id]?.[field] ||
+          singleRelevantSnapshot(id, repository.workspacePath, true)[field]
+      }))
+    });
   }
   
   // Which repository a scoped input root belongs to, for a stable label in the
@@ -530,6 +582,7 @@ export function createEvidenceContract({
       provider,
       capability: providerCapability(provider, config),
       repository: config?.repository || null,
+      repositories: providerRepositories(id, provider, config).map((repository) => repository.id),
       adapter: config?.adapter || "external",
       adapterVersion: String(config?.version || "1"),
       command: command || config?.command || null,
@@ -683,6 +736,7 @@ export function createEvidenceContract({
     providerConfig,
     providerClaims,
     providerRepository,
+    providerRepositories,
     providerWorkspace,
     providerWorkspaceHash,
     providerInputIdentity,

@@ -445,6 +445,14 @@
       "description": "Compatibility alias for packet --task."
     },
     {
+      "name": "host instruction",
+      "usage": "host instruction <command> [--protocol 1] [--format json] [--arguments <text>]",
+      "audience": "host",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Return one package-owned Foundation workflow instruction through protocol 1 JSON without project discovery."
+    },
+    {
       "name": "agents acquire",
       "usage": "agents acquire <change> <task> --owner <id>",
       "audience": "host",

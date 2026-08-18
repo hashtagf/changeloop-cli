@@ -43,7 +43,7 @@ artifacts:
     generates: handoffs.yaml
     description: Permission-bound external operations and their activation-safe delivery contract
     template: handoffs.yaml
-    instruction: Declare operator work separately from implementation tasks; use an empty operations array when none exists.
+    instruction: Declare operator work separately from implementation tasks; owner defaults to workflow.handoffDefaultOwner, and an empty operations array means none exists.
     requires: [proposal, tasks, evidence, grounding]
 
 apply:

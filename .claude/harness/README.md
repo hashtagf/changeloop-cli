@@ -179,7 +179,12 @@ rather than pretending packages are independently landable remotes.
 Per-change `repositories.yaml` selects access
 and dependency scope. The runtime creates child worktrees under
 `.foundation/repository-sandboxes/`, hashes them into one composite snapshot,
-and scopes provider commands and receipts with `repository`.
+and scopes provider commands and receipts with `repository`. Read-selected Git
+repositories also receive detached worktrees: they participate in proof but
+cannot contribute a Land commit. A provider that executes from one repository
+but needs several declares `repository` as its cwd and `repositories` as its
+complete dependency set. Its command receives
+`FOUNDATION_REPOSITORIES_FILE`, a JSON manifest containing those isolated paths.
 
 `tasks.md` stays the only implementation ledger. Permission-bound operations
 live in `handoffs.yaml` and durable state under `.foundation/handoffs/`.
@@ -194,11 +199,20 @@ recommends one agent. The plan is advice and bounded authority for the native
 host; the harness does not invoke a model itself.
 
 JSON output is compact by default and `--pretty` is inspection-only. Plan
-schema 3 resumes dependencies satisfied by completed tasks, reports
+schema 4 compiles a deterministic task/provider/repository/Land graph, resumes dependencies satisfied by completed tasks, reports
 `proof-ready` after all tasks complete, and declares the deepest model required
-by a mixed session while carrying instruction provenance. Packet schema 5 rejects unknown, cross-repository, or
-providerless task claims. Large collections are previews plus counts and
+by a mixed session while carrying instruction provenance. Packet schema 7 adds
+the active graph, lease fencing generation, execution attempt, and versioned
+result authority; it rejects unknown, cross-repository, providerless, stale, or
+out-of-scope task results. Large collections are previews plus counts and
 digests; use `packet <change> --task <task>` as the authoritative expansion.
+
+Conflict scopes are hierarchical. Disjoint paths, contracts, and explicit
+resources may proceed concurrently across active changes; missing or ambiguous
+scope takes the exclusive repository key. All keys are acquired atomically.
+Proof records node diagnostics plus one aggregate graph proof, while Land
+persists a prepare-all snapshot and compare-and-swap revalidates it before each
+multi-remote mutation wave.
 
 Multiple remotes use ordered saga states rather than an atomicity claim.
 Foundation verifies explicit child commits, optional CI state, dependency

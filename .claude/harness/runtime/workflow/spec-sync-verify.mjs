@@ -7,49 +7,21 @@
 // It is an invariant checker, not a reimplementation of the merge. Pure by
 // construction: strings in, findings out, no fs and no child_process.
 //
-// DUPLICATED PARSER: change-validation.mjs has a `parseSpecRequirements` with
-// the same requirement/scenario grammar, but it is closed over inside
-// createChangeValidationRuntime and not exported. `parseSpecDocument` below is
-// a superset (it also retains section context and the verbatim requirement
-// block, which invariant 4 needs). Dedupe the two when a shared parser module
-// is extracted.
+// The parser is shared with pre-Build change validation so both gates interpret
+// requirement identity, section context, and complete scenario lists equally.
+
+import {
+  parseSpecDocument, specDeltaOperation
+} from "../contracts/change-artifacts.mjs";
 
 const HEADING = /^(#{1,6})\s+(.*?)\s*$/;
-const DELTA_SECTION = /^(ADDED|MODIFIED|REMOVED|RENAMED)\b/i;
 const RENAME_TARGET = /^\s*-\s*(?:FROM|TO):\s*`?#{0,6}\s*Requirement:\s*(.+?)`?\s*$/i;
 
 // Parses either a current spec.md or a delta spec.md. `section` carries the
 // enclosing `## ` heading, which is what makes a delta requirement ADDED,
 // MODIFIED, or REMOVED; `body` is the verbatim block used for the
 // byte-identical comparison of untouched requirements.
-export function parseSpecDocument(text) {
-  const requirements = [];
-  let section = null;
-  let current = null;
-  for (const line of String(text ?? "").split("\n")) {
-    const heading = line.match(HEADING);
-    if (heading) {
-      const level = heading[1].length;
-      const title = heading[2];
-      if (level <= 3) {
-        const name = level === 3 && title.match(/^Requirement:\s*(.+?)$/)?.[1]?.trim();
-        if (level === 2) section = title.trim();
-        current = name
-          ? { section, name, scenarios: [], lines: [line] }
-          : null;
-        if (current) requirements.push(current);
-        continue;
-      }
-      const scenario = level === 4 && title.match(/^Scenario:\s*(.+?)$/)?.[1]?.trim();
-      if (scenario && current) current.scenarios.push(scenario);
-    }
-    if (current) current.lines.push(line);
-  }
-  return requirements.map(({ lines, ...requirement }) => ({
-    ...requirement,
-    body: lines.join("\n").replace(/\s+$/, "")
-  }));
-}
+export { parseSpecDocument };
 
 // `## RENAMED Requirements` names its requirements in FROM/TO list items
 // rather than `### Requirement:` headings, so they are invisible to the parser
@@ -73,10 +45,6 @@ export function renamedRequirementNames(text) {
 
 function byName(requirements) {
   return new Map(requirements.map((requirement) => [requirement.name, requirement]));
-}
-
-function operationOf(section) {
-  return DELTA_SECTION.exec(section || "")?.[1]?.toUpperCase() || null;
 }
 
 function listDetail(names) {
@@ -105,7 +73,7 @@ export function verifySpecSync({ before, after, delta } = {}) {
   // guessing at a spec the change never actually declared.
   const sectionsByName = new Map();
   for (const requirement of deltaRequirements) {
-    const operation = operationOf(requirement.section);
+    const operation = specDeltaOperation(requirement.section);
     const seen = sectionsByName.get(requirement.name) || [];
     sectionsByName.set(requirement.name, [...seen, operation || requirement.section || "(no section)"]);
     if (!operation)
@@ -128,7 +96,7 @@ export function verifySpecSync({ before, after, delta } = {}) {
   for (const requirement of deltaRequirements) {
     const { name, scenarios } = requirement;
     if (ambiguous.has(name)) continue;
-    const operation = operationOf(requirement.section);
+    const operation = specDeltaOperation(requirement.section);
     const merged = afterIndex.get(name);
 
     // 1. ADDED introduces behavior that did not exist yet.
@@ -174,7 +142,7 @@ export function verifySpecSync({ before, after, delta } = {}) {
       report("modified-scenario-extra", name,
         `the archived spec declares scenario(s) ${listDetail(extra)} that the delta does not; the merge kept scenarios the MODIFIED block replaced`);
     if (!missing.length && !extra.length &&
-        scenarios.join(" ") !== merged.scenarios.join(" "))
+        scenarios.join("\0") !== merged.scenarios.join("\0"))
       report("modified-scenario-order", name,
         `scenario order differs: delta declares ${listDetail(scenarios)} but the archived spec declares ${listDetail(merged.scenarios)}`);
     const deleted = (beforeIndex.get(name)?.scenarios || [])

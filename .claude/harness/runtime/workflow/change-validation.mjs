@@ -70,7 +70,7 @@ export function createChangeValidationRuntime({
   }
 
   const {
-    assertNewCapabilitiesAreAdditive,
+    assertExistingCapabilityOperations, assertNewCapabilitiesAreAdditive,
     assertNoDroppedScenarios,
     changeSpecScenarios,
     droppedScenarioFindings,
@@ -142,8 +142,8 @@ export function createChangeValidationRuntime({
     ["replace-with marker", /replace-with/i],
     ["unresolved clarification", /\[NEEDS CLARIFICATION(?::[^\]]*)?\]/i],
     ["unresolved TODO/TBD", /\b(?:TODO|TBD)\b/],
-    ["template angle marker", /<(?:Problem|Observable|Only load-bearing|choice|constraint|meaningful alternative|Public contracts|risk|mitigation|provider|name|stable scenario name|action or event|Explicitly excluded|code, API|semantic boundary|path or surface|focused check)[^>]*>/i],
-    ["template removal comment", /<!--[\s\S]*?(?:delete when unused|include the complete modified requirement|name removed behavior)[\s\S]*?-->/i]
+    ["template angle marker", /<(?:Problem|Observable|Only load-bearing|choice|constraint|meaningful alternative|Public contracts|risk|mitigation|provider|name|existing name|stable scenario name|every existing stable scenario name|action or event|complete modified observable behavior|behavior being retired|replacement, compatibility consequence|Explicitly excluded|code, API|semantic boundary|path or surface|focused check)[^>]*>/i],
+    ["template removal comment", /<!--[\s\S]*?(?:delete (?:this section )?when unused|include the complete modified requirement|name removed behavior|use only when the canonical spec)[\s\S]*?-->/i]
   ];
 
   function assertNoScaffolds(state, dir) {
@@ -563,6 +563,7 @@ export function createChangeValidationRuntime({
     if (state.acceptance?.decision === "undecided")
       fail(`acceptance decision is unresolved for '${id}'; ask the user whether subjective human acceptance is required, then resolve with --acceptance-required or --acceptance-not-required`);
     assertNewCapabilitiesAreAdditive(id, dir);
+    assertExistingCapabilityOperations(id, dir);
     assertNoDroppedScenarios(id, dir);
     // The OpenSpec strict lint used to surface only inside 'openspec archive',
     // after the code had landed, so a pure wording defect forced a re-prove.
@@ -995,6 +996,7 @@ export function createChangeValidationRuntime({
 
   return {
     advisoryCapabilities,
+    assertExistingCapabilityOperations,
     assertNoScaffolds,
     assertNewCapabilitiesAreAdditive,
     assertNoDroppedScenarios,
