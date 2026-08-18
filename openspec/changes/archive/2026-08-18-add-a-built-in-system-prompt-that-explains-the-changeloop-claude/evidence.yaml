@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "add-a-built-in-system-prompt-that-explains-the-changeloop-claude-outcome",
+      "scenario": "An active Changeloop Foundation builtin resolves and caches the exact package-owned protocol-1 agent contract into the system prompt, fails closed on invalid endpoints, and adds no context when disabled or fully overridden",
+      "impact": "medium",
+      "capabilities": ["test"]
+    }
+  ]
+}

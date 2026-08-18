@@ -5,6 +5,7 @@ import {
   createFoundationWorkflowHooks,
   FOUNDATION_COMMANDS,
   FoundationWorkflowPlugin,
+  resolveFoundationAgentContract,
   resolveFoundationInstruction,
 } from "../../src/plugin/foundation"
 
@@ -13,6 +14,15 @@ const fixtureExecutable = [
   "bun",
   "-e",
   `const args = process.argv.slice(1)
+if (args[1] === "agent-contract") {
+  console.log(JSON.stringify({
+    protocol: 1,
+    contract: "fixture agent contract " + process.pid,
+    foundationVersion: "fixture",
+    additiveField: true,
+  }))
+  process.exit(0)
+}
 const command = args[2]
 const argument = args[args.indexOf("--arguments") + 1]
 console.log(JSON.stringify({
@@ -106,6 +116,23 @@ describe("resolveFoundationInstruction", () => {
   })
 })
 
+describe("resolveFoundationAgentContract", () => {
+  test("accepts the package-owned protocol response and rejects malformed output", async () => {
+    const result = await resolveFoundationAgentContract({
+      directory: import.meta.dir,
+      executable: fixtureExecutable,
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.contract).toStartWith("fixture agent contract ")
+    expect(
+      await resolveFoundationAgentContract({
+        directory: import.meta.dir,
+        executable: ["bun", "-e", "console.log(JSON.stringify({protocol:1,contract:'',foundationVersion:'x'}))"],
+      }),
+    ).toEqual({ ok: false, code: "foundation_response_invalid" })
+  })
+})
+
 describe("Foundation workflow hooks", () => {
   test("replaces all eight owned markers with instructions from the CLI boundary", async () => {
     const hooks = createFoundationWorkflowHooks({ directory: import.meta.dir }, { executable: fixtureExecutable })
@@ -153,6 +180,47 @@ describe("Foundation workflow hooks", () => {
     await hooks["command.execute.before"]!({ command: "change", sessionID: "session", arguments: "intent" }, output)
     expect(Object.keys((config as Config & { command: Record<string, unknown> }).command)).toEqual(["mine"])
     expect(text(output)).toBe(FOUNDATION_COMMANDS.change.template)
+  })
+
+  test("resolves harness context from Foundation once when Changeloop owns a builtin", async () => {
+    const hooks = createFoundationWorkflowHooks({ directory: import.meta.dir }, { executable: fixtureExecutable })
+    await hooks.config!({} as Config)
+    const first = { system: [] as string[] }
+    const second = { system: [] as string[] }
+    await hooks["experimental.chat.system.transform"]!({} as never, first)
+    await hooks["experimental.chat.system.transform"]!({} as never, second)
+    expect(first.system[0]).toStartWith("fixture agent contract ")
+    expect(second.system).toEqual(first.system)
+  })
+
+  test("fails closed when agent contract resolution is unavailable", async () => {
+    const hooks = createFoundationWorkflowHooks(
+      { directory: import.meta.dir },
+      { executable: ["bun", "-e", "console.error('old cli'); process.exit(1)"] },
+    )
+    await hooks.config!({} as Config)
+    const output = { system: [] as string[] }
+    await hooks["experimental.chat.system.transform"]!({} as never, output)
+    expect(output.system[0]).toContain("foundation_host_api_unsupported")
+    expect(output.system[0]).toContain("host agent-contract protocol 1")
+    expect(output.system[0]).toContain("Do not read a project file")
+    expect(output.system[0]).not.toContain("OpenSpec-native change loop")
+  })
+
+  test("omits harness context when builtins are disabled or fully user-owned", async () => {
+    const cases = [
+      { foundation_workflow: false },
+      {
+        command: Object.fromEntries(LOOP.map((name) => [name, { template: `user ${name}` }])),
+      },
+    ]
+    for (const config of cases) {
+      const hooks = createFoundationWorkflowHooks({ directory: import.meta.dir })
+      await hooks.config!(config as unknown as Config)
+      const output = { system: [] as string[] }
+      await hooks["experimental.chat.system.transform"]!({} as never, output)
+      expect(output.system).toEqual([])
+    }
   })
 })
 

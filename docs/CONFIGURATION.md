@@ -29,11 +29,11 @@ changeloop debug config   # ค่า config หลัง merge ทุกชั�
 
 ## จุดปรับ setting (changeloop ชนะเสมอ)
 
-| ชั้น | ที่ปรับ | หมายเหตุ |
-|---|---|---|
-| Global (ใช้โฟลเดอร์เดิมร่วมกับ opencode) | สร้าง `changeloop.json` ใน config dir ปัจจุบัน (ดูจาก `debug paths`) | changeloop อ่านไฟล์นี้ทับค่า `opencode.json`; OpenCode ตัว official ไม่อ่านไฟล์นี้ — แยก setting สองโปรแกรมได้ในโฟลเดอร์เดียว |
-| Global (แยกโปรไฟล์เต็มตัว) | สร้างโฟลเดอร์ `~/.config/changeloop/` แล้วใส่ `changeloop.json` | พอโฟลเดอร์นี้มีอยู่ CLI เลิก fallback ไป opencode ทันที ต้อง copy ค่า (และพิจารณา data dir) มาเอง |
-| ต่อโปรเจกต์ | `changeloop.json`/`changeloop.jsonc` ที่ root หรือโฟลเดอร์ `.changeloop/` | ชนะ `opencode.json(c)` / `.opencode/` ในโปรเจกต์เดียวกัน ทั้งคู่ยังถูกอ่านเป็น fallback |
+| ชั้น                                     | ที่ปรับ                                                                   | หมายเหตุ                                                                                                                      |
+| ---------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Global (ใช้โฟลเดอร์เดิมร่วมกับ opencode) | สร้าง `changeloop.json` ใน config dir ปัจจุบัน (ดูจาก `debug paths`)      | changeloop อ่านไฟล์นี้ทับค่า `opencode.json`; OpenCode ตัว official ไม่อ่านไฟล์นี้ — แยก setting สองโปรแกรมได้ในโฟลเดอร์เดียว |
+| Global (แยกโปรไฟล์เต็มตัว)               | สร้างโฟลเดอร์ `~/.config/changeloop/` แล้วใส่ `changeloop.json`           | พอโฟลเดอร์นี้มีอยู่ CLI เลิก fallback ไป opencode ทันที ต้อง copy ค่า (และพิจารณา data dir) มาเอง                             |
+| ต่อโปรเจกต์                              | `changeloop.json`/`changeloop.jsonc` ที่ root หรือโฟลเดอร์ `.changeloop/` | ชนะ `opencode.json(c)` / `.opencode/` ในโปรเจกต์เดียวกัน ทั้งคู่ยังถูกอ่านเป็น fallback                                       |
 
 ไฟล์ config เริ่มต้นที่ระบบ seed ให้เมื่อยังไม่มีอะไรเลยคือ `changeloop.jsonc`
 
@@ -69,13 +69,13 @@ config.json → opencode.json → opencode.jsonc → changeloop.json → changel
     // tier → รายการ candidate เรียงลำดับ (ตัวแรกที่พร้อมใช้ชนะ)
     "tiers": {
       "fast": ["anthropic/claude-haiku-4-5", "google/gemini-2.5-flash"],
-      "deep": ["anthropic/claude-opus-4-1"]
+      "deep": ["anthropic/claude-opus-4-1"],
     },
     // ชื่อ agent → tier หรือ "provider/model" ตรง ๆ
     "agents": { "plan": "deep", "test": "fast", "debug": "openai/gpt-5" },
     // ช่อง small model (เช่น title generation)
-    "small_model": "fast"
-  }
+    "small_model": "fast",
+  },
 }
 ```
 
@@ -103,7 +103,7 @@ canonical ผ่าน `claude-foundation host instruction` จาก executable
 ```jsonc
 {
   // ปิดทั้งชุดเมื่อไม่ต้องการ loop commands ใน project นี้
-  "foundation_workflow": false
+  "foundation_workflow": false,
 }
 ```
 
@@ -116,6 +116,15 @@ canonical ผ่าน `claude-foundation host instruction` จาก executable
   เก่า, timeout หรือส่ง response ผิด contract จะหยุดพร้อมคำแนะนำ upgrade/reinstall
   โดยไม่ fallback ไป project file หรือ improvise
 - แก้ field แล้วต้องเริ่ม session ใหม่ (อ่านครั้งเดียวตอน boot)
+
+เมื่อ changeloop เป็นเจ้าของ builtin อย่างน้อยหนึ่งคำสั่ง ระบบจะ resolve
+agent contract ที่เป็น canonical ผ่าน `claude-foundation host agent-contract`
+protocol 1 แล้วเพิ่มข้อความที่ Foundation release นั้นเป็นเจ้าของลงใน system
+prompt โดย cache หนึ่งครั้งต่อ plugin session จึงไม่ bundle หรืออ่าน
+`.claude/harness/AGENT.md` จาก project โดยตรง หาก endpoint ใช้ไม่ได้หรือ response
+ผิด contract ระบบจะ fail closed พร้อมคำแนะนำ upgrade/reinstall โดยไม่สร้าง
+workflow ขึ้นเอง หากปิด `foundation_workflow` หรือ override ชื่อคำสั่งทั้ง 8 เอง
+context นี้จะไม่ถูก resolve หรือเพิ่ม
 
 เวอร์ชันมี 3 ชั้นที่แยกจากกัน ตรวจได้ด้วย:
 

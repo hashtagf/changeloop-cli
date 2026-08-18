@@ -28,6 +28,9 @@ const criticalCases = [
   { id: "opaque-arguments", pattern: "preserves opaque arguments in one argv value" },
   { id: "old-cli", pattern: "fails closed with upgrade guidance" },
   { id: "user-override", pattern: "never intercepts a user-defined command" },
+  { id: "foundation-context-source", pattern: "resolves harness context from Foundation once" },
+  { id: "foundation-context-failure", pattern: "fails closed when agent contract resolution is unavailable" },
+  { id: "foundation-context-disabled", pattern: "omits harness context when builtins are disabled" },
 ]
 
 const resultsDir = path.join(root, "test-results")
