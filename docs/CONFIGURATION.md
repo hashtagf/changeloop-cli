@@ -114,7 +114,9 @@ canonical จาก Foundation release ที่ pin checksum และ bundle �
 - **เปิดเป็น default** — ไม่มี field นี้ = commands ทั้ง 8 ถูกฉีดตอน boot
 - **Command ผู้ใช้ชนะเสมอ** — `command.<name>` ที่ define เองชื่อชนกันไม่ถูกทับ
 - **bundled เป็น default** — runtime ถูก verify checksum และ materialize ใน cache
-  แบบ content-addressed; การใช้งานไม่ download executable หรือ workflow เพิ่ม
+  แบบ content-addressed พร้อม `claude-foundation` shim ที่ผูกกับ release นั้น;
+  shell, background process และ PTY ของ Location จะ prepend shim เฉพาะตอนที่
+  builtin หรือ OpenCode adapter ที่ Foundation เป็นเจ้าของ active อยู่
 - **PATH เป็น explicit compatibility mode** — ตั้ง `foundation_runtime: "path"`
   เมื่อต้องการใช้ CLI ภายนอกที่รองรับ protocol 1
 - **ต้องรองรับ protocol 1** — ตัว command เรียก local process ด้วย
@@ -130,7 +132,8 @@ prompt โดย cache หนึ่งครั้งต่อ plugin session �
 `.claude/harness/AGENT.md` จาก project โดยตรง หาก endpoint ใช้ไม่ได้หรือ response
 ผิด contract ระบบจะ fail closed พร้อมคำแนะนำ reinstall/upgrade โดยไม่สร้าง
 workflow ขึ้นเอง หากปิด `foundation_workflow` หรือ override ชื่อคำสั่งทั้ง 8 เอง
-context นี้จะไม่ถูก resolve หรือเพิ่ม
+context นี้จะไม่ถูก resolve หรือเพิ่ม เว้นแต่ native `.opencode/commands` ที่
+Foundation ติดตั้งและบันทึก ownership ไว้กำลังทำหน้าที่แทน builtin markers
 
 การเปิด repo ไม่มีผลเขียนไฟล์ หาก repo ยังไม่มี harness คำสั่ง Foundation ครั้งแรก
 จะขออนุมัติก่อน แล้วจึงให้รันเส้นทางที่จำกัดขอบเขตไว้:
@@ -144,6 +147,10 @@ changeloop foundation upgrade --yes    # converge managed files ไป pinned re
 
 installer canonical ของ Foundation เป็นเจ้าของ merge, backup และ rollback semantics;
 Changeloop ตรวจ target/symlink/platform และ checksum ก่อน invoke installer นั้น
+ผ่าน `init --host opencode` ทั้ง init และ upgrade จึงติดตั้ง canonical commands
+ใน `.opencode/commands`, guard ที่ `.opencode/plugins/foundation.js` และ ownership
+ที่ `.foundation/adapter-manifests/opencode.txt` ด้วย ไฟล์ชื่อชนที่ manifest ไม่ได้
+เป็นเจ้าของจะถูกเก็บไว้และจะไม่เปิด bundled PATH shim ให้ command ของผู้ใช้
 หากต้อง rollback Changeloop release ให้ติดตั้ง binary รุ่นก่อน แล้วรัน
 `changeloop foundation upgrade --yes` เพื่อ converge managed files กลับไปยัง
 Foundation release ที่ bundle กับ binary รุ่นนั้น ไฟล์นอก manifest จะไม่ถูกลบ

@@ -1525,6 +1525,11 @@
       "mode": 420
     },
     {
+      "path": "install-opencode.sh",
+      "sha256": "c602bf2227fd025fa0f17f667d210d173be8bb202e9224aa0be5ea060d703e1d",
+      "mode": 493
+    },
+    {
       "path": "install.sh",
       "sha256": "0ef805f442dec7ee1367d8b0dff530532b00a1b2a5d890d8671060d97d8e0978",
       "mode": 493

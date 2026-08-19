@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "claims": [
+    {"id":"bundled-lifecycle-uses-selected-runtime","scenario":"Bundled lifecycle commands use the selected runtime","impact":"high","capabilities":["test","integration","security-static"]},
+    {"id":"path-and-inactive-modes-preserve-environment","scenario":"PATH and inactive modes preserve the existing execution environment","impact":"high","capabilities":["test","compatibility","security-static"]},
+    {"id":"invalid-bundled-shim-fails-closed","scenario":"Invalid bundled execution shim fails closed","impact":"high","capabilities":["test","integration","resilience","security-static"]},
+    {"id":"compiled-binary-executes-lifecycle-without-path-foundation","scenario":"Compiled binary executes a lifecycle command without PATH Foundation","impact":"high","capabilities":["test","integration","deployment"]},
+    {"id":"opencode-host-integration-is-installed","scenario":"OpenCode host integration is installed","impact":"high","capabilities":["test","integration","security-static","deployment"]},
+    {"id":"foundation-managed-opencode-commands-use-bundled-runtime","scenario":"Foundation-managed OpenCode commands use bundled runtime","impact":"high","capabilities":["test","integration","compatibility","security-static"]},
+    {"id":"user-owned-opencode-artifacts-are-preserved","scenario":"User-owned OpenCode artifacts are preserved","impact":"high","capabilities":["test","integration","compatibility","security-static","resilience"]},
+    {"id":"bundled-payload-includes-opencode-installer","scenario":"Bundled payload includes OpenCode installer","impact":"high","capabilities":["test","integration","dependency-supply-chain","deployment"]}
+  ]
+}

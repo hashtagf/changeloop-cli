@@ -32,6 +32,7 @@ if (!(await Bun.file(path.join(source, ".claude/harness/commands.json")).text())
 
 const roots = [
   "install.sh",
+  "install-opencode.sh",
   "cli.sh",
   "VERSION",
   "foundation.json",

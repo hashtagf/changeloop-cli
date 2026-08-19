@@ -19,6 +19,19 @@ describe("Foundation build bundle", () => {
     expect(result.source).toContain('"payload/cli.sh": foundation_1')
   })
 
+  test("shipped manifest includes the OpenCode host installer", async () => {
+    const vendor = path.resolve(import.meta.dir, "../../vendor/claude-foundation")
+
+    const result = await createEmbeddedFoundationBundle(vendor)
+
+    expect(result.manifest.files).toContainEqual({
+      path: "install-opencode.sh",
+      sha256: "c602bf2227fd025fa0f17f667d210d173be8bb202e9224aa0be5ea060d703e1d",
+      mode: 0o755,
+    })
+    expect(result.source).toContain('"payload/install-opencode.sh"')
+  })
+
   test("payload drift blocks bundle generation", async () => {
     const vendor = await fixture()
     await writeFile(path.join(vendor, "payload/cli.sh"), "changed\n")

@@ -26,6 +26,7 @@ type FoundationFailureCode =
 type FoundationProcessOptions = {
   executable?: string[]
   runtimeMode?: FoundationRuntime.Mode
+  runtimeOptions?: FoundationRuntime.MaterializeOptions
   maxOutputBytes?: number
   timeoutMs?: number
 }
@@ -89,6 +90,7 @@ export function createFoundationWorkflowHooks(
 ) {
   const injected = new Set<FoundationCommand>()
   let runtimeMode: FoundationRuntime.Mode = options.runtimeMode ?? "bundled"
+  let managedAdapter = false
   let agentContract: Promise<FoundationAgentContractResult> | undefined
   return {
     config: async (config) => {
@@ -98,6 +100,10 @@ export function createFoundationWorkflowHooks(
       }
       runtimeMode = options.runtimeMode ?? foundationConfig.foundation_runtime ?? "bundled"
       applyFoundationCommands(foundationConfig, injected)
+      managedAdapter =
+        foundationConfig.foundation_workflow !== false &&
+        runtimeMode === "bundled" &&
+        (await FoundationRuntime.hasManagedOpenCodeAdapter(input.directory, options.runtimeOptions).catch(() => false))
     },
     "command.execute.before": async (event, output) => {
       if (!isFoundationCommand(event.command) || !injected.has(event.command)) return
@@ -121,14 +127,18 @@ export function createFoundationWorkflowHooks(
         marker.text = result.instruction
         return
       }
-      const project = await FoundationRuntime.status(input.directory).catch(() => undefined)
+      const project = await FoundationRuntime.status(input.directory, options.runtimeOptions).catch(() => undefined)
       marker.text =
         project?.installed.state !== "installed"
           ? bootstrapInstruction(result.instruction)
           : result.instruction
     },
+    "shell.env": async (_event, output) => {
+      if (runtimeMode !== "bundled" || (injected.size === 0 && !managedAdapter)) return
+      Object.assign(output.env, await FoundationRuntime.environment(process.env.PATH, options.runtimeOptions))
+    },
     "experimental.chat.system.transform": async (_event, output) => {
-      if (injected.size === 0) return
+      if (injected.size === 0 && !managedAdapter) return
       agentContract ??= resolveFoundationAgentContract({ directory: input.directory, runtimeMode, ...options })
       const result = await agentContract
       output.system.push(result.ok ? result.contract : failureAgentContract(result.code))
@@ -236,7 +246,7 @@ async function runFoundationHost(
 ): Promise<FoundationHostResult> {
   const signal = AbortSignal.timeout(input.timeoutMs ?? timeoutMs)
   const process = Bun.spawn({
-    cmd: [...(input.executable ?? (await FoundationRuntime.command(input.runtimeMode))), ...argv],
+    cmd: [...(input.executable ?? (await FoundationRuntime.command(input.runtimeMode, input.runtimeOptions))), ...argv],
     cwd: input.directory,
     stdout: "pipe",
     stderr: "pipe",

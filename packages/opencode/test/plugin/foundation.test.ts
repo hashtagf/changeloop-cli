@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test"
+import path from "path"
+import { chmod, lstat, mkdtemp, readFile, readdir, rm } from "fs/promises"
+import { afterEach, describe, expect, test } from "bun:test"
 import type { Config, Hooks } from "@opencode-ai/plugin"
 import {
   applyFoundationCommands,
@@ -8,8 +10,14 @@ import {
   resolveFoundationAgentContract,
   resolveFoundationInstruction,
 } from "../../src/plugin/foundation"
+import { FoundationRuntime } from "../../src/plugin/foundation-runtime"
 
 const LOOP = ["investigate", "change", "build", "prove", "land", "changes", "feature", "dev"] as const
+const roots: string[] = []
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map(removeTree))
+})
 const fixtureExecutable = [
   "bun",
   "-e",
@@ -232,6 +240,53 @@ describe("Foundation workflow hooks", () => {
       expect(output.system).toEqual([])
     }
   })
+
+  test("Foundation-managed native OpenCode commands activate the bundled environment", async () => {
+    const root = await temporary("foundation-managed-opencode-")
+    const cache = await temporary("foundation-managed-cache-")
+    expect((await FoundationRuntime.install(root, { allowUntagged: true, cache })).exitCode).toBe(0)
+    const hooks = createFoundationWorkflowHooks(
+      { directory: root },
+      { runtimeOptions: { allowUntagged: true, cache } },
+    )
+    const config = {
+      command: Object.fromEntries(
+        await Promise.all(
+          LOOP.map(async (name) => [
+            name,
+            { template: await readFile(path.join(root, `.opencode/commands/${name}.md`), "utf8") },
+          ]),
+        ),
+      ),
+    } as unknown as Config
+
+    await hooks.config!(config)
+    const environment = { env: {} as Record<string, string> }
+    await hooks["shell.env"]!({ cwd: root }, environment)
+    const system = { system: [] as string[] }
+    await hooks["experimental.chat.system.transform"]!({} as never, system)
+
+    expect(environment.env.PATH?.split(path.delimiter)[0]).toEndWith("/bin")
+    expect(system.system[0]).toContain("# Foundation agent contract")
+  }, 30_000)
+
+  test("PATH, disabled, and fully user-owned command surfaces receive no bundled environment", async () => {
+    const root = await temporary("foundation-inactive-environment-")
+    const cases = [
+      { options: { runtimeMode: "path" as const }, config: {} },
+      { options: {}, config: { foundation_workflow: false } },
+      { options: {}, config: { command: Object.fromEntries(LOOP.map((name) => [name, { template: `user ${name}` }])) } },
+    ]
+    for (const item of cases) {
+      const hooks = createFoundationWorkflowHooks({ directory: root }, item.options)
+      await hooks.config!(item.config as unknown as Config)
+      const environment = { env: {} as Record<string, string> }
+
+      await hooks["shell.env"]!({ cwd: root }, environment)
+
+      expect(environment.env).toEqual({})
+    }
+  })
 })
 
 describe("applyFoundationCommands", () => {
@@ -263,4 +318,23 @@ function commandOutput(value: string) {
 function text(output: ReturnType<typeof commandOutput>) {
   const part = output.parts.find((item) => item.type === "text")
   return part?.type === "text" ? part.text : undefined
+}
+
+async function temporary(prefix: string) {
+  const root = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", prefix))
+  roots.push(root)
+  return root
+}
+
+async function removeTree(root: string) {
+  await makeWritable(root)
+  await rm(root, { recursive: true, force: true })
+}
+
+async function makeWritable(file: string): Promise<void> {
+  const info = await lstat(file).catch(() => undefined)
+  if (!info || info.isSymbolicLink()) return
+  await chmod(file, info.isDirectory() ? 0o700 : 0o600)
+  if (!info.isDirectory()) return
+  await Promise.all((await readdir(file)).map((entry) => makeWritable(path.join(file, entry))))
 }

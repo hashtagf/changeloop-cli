@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "providers": {
+    "test": {
+      "capability": "test",
+      "adapter": "test-discovery",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "test"],
+      "report": "test-results/evidence-foundation-bootstrap-test.json",
+      "reportFormat": "json",
+      "minimum": 1,
+      "timeoutMs": 300000,
+      "criticalCases": [
+        "bundled-lifecycle-uses-selected-runtime",
+        "path-and-inactive-modes-preserve-environment",
+        "invalid-bundled-shim-fails-closed",
+        "opencode-host-integration-is-installed",
+        "foundation-managed-opencode-commands-use-bundled-runtime",
+        "user-owned-opencode-artifacts-are-preserved",
+        "bundled-payload-includes-opencode-installer"
+      ]
+    },
+    "integration": {
+      "capability": "integration",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "integration"],
+      "timeoutMs": 300000
+    },
+    "compatibility": {
+      "capability": "compatibility",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "compatibility"],
+      "timeoutMs": 300000
+    },
+    "security": {
+      "capability": "security-static",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "security"],
+      "timeoutMs": 300000
+    },
+    "resilience": {
+      "capability": "resilience",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "resilience"],
+      "timeoutMs": 300000
+    },
+    "deployment": {
+      "capability": "deployment",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "deployment"],
+      "timeoutMs": 600000
+    },
+    "compiled-test": {
+      "capability": "test",
+      "adapter": "test-discovery",
+      "discoveryProvider": "compiled-discovery",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "compiled-test"],
+      "report": "test-results/evidence-foundation-bootstrap-compiled.json",
+      "reportFormat": "json",
+      "minimum": 1,
+      "criticalCases": ["compiled-binary-executes-lifecycle-without-path-foundation"],
+      "timeoutMs": 600000
+    },
+    "compiled-discovery": {
+      "capability": "discovery",
+      "adapter": "test-discovery",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "compiled-test"],
+      "report": "test-results/evidence-foundation-bootstrap-compiled.json",
+      "reportFormat": "json",
+      "minimum": 1,
+      "timeoutMs": 600000
+    },
+    "supply-chain": {
+      "capability": "dependency-supply-chain",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "supply-chain"],
+      "timeoutMs": 300000
+    }
+  },
+  "services": {}
+}
