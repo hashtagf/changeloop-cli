@@ -10,6 +10,7 @@ const it = testEffect(Layer.empty)
 const document = {
   model: "anthropic/claude-sonnet-4-5",
   foundation_workflow: false,
+  foundation_runtime: "path" as const,
 }
 
 describe("foundation_workflow config", () => {
@@ -17,6 +18,7 @@ describe("foundation_workflow config", () => {
     Effect.sync(() => {
       const decoded = Schema.decodeUnknownSync(ConfigV1.Info)(document, { errors: "all" })
       expect(decoded.foundation_workflow).toBe(false)
+      expect(decoded.foundation_runtime).toBe("path")
     }),
   )
 
@@ -26,6 +28,7 @@ describe("foundation_workflow config", () => {
       const migrated = ConfigMigrateV1.migrate(decoded)
       const v2 = Schema.decodeUnknownSync(Config.Info)(migrated, { errors: "all" })
       expect("foundation_workflow" in v2).toBe(false)
+      expect("foundation_runtime" in v2).toBe(false)
     }),
   )
 })

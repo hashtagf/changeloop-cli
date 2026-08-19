@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "operations": [{
+    "id": "H001",
+    "owner": "claude-foundation maintainer",
+    "environment": "Maximumsoft-Co-LTD/claude-foundation release repository",
+    "authority": "permission to publish and attest a tagged Foundation release",
+    "operation": "Publish a tagged release containing commit 3e02fa5 or its successor, host agent-contract protocol 1, the canonical install payload, and a release checksum suitable for Changeloop pinning.",
+    "timing": "pre-land",
+    "activation": "activation-coupled",
+    "evidence": ["tracking-reference", "operator-attestation"],
+    "runbook": "Follow claude-foundation RELEASING.md, then provide the tag, immutable commit, and published checksum reference; do not place credentials in the handoff record.",
+    "rollback": "Withdraw the candidate release before Changeloop Land or publish a corrected successor and update the pin; do not repoint an immutable tag.",
+    "claimIds": ["payload-drift-blocks-the-build"],
+    "taskIds": ["T001"]
+  }]
+}

@@ -8,6 +8,7 @@ import TEMPLATE_LAND from "./foundation/land.txt"
 import TEMPLATE_CHANGES from "./foundation/changes.txt"
 import TEMPLATE_FEATURE from "./foundation/feature.txt"
 import TEMPLATE_DEV from "./foundation/dev.txt"
+import { FoundationRuntime } from "./foundation-runtime"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 const protocol = 1
@@ -19,10 +20,12 @@ type FoundationFailureCode =
   | "foundation_cli_missing"
   | "foundation_cli_timeout"
   | "foundation_host_api_unsupported"
+  | "foundation_bundle_invalid"
   | "foundation_response_invalid"
 
 type FoundationProcessOptions = {
   executable?: string[]
+  runtimeMode?: FoundationRuntime.Mode
   maxOutputBytes?: number
   timeoutMs?: number
 }
@@ -67,7 +70,7 @@ export const FOUNDATION_COMMANDS = {
 } satisfies Record<string, { description: string; template: string }>
 
 export function applyFoundationCommands(
-  config: Config & { foundation_workflow?: boolean },
+  config: Config & { foundation_workflow?: boolean; foundation_runtime?: FoundationRuntime.Mode },
   injected = new Set<FoundationCommand>(),
 ) {
   if (config.foundation_workflow === false) return injected
@@ -85,10 +88,16 @@ export function createFoundationWorkflowHooks(
   options: FoundationProcessOptions = {},
 ) {
   const injected = new Set<FoundationCommand>()
+  let runtimeMode: FoundationRuntime.Mode = options.runtimeMode ?? "bundled"
   let agentContract: Promise<FoundationAgentContractResult> | undefined
   return {
     config: async (config) => {
-      applyFoundationCommands(config as Config & { foundation_workflow?: boolean }, injected)
+      const foundationConfig = config as Config & {
+        foundation_workflow?: boolean
+        foundation_runtime?: FoundationRuntime.Mode
+      }
+      runtimeMode = options.runtimeMode ?? foundationConfig.foundation_runtime ?? "bundled"
+      applyFoundationCommands(foundationConfig, injected)
     },
     "command.execute.before": async (event, output) => {
       if (!isFoundationCommand(event.command) || !injected.has(event.command)) return
@@ -101,13 +110,26 @@ export function createFoundationWorkflowHooks(
         command,
         arguments: event.arguments,
         directory: input.directory,
+        runtimeMode,
         ...options,
       })
-      marker.text = result.ok ? result.instruction : failureInstruction(result.code)
+      if (!result.ok) {
+        marker.text = failureInstruction(result.code)
+        return
+      }
+      if (runtimeMode !== "bundled") {
+        marker.text = result.instruction
+        return
+      }
+      const project = await FoundationRuntime.status(input.directory).catch(() => undefined)
+      marker.text =
+        project?.installed.state !== "installed"
+          ? bootstrapInstruction(result.instruction)
+          : result.instruction
     },
     "experimental.chat.system.transform": async (_event, output) => {
       if (injected.size === 0) return
-      agentContract ??= resolveFoundationAgentContract({ directory: input.directory, ...options })
+      agentContract ??= resolveFoundationAgentContract({ directory: input.directory, runtimeMode, ...options })
       const result = await agentContract
       output.system.push(result.ok ? result.contract : failureAgentContract(result.code))
     },
@@ -214,7 +236,7 @@ async function runFoundationHost(
 ): Promise<FoundationHostResult> {
   const signal = AbortSignal.timeout(input.timeoutMs ?? timeoutMs)
   const process = Bun.spawn({
-    cmd: [...(input.executable ?? ["claude-foundation"]), ...argv],
+    cmd: [...(input.executable ?? (await FoundationRuntime.command(input.runtimeMode))), ...argv],
     cwd: input.directory,
     stdout: "pipe",
     stderr: "pipe",
@@ -256,6 +278,9 @@ function endpointFailureCode(stderr: string): FoundationFailureCode {
 function processFailureCode(error: unknown): FoundationFailureCode {
   if (error instanceof FoundationResponseLimitError) return "foundation_response_invalid"
   if (error instanceof Error && /ENOENT|not found/i.test(error.message)) return "foundation_cli_missing"
+  if (error instanceof Error && /Bundled Foundation|Unsafe Foundation bundle/i.test(error.message)) {
+    return "foundation_bundle_invalid"
+  }
   return "foundation_host_api_unsupported"
 }
 
@@ -270,7 +295,19 @@ function failureAgentContract(code: FoundationFailureCode) {
 function failureAction(code: FoundationFailureCode, endpoint: string) {
   if (code === "foundation_cli_missing") return "Install claude-foundation and ensure it is available on PATH."
   if (code === "foundation_cli_timeout") return "Verify the local claude-foundation installation and retry."
+  if (code === "foundation_bundle_invalid") return "Reinstall this Changeloop release and retry."
   return `Upgrade or reinstall claude-foundation with ${endpoint} protocol 1 support.`
+}
+
+function bootstrapInstruction(instruction: string) {
+  return [
+    "Foundation is not initialized in this project.",
+    "Ask the user for explicit approval before changing repository files.",
+    "After approval, run `changeloop foundation init --yes` from this project and verify that it succeeds.",
+    "If approval is declined or initialization fails, stop without improvising the workflow.",
+    "After successful initialization, continue with this canonical instruction:",
+    instruction,
+  ].join("\n\n")
 }
 
 function isFoundationCommand(command: string): command is FoundationCommand {

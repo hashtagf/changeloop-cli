@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "claims": [
+    {"id":"additive-protocol-response-remains-compatible","scenario":"Additive protocol response remains compatible","impact":"medium","capabilities":["test","compatibility"]},
+    {"id":"canonical-context-is-injected","scenario":"Canonical context is injected","impact":"high","capabilities":["test","integration"]},
+    {"id":"canonical-project-instruction-is-used","scenario":"Canonical project instruction is used","impact":"high","capabilities":["test","integration"]},
+    {"id":"compiled-binary-works-without-path-foundation","scenario":"Compiled binary works without PATH Foundation","impact":"high","capabilities":["test","integration","deployment"]},
+    {"id":"context-endpoint-fails-closed","scenario":"Context endpoint fails closed","impact":"high","capabilities":["test","integration","resilience"]},
+    {"id":"explicit-path-compatibility-mode","scenario":"Explicit PATH compatibility mode","impact":"medium","capabilities":["test","compatibility"]},
+    {"id":"first-foundation-command-guides-one-time-bootstrap","scenario":"First Foundation command guides one-time bootstrap","impact":"high","capabilities":["test","integration"]},
+    {"id":"fresh-project-is-initialized","scenario":"Fresh project is initialized","impact":"high","capabilities":["test","integration","security-static"]},
+    {"id":"inactive-built-ins-add-no-context","scenario":"Inactive built-ins add no context","impact":"medium","capabilities":["test"]},
+    {"id":"interrupted-installation-rolls-back-or-resumes-safely","scenario":"Interrupted installation rolls back or resumes safely","impact":"high","capabilities":["test","integration","resilience"]},
+    {"id":"loop-commands-present-by-default","scenario":"Loop commands present by default","impact":"medium","capabilities":["test"]},
+    {"id":"opening-a-project-remains-read-only","scenario":"Opening a project remains read-only","impact":"high","capabilities":["test","security-static"]},
+    {"id":"opt-out-disables-injection","scenario":"Opt-out disables injection","impact":"medium","capabilities":["test","compatibility"]},
+    {"id":"partial-foundation-installation-fails-closed","scenario":"Partial Foundation installation fails closed","impact":"high","capabilities":["test","integration","resilience"]},
+    {"id":"payload-drift-blocks-the-build","scenario":"Payload drift blocks the build","impact":"high","capabilities":["test","integration","dependency-supply-chain","cross-repo-contract"]},
+    {"id":"repeated-initialization-converges","scenario":"Repeated initialization converges","impact":"high","capabilities":["test","integration","resilience"]},
+    {"id":"runtime-use-performs-no-network-download","scenario":"Runtime use performs no network download","impact":"high","capabilities":["test","integration","dependency-supply-chain"]},
+    {"id":"unsafe-target-is-rejected-before-mutation","scenario":"Unsafe target is rejected before mutation","impact":"high","capabilities":["test","security-static"]}
+  ]
+}

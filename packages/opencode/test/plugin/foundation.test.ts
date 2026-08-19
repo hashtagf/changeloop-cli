@@ -134,15 +134,25 @@ describe("resolveFoundationAgentContract", () => {
 })
 
 describe("Foundation workflow hooks", () => {
-  test("replaces all eight owned markers with instructions from the CLI boundary", async () => {
+  test("explicit PATH mode replaces all eight owned markers with canonical instructions", async () => {
     const hooks = createFoundationWorkflowHooks({ directory: import.meta.dir }, { executable: fixtureExecutable })
-    const config = {} as Config
+    const config = { foundation_runtime: "path" } as unknown as Config
     await hooks.config!(config)
     for (const name of LOOP) {
       const output = commandOutput(FOUNDATION_COMMANDS[name].template)
       await hooks["command.execute.before"]!({ command: name, sessionID: "session", arguments: "intent" }, output)
       expect(text(output)).toBe(`resolved ${name}: intent`)
     }
+  })
+
+  test("guides explicit bootstrap before the first bundled workflow command", async () => {
+    const hooks = createFoundationWorkflowHooks({ directory: import.meta.dir }, { executable: fixtureExecutable })
+    await hooks.config!({} as Config)
+    const output = commandOutput(FOUNDATION_COMMANDS.change.template)
+    await hooks["command.execute.before"]!({ command: "change", sessionID: "session", arguments: "intent" }, output)
+    expect(text(output)).toContain("Ask the user for explicit approval")
+    expect(text(output)).toContain("changeloop foundation init --yes")
+    expect(text(output)).toContain("resolved change: intent")
   })
 
   test("fails closed with upgrade guidance and no project-file fallback", async () => {

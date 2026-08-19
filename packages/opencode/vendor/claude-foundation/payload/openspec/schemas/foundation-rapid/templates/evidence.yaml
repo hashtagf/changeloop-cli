@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "replace-with-stable-claim-id",
+      "scenario": "Low-impact outcome being proven",
+      "impact": "low",
+      "capabilities": ["test"]
+    }
+  ]
+}

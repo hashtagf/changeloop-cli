@@ -95,15 +95,17 @@ config.json → opencode.json → opencode.jsonc → changeloop.json → changel
 changeloop ฝัง change-loop commands ของ claude-foundation มาในตัว —
 `/investigate /change /build /prove /land /changes /feature /dev` — โผล่ทุก
 project โดยไม่ต้องตั้งอะไร ตัว builtin เป็น thin dispatcher ซึ่งอ่านคำสั่ง
-canonical ผ่าน `claude-foundation host instruction` จาก executable ที่ resolve
-ผ่าน `PATH` จึงใช้ instruction ของ Foundation release ที่ติดตั้งอยู่ โดยไม่อ่าน
-`.claude/commands` ของ project และไม่ bundle workflow body ของ Foundation
-เวอร์ชันใดเวอร์ชันหนึ่ง:
+canonical จาก Foundation release ที่ pin checksum และ bundle มากับ binary
+โดยไม่อ่าน `.claude/commands` ของ project และไม่ต้องมี `claude-foundation`
+อยู่ใน `PATH`:
 
 ```jsonc
 {
   // ปิดทั้งชุดเมื่อไม่ต้องการ loop commands ใน project นี้
   "foundation_workflow": false,
+
+  // compatibility migration เท่านั้น: ใช้ claude-foundation จาก PATH
+  "foundation_runtime": "path",
 }
 ```
 
@@ -111,7 +113,11 @@ canonical ผ่าน `claude-foundation host instruction` จาก executable
 
 - **เปิดเป็น default** — ไม่มี field นี้ = commands ทั้ง 8 ถูกฉีดตอน boot
 - **Command ผู้ใช้ชนะเสมอ** — `command.<name>` ที่ define เองชื่อชนกันไม่ถูกทับ
-- **ต้องมี CLI ที่รองรับ protocol 1** — ตัว command เรียก local process ด้วย
+- **bundled เป็น default** — runtime ถูก verify checksum และ materialize ใน cache
+  แบบ content-addressed; การใช้งานไม่ download executable หรือ workflow เพิ่ม
+- **PATH เป็น explicit compatibility mode** — ตั้ง `foundation_runtime: "path"`
+  เมื่อต้องการใช้ CLI ภายนอกที่รองรับ protocol 1
+- **ต้องรองรับ protocol 1** — ตัว command เรียก local process ด้วย
   argv โดยตรง มี timeout 5 วินาที และจำกัด response 256 KiB; เมื่อ CLI หาย,
   เก่า, timeout หรือส่ง response ผิด contract จะหยุดพร้อมคำแนะนำ upgrade/reinstall
   โดยไม่ fallback ไป project file หรือ improvise
@@ -122,22 +128,25 @@ agent contract ที่เป็น canonical ผ่าน `claude-foundation h
 protocol 1 แล้วเพิ่มข้อความที่ Foundation release นั้นเป็นเจ้าของลงใน system
 prompt โดย cache หนึ่งครั้งต่อ plugin session จึงไม่ bundle หรืออ่าน
 `.claude/harness/AGENT.md` จาก project โดยตรง หาก endpoint ใช้ไม่ได้หรือ response
-ผิด contract ระบบจะ fail closed พร้อมคำแนะนำ upgrade/reinstall โดยไม่สร้าง
+ผิด contract ระบบจะ fail closed พร้อมคำแนะนำ reinstall/upgrade โดยไม่สร้าง
 workflow ขึ้นเอง หากปิด `foundation_workflow` หรือ override ชื่อคำสั่งทั้ง 8 เอง
 context นี้จะไม่ถูก resolve หรือเพิ่ม
 
-เวอร์ชันมี 3 ชั้นที่แยกจากกัน ตรวจได้ด้วย:
+การเปิด repo ไม่มีผลเขียนไฟล์ หาก repo ยังไม่มี harness คำสั่ง Foundation ครั้งแรก
+จะขออนุมัติก่อน แล้วจึงให้รันเส้นทางที่จำกัดขอบเขตไว้:
 
 ```sh
-claude-foundation version              # CLI ที่ resolve จาก PATH
-claude-foundation host instruction changes --protocol 1 --format json
-claude-foundation runtime version      # runtime ที่ติดตั้งใน project
-claude-foundation runtime api-version  # compatibility API ของ project runtime
-claude-foundation doctor --stage change
+changeloop foundation status --json
+changeloop foundation init --yes       # fresh install หลังผู้ใช้อนุมัติ
+changeloop foundation doctor
+changeloop foundation upgrade --yes    # converge managed files ไป pinned release
 ```
 
-CLI ตรวจ runtime API compatibility ก่อนส่ง operation ไปยัง project harness;
-semantic version ของ CLI และ runtime ไม่จำเป็นต้องเท่ากันเมื่อ API compatible
+installer canonical ของ Foundation เป็นเจ้าของ merge, backup และ rollback semantics;
+Changeloop ตรวจ target/symlink/platform และ checksum ก่อน invoke installer นั้น
+หากต้อง rollback Changeloop release ให้ติดตั้ง binary รุ่นก่อน แล้วรัน
+`changeloop foundation upgrade --yes` เพื่อ converge managed files กลับไปยัง
+Foundation release ที่ bundle กับ binary รุ่นนั้น ไฟล์นอก manifest จะไม่ถูกลบ
 ส่วน builtin dispatcher negotiate ด้วย protocol 1 ไม่ได้บังคับ semantic version
 ให้เท่ากัน
 

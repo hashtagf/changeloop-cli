@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "replace-with-stable-claim-id",
+      "scenario": "Observable behavior being proven",
+      "impact": "medium",
+      "capabilities": ["test"]
+    }
+  ]
+}

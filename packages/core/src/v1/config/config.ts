@@ -85,6 +85,9 @@ export const Info = Schema.Struct({
     description:
       "Set to false to disable the built-in claude-foundation change-loop commands (investigate, change, build, prove, land, changes, feature, dev)",
   }),
+  foundation_runtime: Schema.optional(Schema.Literals(["bundled", "path"])).annotate({
+    description: "Select the bundled Foundation runtime (default) or a compatible claude-foundation executable on PATH",
+  }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
       "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",

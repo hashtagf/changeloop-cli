@@ -1,0 +1,1633 @@
+{
+  "schema": 1,
+  "release": "v3.3.1",
+  "commit": "86f09134e19b05e540ab7c3d4890e5805f90ba6c",
+  "version": "3.3.1",
+  "tagged": true,
+  "hostProtocols": {
+    "instruction": 1,
+    "agentContract": 1
+  },
+  "files": [
+    {
+      "path": ".claude/commands/build.md",
+      "sha256": "2b5f18e68106d5b33fab911c7ff7fc15394a1faee3e9efab639cdcb819981531",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/change.md",
+      "sha256": "fd80000c4c5bd4fa33ba3704b2902e51735f9b4b87d4116b4d641d56b7c0f31c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/changes.md",
+      "sha256": "9ef6bfbae1b4acf6bb64552d1cfe07d742369f80b158ddfaf7f733f77411db7a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/dev.md",
+      "sha256": "988f428b4c0db85f1e022b1431c1135cb0861b6a019c46353063ca97139563e8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/feature.md",
+      "sha256": "d99a0c1eac581b485cd095bc42b0c89c3073e42f952f7bae577d0dcc744cfab7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/investigate.md",
+      "sha256": "2e7ef07be3d65fb7d331a238ad6e12fe41328527e06c453327b715be6e9c08c4",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/land.md",
+      "sha256": "224d837478a8adb4fa769f3f3111b10493ab6619ce34092d8cc84320c248c032",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/prove.md",
+      "sha256": "573e1ea951848ccea42aaf7a2cb703a150d0c7b08325dfd5348cce1dfd4bee4a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/references/build-dispatch.md",
+      "sha256": "0d6df1559d39a014cb49eff562bab24f131e90aff50d55a16dab18c877677a97",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/references/build-policy.md",
+      "sha256": "566b9f0a9150f315d40b50a5f1a6a571b983a1187ef08a6d77039c3f62f2fa9c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/AGENT.md",
+      "sha256": "6694c76aa2ef2213f1398090df4b2b998f17af08cc4fb4140fdf40a192ef97dc",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/DEVELOPER-SETUP.md",
+      "sha256": "e20867aa2d01d38f05284566b530600495280d919190182ed03e1d4ba7b472aa",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/EVIDENCE.md",
+      "sha256": "f149459d90323aad722b9d659d62a152de07e2d06a705234e6cb2f291bdb1ad7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/README.md",
+      "sha256": "d93b903bcaa772dae121ab7ad364542404670c5746bb48ba32b09c3093516308",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/adapters/cursor-human-guidance.mdc",
+      "sha256": "40d1f03474d78bfb035074506015ec3ec1a28acbe6ada8fca71f98542b6a85c7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/adapters/host-capabilities.json",
+      "sha256": "5192d807d6ceaede3f35ee0701bc2c59e17ed785e0cf645b16e29133510b8b59",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/adapters/install-support.sh",
+      "sha256": "a9c0b37b0198ede1fc13b1b562ed7705f8af96d210e959cc9be0fdee842716a2",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/adapters/opencode-plugin.js",
+      "sha256": "c0e65636822e7b67cdcc26329e5d18d4a8d03f865f1b4e6a20b20e600bb4b40f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/commands.json",
+      "sha256": "421d3558df0f721edb84ae996cab2626f53118345f4dd5afb8bb54538093de9c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/foundation.mjs",
+      "sha256": "a5effc5455d9f9819749ef97d047a43f073af985d3caa9bcb53ab2aaaa0f27fd",
+      "mode": 493
+    },
+    {
+      "path": ".claude/harness/protocol.json",
+      "sha256": "32c2d2375b2c14e5c398f26788f45554d834143d8e4d14560767e6abc5b1825f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/README.md",
+      "sha256": "12f08a8cdba65ea9205dd824a97f6e10ba9d3ab5ea8e23f302ebbc3f4b3071be",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/composition/bootstrap.mjs",
+      "sha256": "e34abb7972c76ce5d5569dfd4aecf64b6e1e8b27e6a77d6daeb3f356b1f8a6c4",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/README.md",
+      "sha256": "6f4486ce4d0180cd1656aa8a33ffd5e45c25ff93f50929cf6133eba507380306",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/change-artifacts.mjs",
+      "sha256": "da232a5deffef9769f1584fb28a579f8e6bc67ee3776951cba08adb18c5051c7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/host-agent-contract.schema.json",
+      "sha256": "4df7c22634b415514d6c1c8f9d95c1340e723e15bdc3baaca5056cf86b4b4416",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/host-execution-result.schema.json",
+      "sha256": "ca77a46e9496452345562547b75acfb367da5f7e8525392e4d85d970486133b2",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/host-instruction.schema.json",
+      "sha256": "428f73e93d1b33f740db36f8137e500d7730fda436ad2d018beaecd29a07dd0e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/instruction-manifest.schema.json",
+      "sha256": "7a43e191f158777d8eba81159632900b4cb3858da491f6c3e6556179662e4baf",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/model-policy.mjs",
+      "sha256": "528199d1ee8c73240b7b2093a3f7b63c86b0be55047b94e4ba4f441241e5b983",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/blocked-decision.mjs",
+      "sha256": "42efc87a07bda9512b07d297bd09e1123a02b227adc67bfb6e07930dc8cc83c3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/cli-flags.mjs",
+      "sha256": "bc76a1abcea38d2398523157ee1ba82ae7c748d2bf206329aef9a7d507cb9ca1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/cli-router.mjs",
+      "sha256": "c9daa8e8b454639066b8a3cde6914ce28949e7fb6c1868142e09dde10c8505b0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/command-registry.mjs",
+      "sha256": "e291a0253051ff0dbd727f731d6094c77c5b1557dd183869020aa6086e525ff5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/diagnostics-runtime.mjs",
+      "sha256": "9b1ae0df236d9f6acc6d97eade6b3882078ab82b014bb1d6860cfbf8c82a677d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/graph-execution.mjs",
+      "sha256": "a57fc754c1d88c76607d422f712378f5768e43d777ca0ca71f751cd299a0d7ca",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/graph.mjs",
+      "sha256": "a161970929c565c1d37309f6aeaf58507b8828b0b9c63439e7b8afd5eef7d80c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/host-agent-contract.mjs",
+      "sha256": "7596b43f7c57c612a402ffb39613cbc797c855ef239336eb307616630e431d0d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/host-instruction.mjs",
+      "sha256": "5e2363c9ca50b791591e8c8a3087b0a3f1e383bd4143a57a81dae2355ff8eb38",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/instruction-manifest.mjs",
+      "sha256": "28749bc470915b3cb5fca78c11460c2f2fce7ee213ea6b1061d48e36c09bf85a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/instruction-recorder.mjs",
+      "sha256": "471a77fc33725cae0a833e6c95d8c02ccb7b8959fbd0f06851adacc149139fc2",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/lifecycle-phase.mjs",
+      "sha256": "baea7b2e93ae5eaa0a9d84d83fe42071fe01d581a7f96281760d14645ea78411",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/next-step.mjs",
+      "sha256": "a8dbc8dc6da9df43c4b4d5c3322a0e098d57d926d47b82e26b42af63fcea4607",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/process-lock.mjs",
+      "sha256": "33c14825bea313890a6ed998b130b160c72f1f03ae612a19a98ff5c427512107",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/process-runtime.mjs",
+      "sha256": "54c6441ecf716e65b4bce7199663187dc45fd6d10dc488f3810dafe8d08b2322",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/runtime-environment.mjs",
+      "sha256": "0c49e1ffc36714e6ee211ca9a60f14fd543f4fdbca48a16d8236d5f0769991c9",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/state-runtime.mjs",
+      "sha256": "91cccf0a1ca80f8f402b359bdfe8e2d6483ba0ceaf68b6ac9714b77780f930f0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/trust.mjs",
+      "sha256": "e9e765fd082709658e5d3ff57b7b0f721cc28421a93931e7c546cf8c6c69c708",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/workspace-policy.mjs",
+      "sha256": "6cb798754e35df0024e767236298ad7d7e94c0d80c08b5a2e710e9fe12cd6f0f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/workspace-surface.mjs",
+      "sha256": "357715fe0f010a590819b8a47db8f124660088af4a5e84a9efe9585013ca485a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/adapter-runtime.mjs",
+      "sha256": "f3daabeb300decad5c36193f43d0a9852a86401a605bb128bfbce6b4406a8347",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/artifact-store.mjs",
+      "sha256": "c86b440216e1d0af7c3c4b56c62b0b6a2a945064d3663d79efcea9595f87b7cf",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/attestation.mjs",
+      "sha256": "64d90eee8dcad6ea9d66ed7d7051e4b6547c0b6d4f3f98b12afea938df9bf631",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/codex-reviewer.mjs",
+      "sha256": "5fcdcbe575fe7e94f82ac71c119f3a8d909e7253916878b51c25d5424d54b8ee",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/configured-reviewer.mjs",
+      "sha256": "f0a0fd5dd2d64d205db922dd7c2f8983fdd8a002ed06339fd76f55a37eb1d67e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/evidence-bootstrap.mjs",
+      "sha256": "ee9a312e16e0e83447a1bf51d9f31dc8bc2b9f13115a1518e518fd9b5c8694be",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/evidence-contract.mjs",
+      "sha256": "320fd222e0593787ade1b7107cc274e4daca45dbceec8c0e4f4b47ed57d4ac9d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/evidence-results.mjs",
+      "sha256": "c502c5b8df8f23f52c8cda6ecd785c2b944889b5fa458baabafd8a425fc7d14d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/proof-execution-runtime.mjs",
+      "sha256": "b680a854740b99652e6deaffa80d44f90a4acc56c250a02b7490c4d552373a5b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/proof-execution/service-sessions.mjs",
+      "sha256": "0b8c0bc958671f30bc644621276d2d9be501314496484fffb8dfe8bf02ed316f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/proof-readiness.mjs",
+      "sha256": "cd2e67c1f11e5e3809846eb6d9267aa6e215e8d3fa532cc0d4fe2e93cbdd26ab",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/proof-runtime.mjs",
+      "sha256": "a7afb1474cc8a7eaeb00d266b68d1ff2bfbad0fec435cd35dac79a4dcb632db3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/provider-catalog.mjs",
+      "sha256": "47bac6793fd12a1bae33e28de5033542c81819945b28f187f8e721028fb08d5b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/provider-scheduler.mjs",
+      "sha256": "802d4d2a9eb655ab51bac5ad96aff0386cd4b2d4b689419f35bf8e96ea7e98c6",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/receipt-runtime.mjs",
+      "sha256": "1e5bf00c3d9de9184eb9bcbd918c8a8806621bcc6bc5cf7f9e43623acc087fec",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/receipt-validity.mjs",
+      "sha256": "6dc2b4f5576fab2e6a48b7d1bd0de74f1e119de5c785a9881041e20c68a22106",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/review-attempt-store.mjs",
+      "sha256": "f4351641e1271e8ffb2968cee3f6db13c38a2179ff97ad91f22331c9d520b8fb",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/review-protocol.mjs",
+      "sha256": "9337bc709c39adac790c209c83d3cd9ed1a9d2471b984224e059e289df58ad6b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/review-routing.mjs",
+      "sha256": "2b60595094fcceb6e3068cf4dc3d4b577f73f1777b5c8cef3e2e8562e6e57a85",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/signed-ci.mjs",
+      "sha256": "e7ed0ba24c8eb3e37e700f3e04e6ae81d510baf80f26361e352efc7aa8c045cf",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/traceability.mjs",
+      "sha256": "3ac537a4a4519021d3a7e21b8f705eb65b53dfbd7ded8dfd62dd5f01b147d2ef",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/observability/exec-runtime.mjs",
+      "sha256": "823ff74edec19183e4d7f9462fefe5518a54178aad72736a47e00ab4f3ab5634",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/observability/host-execution-contract.mjs",
+      "sha256": "82a10daf0755ccb469be26aa1c1c5b765636ffe748a3c9cb52fe5d122b593be9",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/observability/metrics-runtime.mjs",
+      "sha256": "08b4a79928733e3411fda1cd61d646c6d2b191a21df2599b0f63a8a01721d2c7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/observability/model-drift.mjs",
+      "sha256": "919232c5d57e1772bab54e46832a432b2e29d2c2b34705d7bcccd7642e8f4be3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/observability/telemetry-runtime.mjs",
+      "sha256": "0e749fa98418c70623e6c0dee027f68625d1e81deb8af7f541e25c078e752571",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/observability/telemetry.mjs",
+      "sha256": "0529f5affd1d68853fe8427a4e46d8d78a1784c0d29ceaa4cd73c9ab32449750",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/reliability/bounded-retry.mjs",
+      "sha256": "f82798a5bcfb04b0fc3341046bb03a6af35ef93dd6471d84da5c732c25d52e40",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/version.mjs",
+      "sha256": "9f7a8915e227166e4d6c2f53357a5d253873786fbdbc788529b1dda4982bbc91",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/abandon-runtime.mjs",
+      "sha256": "9078e7189b9e7b92be096e835a8a40040d0d462e2cee1579630a1be0dc2c0600",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/agent-dispatch.mjs",
+      "sha256": "294773bf06a5f58dc126bf80435f1d1109da3f49d8c09ad04ca5589f88ba0850",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/agent-planning.mjs",
+      "sha256": "4cb35fe4f6b661367a3cbd101559bda6b46ac4760e130ff006cde6ab48f51da3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/apply-recovery.mjs",
+      "sha256": "3643efbb1c02a03053573de82f66e477120fd8d15e10b140968c35b011bab3ac",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/apply-runtime.mjs",
+      "sha256": "ddc19b4828a047d3cdde839f3e45ced1f2532bab88d34665680cdd39dc6664e3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/authority-runtime.mjs",
+      "sha256": "378b56dc0d10345231ff42efa4e940e3461cac956edc362803447f8885a08dcd",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/authority.mjs",
+      "sha256": "58ad069e56eaf9b11b0c19af71be5c7e89de2638147bf1bc2728846ca3210431",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/budget-commands.mjs",
+      "sha256": "4eb4af0299e710209203940a83d411f0960396efe0cc325a057f2dd4231448b8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/budget.mjs",
+      "sha256": "4e080ab4af1791398391938922314e19ecea75929dcc6c2b96573017fafc3406",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/change-artifacts.mjs",
+      "sha256": "b0356c4c8eeaf896fc76810531b72cae2df8819bb799f4b9d1ae99b01cbdda2e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/change-lifecycle.mjs",
+      "sha256": "d74dc9385c09b8860194a3d734417bfcf2cfd03e807b16e39f1688cc6edc9d2b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/change-policy.mjs",
+      "sha256": "2de8f96a5ccec2dc1731638da30500d1b3d25fb439fbeccc590e6bd4d49c82a5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/change-validation.mjs",
+      "sha256": "948e3fcf6bbf959f1dcdfaa89dc221463addf451fc02d980909965beb8b64a04",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/handoff-runtime.mjs",
+      "sha256": "befabcc34d0bbaa20e9647998751cacb8f5d16bd205548d41e1e874a042f5ebc",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/land-journal.mjs",
+      "sha256": "0a42c00aa9224a01be70a16fdfa8b63d3a5722dec305fec4b9336cba154315fa",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/land-runtime.mjs",
+      "sha256": "f0beff274857006b69db714263dfc0a33ebb349c5503a0f1fc408afdb2e8ac0e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/lease-runtime.mjs",
+      "sha256": "3d22071ab5795bf6e1707ddde695a46729808b4a040b11fd15e1fdf4c02a91c6",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/packet-runtime.mjs",
+      "sha256": "bab920b86696e7bdfb058485d5b99f71ed6d5fb22d73786cded66c9fc8fa7b3e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/repository-snapshot.mjs",
+      "sha256": "2d031e62524266b64c0f0385ae20f78c7d602e60f214865caf07959e4d28702b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/repository-topology.mjs",
+      "sha256": "e6715f05b4f3559ca2277eeb2e7f30a1dfa3f1541afa94bd8a101a53dda17874",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/sandbox-cleanup.mjs",
+      "sha256": "40e431ddfe662a7daf30f8c6ee6cfe0f2636feac98fd15dccbc906ca872eb069",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/sandbox-runtime.mjs",
+      "sha256": "e010be4b6752428efbbf0cdaa5139c4ac3b767a4eefc0e1d1dab857fcab8fe8a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/security-policy.mjs",
+      "sha256": "9140b94eb1f02ab7ef9d0f52dc688ea73cb9945156ce91ea1791e90930aeac6c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/spec-sync-verify.mjs",
+      "sha256": "8c5deeefe13264cc65c653cfc9c9557a8f4d62ce45fce7e3e73f7f7d291b3014",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/validation/spec-delta.mjs",
+      "sha256": "2bc0aceffe226722affb58a65148800150374144919cf2710aa46fec7c135d33",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/agent-dispatch.test.mjs",
+      "sha256": "92bae9ba783f08924f079a47a3f0e281df9e2d29d65fe12f2b87e631c59ab3c0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/authority-lock-process.test.mjs",
+      "sha256": "df1a44c9e77230522ee198d51c19225cc151157c9d906fc823090824b541e652",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/configured-reviewer.test.mjs",
+      "sha256": "64e053c063b97e3ccd5b488a0271101c92ed24dee88cf5d26af05461b6b285ce",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/evidence-input-coverage.test.mjs",
+      "sha256": "092e3398d01a8fefdd79bba256b8da125a864ad0f0a56d1974eac9be8e360ec1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/execution-graph.test.mjs",
+      "sha256": "5b201e627b703aa20a8e7f1dcdfbb3126fe3e9822368e007b5b9d27dd551b9b0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/grounding-policy.test.mjs",
+      "sha256": "addfe6fa7ec17f8a94ace782c92778a701c910c553cfac172c8dd5b2116964a4",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/handoff-policy.test.mjs",
+      "sha256": "34db7fca77b9f5985b8f4a13df7d6466aebf1ea4cba7fadf89cf216939c48610",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/proof-advance-process.test.mjs",
+      "sha256": "28a259783ef9a6be5fb517a25341eecd4c384ff1e076e63524f76a8a37839f30",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/proof-advance.test.mjs",
+      "sha256": "56208b2ff567adc731bfebef1dbbd3114aca4fdb66e8717af7cf7dd7356ce06d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/repository-topology.test.mjs",
+      "sha256": "a46a14279f47c39173df1db4b4725d63afaa2c8cdbf4f21f4fefdf1cf81697d4",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/review-guard-reconciliation.test.mjs",
+      "sha256": "46e8eea4b4165d640afd0d4cc09984ec2c5b0a30ee154f1856e1afcfb1833f15",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/review-repair-closure.test.mjs",
+      "sha256": "9870ac150c7106d5cb1443c261bedbd6e8238dde96f89490b4e6d9f345d00421",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/sandbox-grounding-portability.test.mjs",
+      "sha256": "816b2f1bf89e9352c418085b710e1daa5df7c11c7fe9e034d11ab41bd7d9506f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/workflow-policy.test.mjs",
+      "sha256": "a8fa2f68178838e3ecc5c30be0ac697e07b48c8977435c206a11d0a3c95d70e2",
+      "mode": 420
+    },
+    {
+      "path": ".claude/hooks/README.md",
+      "sha256": "91e3bd493996d0ec6dd8ef4006f63d8dff063963e5fea7607edd948e95ec87ff",
+      "mode": 420
+    },
+    {
+      "path": ".claude/hooks/lint.sh",
+      "sha256": "6b8d059d8a937f0e948a363b8a359773353ce7a34759c7806dc41572de196ef7",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/no-direct-main-commit.sh",
+      "sha256": "f26fd0a0aa2cd4e4bbd05aea75b0ce7b8d5f2953b517d6e029c040204bfd42f9",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/phase-mutation-guard.md",
+      "sha256": "b597dcc76123b45f03a1891033fe8951ffc42faeaf927167dbaf239ce50fd2ce",
+      "mode": 420
+    },
+    {
+      "path": ".claude/hooks/phase-mutation-guard.mjs",
+      "sha256": "3c7ee8fe0014490e0bb531eafe4b4619d31ef56f79b792a9405d03827a6cd0ea",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/phase-mutation-guard.sh",
+      "sha256": "53a24c8ba871f45c6a8c3cfa59a34488c4c58b457dd4f7dd972578ac19701fbd",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/protect-secrets.sh",
+      "sha256": "ed80324f1ecddec6ae99a9dccc674c7fc323dd0aa920312efc00e0a64cc4e7d3",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/session-context.mjs",
+      "sha256": "324338ecba10ba6e82d188980b39ba9e7b880d4c17a9124b6e3a8debefb33989",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/session-context.sh",
+      "sha256": "4d2e2b8a71c1db9fe6fd903271ca2bc9b43e808f5f8f00e8145b31fb6486c957",
+      "mode": 493
+    },
+    {
+      "path": ".claude/orchestrator.md",
+      "sha256": "e0077ad3c66be75c5079f7cae8be5b9489c32f6e3890cf501f0470cb31ed1229",
+      "mode": 420
+    },
+    {
+      "path": ".claude/rules/fundamentals.md",
+      "sha256": "179ce69b63e7f19e0fdcd2cefd62fe717eea50a1f24f0484f20e29a3578bcc3b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/settings.json",
+      "sha256": "7d7e0b7a8b7e8f0aa88cacbfceb28e0a803489ee212608c0e418c5b905ec6929",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/api-design-fundamentals/SKILL.md",
+      "sha256": "ae9ac1833b6f912757266c5b2bcc52a0ec5f228a7b6807738e61d9ab4754e218",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/api-design-fundamentals/references/auth-and-limits.md",
+      "sha256": "b19a2239c8d03f63b7858c06f059e6efdc75c767e9530d33bfe773d72f5217d1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/api-design-fundamentals/references/contracts-and-errors.md",
+      "sha256": "ba33ccd2255cd24c8dd58bacace352f08a54914542fd6952e853e5412597f266",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/api-design-fundamentals/references/evolution.md",
+      "sha256": "47b0636d16019954fa3a4f46edfb94eb0dcbde28f14a76347d657e59f9f10a9a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/api-design-fundamentals/references/resource-modeling.md",
+      "sha256": "fd1766c87c9c59a9fbd97624508b2f0ca52b57cb61b8aa16dbc724a98545c3c6",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/architecture-fundamentals/SKILL.md",
+      "sha256": "5dbe5bde611180fd318dbbd9be7970a7b724d80b22c3a7fe3b3fbcf1b9dfeb15",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/architecture-fundamentals/references/boundaries.md",
+      "sha256": "9b0e1cd6aba113c0ed0b25d4f6dde7c306a7aa30bd9f50e2fc2052ca89dc071e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/architecture-fundamentals/references/communication.md",
+      "sha256": "5e1a970b2e4eb054be0474d5da21ecd5d8d883688e6cd7db88eb16e121212da3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/architecture-fundamentals/references/observability.md",
+      "sha256": "d016b07c5f064ec31cce9ccc09f2840783e100a076a7539b6a2bf1048c475ebd",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/architecture-fundamentals/references/resilience.md",
+      "sha256": "85b088e614fad4beb3d310faeb50849ef725dc07e203aacac1b7caafe30505c0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/brainstorming/SKILL.md",
+      "sha256": "5b97e301654b7f5e99bcb9204a58720f549d4f00dbcddc85b62195d26c7b0a32",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/build/SKILL.md",
+      "sha256": "19a74adf9a713f240803f86d7957f35743a9d155cae27a966815b4aeed37f117",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/change/SKILL.md",
+      "sha256": "c3f7e1769890a1d1d631f1ed5e5e758329fbfbcac7e9e8d61ec10dd7d700595d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/change/references/workflow.md",
+      "sha256": "ce8ae71a88677831f0142d5e1ffe7c1a96b980f2d4d16e36e74da2ef6c69bcc1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/changes/SKILL.md",
+      "sha256": "4c3421d8cbad21bd4e4adf65489bca572cb51185b5a39dab1bf894fd9507f799",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/claude-md/SKILL.md",
+      "sha256": "877de7b47b2fda9b0c0ddde1aa566d1ba34095b6cdee3a18377a4f1a7b65ec8f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/coding-discipline/SKILL.md",
+      "sha256": "445ee51fd9c9c3f1e379713614a3d8756e09fcff8671463ae8473f94c639c582",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/coding-discipline/references/details.md",
+      "sha256": "89a068c163b346b03beb267c5276c49cb7ce3c1f23f06492e5544427fceda2ca",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/concurrency-fundamentals/SKILL.md",
+      "sha256": "244ad425971bbac7fdc96abdfda54f964b4b86d382ce75d7f741117e69b5162c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/concurrency-fundamentals/references/shared-state-and-async.md",
+      "sha256": "0d306aad67c8aec86613dc7b255e85c536996c3a5fde47a13b3a60705da17469",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/database-fundamentals/SKILL.md",
+      "sha256": "9d28040036930cbb0530b48a240380210eaa95807be63d8b9fdd9bbdd5009ea7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/database-fundamentals/references/indexing.md",
+      "sha256": "edb79f69968364581d95cc3da30d7944806c966e8aa72050b815f5e07dca1d34",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/database-fundamentals/references/migrations.md",
+      "sha256": "6977264597f0b744723f43907212e44ebce847d3ac2d14b564229dfdbd5e4230",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/database-fundamentals/references/query-performance.md",
+      "sha256": "bd873403093dcfb4656d565ea4fe22d1681127aa702c47ff8c671c95d8f79df1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/database-fundamentals/references/schema-design.md",
+      "sha256": "675e6a48a151f594c1dc51048017fa4d529a422ef2a37d07ec05dcc1b0e2a280",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/database-fundamentals/references/transactions.md",
+      "sha256": "96306e10686e734def2d429b94f44f9623a8b6dbee1c85f3843ade0ed0e67724",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ddd-strategic/SKILL.md",
+      "sha256": "df2ac2ce99bb5d01c5db806c06ade48f3fe62bb24c417302df60c6d848fd393e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ddd-strategic/references/aggregate-design.md",
+      "sha256": "592ed90999c2046e9f3d8aa4b58bbb9d647d20ca4e42f49fd6b21b1d19e6f896",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ddd-strategic/references/bounded-contexts.md",
+      "sha256": "da2ad247744763cc5122613f46716264c86484733f3b42bcf5e2a29994aec608",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ddd-strategic/references/event-storming.md",
+      "sha256": "6e59bd9cbecd41d16e016ab5508573cf8c3fb12d3fb1c69cc52c6c9c5990e0a5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ddd-strategic/references/failure-modes.md",
+      "sha256": "fe4a7c6d9c6fb637c36a0cbe53a0c90ca8ab3a6811b2d2359bd507506bbaecaa",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ddd-strategic/references/subdomain-classification.md",
+      "sha256": "2a61b4486f1cdc24b13cdb0b80d9a6f11ba5648adcf70b25e9bf3544629097e5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/debug-fundamentals/SKILL.md",
+      "sha256": "1a926c54d5e07a75953d6755eafa85fecfecfbf38bb89b52af4015d7f3cbcd37",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/debug-fundamentals/references/bisection.md",
+      "sha256": "57b55b059ee348c94f8b0f426bccdf4a1ea5515fadce669df3de9793950587b7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/debug-fundamentals/references/distributed-debugging.md",
+      "sha256": "8fc05b6f213726903a6b4eb24a5072fabd0bc4a2bd9e4cfdf1fe24d336e0a081",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/debug-fundamentals/references/instrumentation.md",
+      "sha256": "ef54baaf19f4357c7382074aae382b1b9a0ccf7f2e20cb57696f3fae167990da",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/debug-fundamentals/references/reproduction.md",
+      "sha256": "bb9d8257795eab345b430770cae7c43cd9ded4098f3818b28448ba876dfc4580",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/delivery-engineering/SKILL.md",
+      "sha256": "73d9c04eb992bad67af7a3437cc08f05c50657730e64c4e4142571f68d05a933",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/delivery-engineering/references/pipeline-and-deploy.md",
+      "sha256": "ce078ef28b63cc6c13a768cde1a93b67eb7661f424eabcc6b9a348d11c6f289f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/dev/SKILL.md",
+      "sha256": "397787e049541a6aeca6eb42f01b605bc0d202c3fd3482f15046f5bf7575919e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/feature/SKILL.md",
+      "sha256": "fa433d93d89646f5a1d14de17b61d8a7ee6b541a631779f56bdcbed24234bb3c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/feature/references/workflow.md",
+      "sha256": "87fe39ae9b78eef566472d9209ea2bcfa1de69235ed43075e18266da01486317",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/frontend-design/LICENSE.txt",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/frontend-design/SKILL.md",
+      "sha256": "1e1be6d6819ffe661044d6c7bb6e4553edfa82ebd389d05d7471cbccd545d551",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/git-workflow/SKILL.md",
+      "sha256": "3b2892c98acbb2309b1c4439c6a014ddd74b3bfc499fb38ce9163c1b4f9571e6",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/git-workflow/references/branching-and-rebasing.md",
+      "sha256": "4e97c22f1a57edfe2e05dcc57536f08ac74232d438cecd7ffb8f3f69c8df3104",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/git-workflow/references/commit-messages.md",
+      "sha256": "095b1012ba1d5471b3587cd537396810db0f05683fbc1a58dd34bf2e2c0c6d99",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/git-workflow/references/pull-requests.md",
+      "sha256": "496b91f695f40bc85a977a6a409208460123ae4e1375b8bb85dacc1e093eee6f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/git-workflow/references/recovery.md",
+      "sha256": "3fe4ba7ae00d68159c900c50d36209895c0587640d318bc1d5d2a6488ff89c3c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/gridgeist/SKILL.md",
+      "sha256": "fb439b0497028dbd11052eae7c46ea6f7495ffb420beb74640360723b8a598e5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/gridgeist/assets/gridgeist-small.svg",
+      "sha256": "6c39b666b034b54041423f5a79717b503c92d98a1a0f9c0dbcb7c846092011a3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/gridgeist/assets/gridgeist.png",
+      "sha256": "1e2bc6d6672faab48eeff1dbac6f1ed662d67cf569e6cf042776b504769ddd8e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/gridgeist/assets/gridgeist.svg",
+      "sha256": "4d92687b76a150b3998975282f661d68c95971d9902634ccae326af06fbf9a80",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/gridgeist/references/design-language.md",
+      "sha256": "b39deba3ac333380fc0bbc6720aafc8a294a2284a64565f49354338dd1ad2bb3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/gridgeist/references/review-checklist.md",
+      "sha256": "9b9dbe877c6ca611036f496d28c1de7c58f66b5ba4f304547d78769e639bbf4d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/grill-task-gu-please/SKILL.md",
+      "sha256": "adfb0a7a8ce2bfe6eabf26c68cfb8312e9cf704f3d27c0cb8cfa89894cc652ee",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/grill-task-gu/SKILL.md",
+      "sha256": "34e15779a4b89d6d708ba4dbb7d59a28f6e81c19ab568454132627c3fd577c87",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/grill-task-gu/references/intake-contract.md",
+      "sha256": "bf448b4019afb743980b5375b99c1a749e35f72769fbc34bc20f8aa92271577e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/harness-html-report/SKILL.md",
+      "sha256": "f9559de8ec507af37968a20d404a6f61252703ed727598e675e5713c36b4c856",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/harness-html-report/references/report.md",
+      "sha256": "1cfa407980c7248ab84962d71febe9d983b2cf57dec99ccdfaf37ee159eabb50",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/hexagonal-backend/SKILL.md",
+      "sha256": "6104ed71d4adc308f35f542564594071e1d6011861260affca1734b65ece2365",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/hexagonal-backend/references/go.md",
+      "sha256": "e9bdc286e57a0b18c53988417c5492a6e37c6efd133326c48bd9139436626506",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/hexagonal-backend/references/patterns-and-pitfalls.md",
+      "sha256": "8cb4148f573d615569d8ce54d638b029baafd5d31de9c63fd37d29796792810d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/hexagonal-backend/references/typescript.md",
+      "sha256": "60d15c99caaeb21a268a67cff2c19ee26c87a008409f7f225e2ad370635a4a56",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/init-project-docs/SKILL.md",
+      "sha256": "ba1b282408162acf11fb8a61c723205a77c980bda74d4543da06ff4f9a0f63f3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/init-project-docs/evals/evals.json",
+      "sha256": "c0d5c68783e0bf67464e3003c1950a94f50a7c4c33b1d182a92d9c53553fced1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/init-project-docs/references/doc-templates.md",
+      "sha256": "d701fb812b1d404355205b1508a27e78e1eeaa536db5812ecc4a244286336476",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/init-project-docs/references/workflow-and-quality.md",
+      "sha256": "7b75805d3199dc8cddc746e488682745ce1094b3506f7cd4fd49681a7ffa1012",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/init-project-docs/scripts/build_doc_viewer.py",
+      "sha256": "1a4bedf735ec44ba1bc72326346d7b7a50547dcdc36b9cd26f5b15d9fca630f3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/investigate/SKILL.md",
+      "sha256": "0ee50f90ff3da3545ffda4556685feb6de59bd1df54522a90516bf0d4d096df0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/land/SKILL.md",
+      "sha256": "70216c406fa7a377b241459d536374359e9f3f48feb901a251d0081766b4cbbf",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/observability-fundamentals/SKILL.md",
+      "sha256": "05139c4b3422741c3911d096272620da0f817f13b20fb43c160da44c2417cdef",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/observability-fundamentals/references/logs-metrics-traces.md",
+      "sha256": "9a9948dc19cde4adc415b4cfa346fa915ebf10a084a20fcb022fdb8c81761ae3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/plan-writing/SKILL.md",
+      "sha256": "62fdf4d85bfec5979ca148e530ad1f4b99e2743b4bd817127e6254d615941114",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/programming-fundamentals/SKILL.md",
+      "sha256": "5153c98fc016bdb7efd3843d22a288d6b96a6b715aa8f5d9d1a20f7f9956292f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/programming-fundamentals/references/complexity.md",
+      "sha256": "b4f5d9c27f0a6b5ca68df16e40bbb0181c2dc5ec9e77a2f6082b07cd64a003e8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/programming-fundamentals/references/details.md",
+      "sha256": "ebac845716d0283f66c27a0fb1d490e8df8db28862163f931fffb40db45d23f8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/programming-fundamentals/references/error-handling.md",
+      "sha256": "a2e35bc4616255c47dc2bdff799ca009e1b9504f296ce81a1c0078da704503c1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/programming-fundamentals/references/module-design.md",
+      "sha256": "b23b319dc43ccd8ebfbfb639ce0923b09cc8436cd51222f41dc9b98364e1a97d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/programming-fundamentals/references/naming.md",
+      "sha256": "6e47371a9dc6de7fe0b1a8f5054d1fbb9475559ecd0a3c543e96303f8ecd0a8c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/programming-fundamentals/references/testing.md",
+      "sha256": "40de13e5269c8a45dcd1b8c9ba206400444917581fb200b3d7c3605bd072ab51",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/prove/SKILL.md",
+      "sha256": "f4a5cf2819d150fd300f716b2e781027082cb9d5016089410d0f9bd246cabfc5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/prove/references/workflow.md",
+      "sha256": "74457c51c2d99bb0cefbd6c9019e7fcf181e7219945d6450518fedec7766e492",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/queue-fundamentals/SKILL.md",
+      "sha256": "9f3d06c7e369ecb7129341a7f507628856947b834cce49d7ad88090a6bc6e686",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/queue-fundamentals/references/broker-selection.md",
+      "sha256": "3d0d89a9c491de8e6c1e6d52fdd3867a550dfc857a7e149a7c102741f650e0d1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/queue-fundamentals/references/idempotency.md",
+      "sha256": "aed5e8fa5e46c02c764076c388839fdfbffdd0b0e75755232562189f1dda37e5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/queue-fundamentals/references/operating.md",
+      "sha256": "2a4ac56cc62102ebddbc2a339660d8e5bf0bc7cf3e62746ac6389d002a705726",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/queue-fundamentals/references/outbox.md",
+      "sha256": "645c077961f10b8d403b1265e9f80417794544664eba368914ce730ca006aa05",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/refactoring-fundamentals/SKILL.md",
+      "sha256": "529a1ecca321e5892319f4f5c3c9417266189eb5a5348741ecda8727408fa192",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/refactoring-fundamentals/references/catalog.md",
+      "sha256": "13acc65d7b45724febd76996089863c19999c7ad1de83ce1ecebd5bc11a9b26f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/refactoring-fundamentals/references/characterization-tests.md",
+      "sha256": "969622f7ab175bce1baf10eb90cfb93b92a9f84ee1a5a0edacfed061d4895857",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/refactoring-fundamentals/references/code-smells.md",
+      "sha256": "e19acc708a2886be7b08f329a72d722ad24bbf3ae2872d36db75ca45c4f1ab78",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/refactoring-fundamentals/references/large-scale.md",
+      "sha256": "1260eb49256b0eb411cace7414c97be57bb7aeae24c3b2f56200cba4f94b144f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/refactoring-fundamentals/references/refactoring-discipline.md",
+      "sha256": "31ad698b7fbeb883afbb7db6808f3403ab45ab7c438da8c5407a337a2e318f0d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/security-fundamentals/SKILL.md",
+      "sha256": "95bffb75c26b833cb347606107ec32e7fe453a0e5170508a91079beb7d61f2a1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/security-fundamentals/references/authn-authz.md",
+      "sha256": "83aa5547f4b7d96552b95901e5fb02605d6114b8af72822524e578b80d042ae0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/security-fundamentals/references/input-and-output.md",
+      "sha256": "91392fe42a38e841fcb575dbca6ab5f6f5ce67e2f393dc2de648bfa0381a71d4",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/security-fundamentals/references/trust-and-hardening.md",
+      "sha256": "4448c1ac6c3493d61d02267b180ad874d9b1f55f06b34f3ff0d9beeeaa9273a9",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/LICENSE.txt",
+      "sha256": "bc6b3af2f331cbc7fb0da1344efb2cbe5877a31498b4d70dbc7000f3405a1362",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/SKILL.md",
+      "sha256": "fd74f762f32c09630631e6f4edf49030d535a62c51c7ef2ba42ade09372d7562",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/agents/analyzer.md",
+      "sha256": "ce0f2d1efc083e1fe98c92b3e40a65ddb3761eee9be57a6236ef4568483e8a12",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/agents/comparator.md",
+      "sha256": "f4265b67438d7d73ad3b6e3089e40e4987187a54ab1576d8e7116febe62e05ec",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/agents/grader.md",
+      "sha256": "39b7db03973c7ba90747807224fd64145e06f951745fd1931a75f78194fa4c60",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/assets/eval_review.html",
+      "sha256": "ce477dcc74dc1c0d1d3352646a79167b5a63634e936b1019160025065974e452",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/eval-viewer/generate_review.py",
+      "sha256": "fc9d1b9243fe5ab6012ebd579bd76d0035de1b79fd3b969de114defab26478fb",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/eval-viewer/viewer.html",
+      "sha256": "a53213426ee1100441d701a3a0d49cda7a842f992d2c36463f4d3cc0258575fa",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/references/creating-skills.md",
+      "sha256": "06e17eb1e23bff28773c0a1c8ed69e8d7507011b87c3a51ae774a300f6d51967",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/references/description-optimization.md",
+      "sha256": "f69000ac9375bb6b7348f529adeddfb6f45712a035363a81491082a769ae384d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/references/environment-specifics.md",
+      "sha256": "b361201a19aa68117a051461c2ab35fd5325a2fa0af8de562482aa54505f7b0e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/references/improving-skills.md",
+      "sha256": "b5086705e9a953924be09180ba88d8317b354d9a8cd288fb9486d9098b381074",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/references/schemas.md",
+      "sha256": "e09f9d1651f48480270e4f4ce37febdac7b213d733db90cb4adae1f8159926a4",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/references/testing-and-evaluation.md",
+      "sha256": "204cd98f544e79857a0ed747985ad724317602259ff63a3f73dfa235841ae78d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/scripts/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/skill-creator/scripts/aggregate_benchmark.py",
+      "sha256": "123ef128ea5ccc01a4b1ac212ef5567f21e9c13d3d240609780beeb3200c49aa",
+      "mode": 493
+    },
+    {
+      "path": ".claude/skills/skill-creator/scripts/generate_report.py",
+      "sha256": "13df7118a3c50c83c4c3250a606d5f2b20b25a3d44cbc392b3d669ec75281453",
+      "mode": 493
+    },
+    {
+      "path": ".claude/skills/skill-creator/scripts/improve_description.py",
+      "sha256": "87d864570220b699fac52da309d2d6efdb060647bfebc74f768128e646accf80",
+      "mode": 493
+    },
+    {
+      "path": ".claude/skills/skill-creator/scripts/package_skill.py",
+      "sha256": "1a33059b0db1ef73375d46d513e5ea81369d2e8838c970597b0d52ddef8d1c0f",
+      "mode": 493
+    },
+    {
+      "path": ".claude/skills/skill-creator/scripts/quick_validate.py",
+      "sha256": "67cf5703402013936c8fb75ad6a1afecd8841d45cc5e606b634eb05825fde365",
+      "mode": 493
+    },
+    {
+      "path": ".claude/skills/skill-creator/scripts/run_eval.py",
+      "sha256": "43e3b8f80dbf69c343967ba77e268fae991d9fa3ed68b32a0ff02532cd48657f",
+      "mode": 493
+    },
+    {
+      "path": ".claude/skills/skill-creator/scripts/run_loop.py",
+      "sha256": "7bd6f674203168520517eec94c55f493c0d154339b061b4d7c0f0dad187d0f21",
+      "mode": 493
+    },
+    {
+      "path": ".claude/skills/skill-creator/scripts/utils.py",
+      "sha256": "3af8ae62c40c73ab712207436a0d9a981e845f25c5a7040229eb189cc8e45bb1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/tailwind-design-system/SKILL.md",
+      "sha256": "9481d809caedc2e5ef29a679607b2e8b50c8e086311f6a18b1df04d971dd88c7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/tailwind-design-system/references/component-patterns.md",
+      "sha256": "702a5ce53f1712b37b8e3a144433effb5b18633d833eb42bd8cf41b5c8a05a95",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/tailwind-design-system/references/layout-motion-theming.md",
+      "sha256": "c2408b2677b4152bc2f72cbe6267ae59023d1959a8ac5e9902839682b65d14a3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/tailwind-design-system/references/setup-and-migration.md",
+      "sha256": "6de1329f79707706eed17892f1c530fc48f3b83eca9023567056fc0f07747e72",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/tailwind-design-system/references/utilities-and-advanced.md",
+      "sha256": "57feceea7df6c8782290de0286bf369d054d0a3601c0b0683bd4798ac936dd00",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/testing-fundamentals/SKILL.md",
+      "sha256": "2e125044e242978a4d75d5b2c35a82a453f917ecbef761a07357d6f3f8750208",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/testing-fundamentals/references/coverage.md",
+      "sha256": "2e6293e410a0d7856363285d8c1f6fab8c3c4a21c96df61d6276e4c897e4b11e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/testing-fundamentals/references/test-design.md",
+      "sha256": "13c6afc874778162d38e10452ed9960b603d8fcd584660dfed16836a75d18856",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/testing-fundamentals/references/test-doubles-and-levels.md",
+      "sha256": "44765464d60adfc7d0503939dbb19e5c1b78ae1a226f9ebc981d0a3cf7ac620a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/SKILL.md",
+      "sha256": "b56ffe913c0c62ec780d2943542caa096ca2addd5c754076c5e6d2c12421da08",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/_sync_all.py",
+      "sha256": "b540b3a4f87598ae29048b3cceae1fc17b39b629aee2cbe5c802ffc7b48abf6d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/app-interface.csv",
+      "sha256": "2a17ef810dab715ce1f339861817a8fbe3ccc38142b70517301e874803e838ac",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/charts.csv",
+      "sha256": "ebb565308115f955791b0431797a89d9b3587c25d5babb9428d10712c4924817",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/colors.csv",
+      "sha256": "69ee8c1147b269599d20ca418bdd6f32563a9aa2d962fb9a9b8dec66bf7b1ba4",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/design.csv",
+      "sha256": "6f0ae42f16b3cbfa3f07050268387557859ff666e2651b1b82763f099d724b3f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/google-fonts.csv",
+      "sha256": "2c03a3cd134d126bd9d6a7dc2a6360dc5272219ad6df3eb9315b031f806e1487",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/icons.csv",
+      "sha256": "f376c29fb4df37b4bdb366a5aa70cb211ba3dd8b435390aaa03152a64b07d2e8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/landing.csv",
+      "sha256": "080cedbcd61ff8ec9520f33929baa76bee9589e783f83b2f8d824a466b6a46d7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/products.csv",
+      "sha256": "9fd9e776ba847cf44c1ea78f95fe5e33b2c56bb7e186e3cfff9c49bc7fcb691b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/react-performance.csv",
+      "sha256": "904c8afcda229629545912dde0e8ac37503757131f0169f80b016f1f58c4fd3f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/angular.csv",
+      "sha256": "dd7cc2a2b34cd8f0508bd05b067545e7a44f7724440c432d491d92a61a8fb6c1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/astro.csv",
+      "sha256": "ad18dae3ab6d148d37d144592df80dc1825b6c9e86d9d2d68fdda77434206a37",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/flutter.csv",
+      "sha256": "fe36d404c799781e8ba6e9a8179b45799ed5126a545528550cd2eb0f2346e8c5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/html-tailwind.csv",
+      "sha256": "7aef38e75c53559470afcfa91580a9917ca8b7dbf8b92110389e23e93703ac52",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/jetpack-compose.csv",
+      "sha256": "6c8fd4b0391c342c12b0af15610cd5becbeccaef0bbe8dcfc01d928c3195d93e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/laravel.csv",
+      "sha256": "50e11e60a64b30f329af25ae71f4b8bbdb43bafc1865451b74f9f540a88964d5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/nextjs.csv",
+      "sha256": "e828ccc04843742f52f545a068e8a9ab0d2b97c0e771f7e93bf0cef74da05554",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/nuxt-ui.csv",
+      "sha256": "05d6e74501b2b6a636faed32450622759f49a5bcafad971f5f4e7eba0eb7be71",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/nuxtjs.csv",
+      "sha256": "f7a3f2d9542856d00199f85c6c023b7c284cc698e2e6e12d61afce2edacb24d6",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/react-native.csv",
+      "sha256": "a08ca77fcf6b6d9531982dce465366296013bfcf12d2938ac72ad57cf0c4f085",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/react.csv",
+      "sha256": "e5624ab41d33427d88e41d07581ce4eca59b37b36ab72a6ad43a9c8e2d0a1c72",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/shadcn.csv",
+      "sha256": "395c2e415ef6f48a474acccdc8eb2c7258a6ed751a5037ba171a2d8823e02ded",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/svelte.csv",
+      "sha256": "71af52d64f266c88070b91dbbaa900c2f8074b6baae9f35eaea6ba9cec6fd803",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/swiftui.csv",
+      "sha256": "c9c2d2510f8e66281a2514e8dd0125a6b653b9ef53a71281b5e7dfe003d5b569",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/threejs.csv",
+      "sha256": "f1c05f8f269fc4784170c837f4ff43b50042f00bbd6ba7dbef2896081a052544",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/stacks/vue.csv",
+      "sha256": "c2724915d3c11cd67263f25896cff721f787a0fdd8326002d31e9f5806dfd8f8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/styles.csv",
+      "sha256": "9b5089dcde8999333b36878252a255cc3bacbb2fe7b836c76cc7f7aa2abb643d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/typography.csv",
+      "sha256": "dbea262a54e3bfa2e6c3b15989a365d5ef4c43349316aff46635e82ca825adce",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/ui-reasoning.csv",
+      "sha256": "41976082ecae1100da937c949215dc6694393e03f3c2a7444dd92a9edb43cb11",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/data/ux-guidelines.csv",
+      "sha256": "1870ee048f2a2bdd60709f8f7adf7f3b6dcad560bc005c8b2915a8ac8639820d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/references/app-ui-rules.md",
+      "sha256": "eacaae7404b171780b8062b7555e36fe34143ab17f7858a18fd3aa60af318508",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/references/quick-reference.md",
+      "sha256": "181597cab1d5db17ea819f6a05465034b4f189899421c17bb866993f7348af9a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/references/search-tool.md",
+      "sha256": "3b9eb82dc8c6e4b4c2f08fbfd5cba6427912dfd349d461ef83070fc91fd4236e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/scripts/core.py",
+      "sha256": "bdae95f606ac7afba4517bdb087275049837e55db31bb450313274d5b5f82b02",
+      "mode": 493
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/scripts/design_system.py",
+      "sha256": "4da1d341f3c7749df51b51db4a543a48a427c3c746eb0e9882a1ab86acf3bb54",
+      "mode": 420
+    },
+    {
+      "path": ".claude/skills/ui-ux-pro-max/scripts/search.py",
+      "sha256": "6a565f960a672e16dd064ccadd3406db999bfd1a4bff4d609b36a8d4c6450b86",
+      "mode": 420
+    },
+    {
+      "path": ".foundation/.gitignore",
+      "sha256": "2cf3fcb1841a033c7bec7eaf149b76f9fe377925cbed337d93908178d20f3e54",
+      "mode": 420
+    },
+    {
+      "path": ".foundation/README.md",
+      "sha256": "981cd7b42e89f3c2a048d48d4b2e0a2364bf695fbdb4a921e76bf3a1c7e7a374",
+      "mode": 420
+    },
+    {
+      "path": "VERSION",
+      "sha256": "ef2a79c2f7dc37800a73fd9930b307824ce20af920cbc7159323456418e77e6b",
+      "mode": 420
+    },
+    {
+      "path": "WORKFLOW.md",
+      "sha256": "cc7689831700985d401931b1f8c73608ea239dea54a8e6fe173b4fc02a03a458",
+      "mode": 420
+    },
+    {
+      "path": "cli.sh",
+      "sha256": "508ae8e07502a4a938ef7111975f3e2fc7f9f7c6da49dcc4585a1b95a25243de",
+      "mode": 493
+    },
+    {
+      "path": "foundation.json",
+      "sha256": "0c73c4f7882e8b1910c073bd0ed8acd1bbb71766a29b6a398e6f3f7236b4ca99",
+      "mode": 420
+    },
+    {
+      "path": "install.sh",
+      "sha256": "0ef805f442dec7ee1367d8b0dff530532b00a1b2a5d890d8671060d97d8e0978",
+      "mode": 493
+    },
+    {
+      "path": "openspec/config.yaml",
+      "sha256": "da5e79851a1660e5a001d3980224e224a938a002a9ca3b5a65e5de8ac77d4a4b",
+      "mode": 420
+    },
+    {
+      "path": "openspec/repositories.yaml",
+      "sha256": "8bf4de12e7da856670e6655138d5c5b9c0131e770e1ce09b1114868f57ff04d6",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-rapid/schema.yaml",
+      "sha256": "5bcd4a6ff676051884e51bdb6a293c8b9518704a090bd2e4a9360ad42d99faae",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-rapid/templates/evidence.yaml",
+      "sha256": "23bb9e0742177b586d3e17ba402aa81478633fd97f42272c43ffc6688ca02fc7",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-rapid/templates/execution.yaml",
+      "sha256": "89cc6385cf88b6ccfc37e18194adb9a801e6625aababf888cb535ad2fb7f9803",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-rapid/templates/grounding.yaml",
+      "sha256": "02df8cd12b8cae0c99c40f95d157098ee7dfb135abcad31f6f338f3f3de679c7",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-rapid/templates/handoffs.yaml",
+      "sha256": "f577ae145635d24fa7ef82e7f4166b8daef332700b9a42bcfb6210bd8a6c140d",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-rapid/templates/proposal.md",
+      "sha256": "0dc1bf0271f35bb72840e5a2f959b86df333f3389e8d9bb0cde9107dcc9f0060",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-rapid/templates/repositories.yaml",
+      "sha256": "bd86efd885982b59cf524c12c6400eb124b1e5636ffb96eaad2e9ffd949e0106",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-rapid/templates/tasks.md",
+      "sha256": "34e5ac3eedc711fa2ec86d2f4bcea5c59d5a60d2e91d2a0662072017ce4dc882",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/schema.yaml",
+      "sha256": "9eb85b89f7a2e5f874ef8e17513181f22c7b9c9fbff1d53a597162bc1671e6cb",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/templates/design.md",
+      "sha256": "0f70d700f5d970788552cf53588e8784f22f04b62e23141c7629dc02fbeae907",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/templates/evidence.yaml",
+      "sha256": "481cfd51176ece8dc8596e9db36144a222c50d3b63026238630ab26cda9b799a",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/templates/execution.yaml",
+      "sha256": "89cc6385cf88b6ccfc37e18194adb9a801e6625aababf888cb535ad2fb7f9803",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/templates/grounding.yaml",
+      "sha256": "02df8cd12b8cae0c99c40f95d157098ee7dfb135abcad31f6f338f3f3de679c7",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/templates/handoffs.yaml",
+      "sha256": "f577ae145635d24fa7ef82e7f4166b8daef332700b9a42bcfb6210bd8a6c140d",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/templates/proposal.md",
+      "sha256": "2f344def01fb142cf5a87f9070721c009b6f6e40878343b258c1963a8b2b5667",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/templates/repositories.yaml",
+      "sha256": "bd86efd885982b59cf524c12c6400eb124b1e5636ffb96eaad2e9ffd949e0106",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/templates/spec.md",
+      "sha256": "f760aa03b044b0f317e9e4622b0f6ab57c47619850ab1334507a2826ef985bd5",
+      "mode": 420
+    },
+    {
+      "path": "openspec/schemas/foundation-standard/templates/tasks.md",
+      "sha256": "8bf7cf1ad256ef40bcc929524530b46cd22eff68db1ed101a953a8046e8f4eda",
+      "mode": 420
+    }
+  ]
+}

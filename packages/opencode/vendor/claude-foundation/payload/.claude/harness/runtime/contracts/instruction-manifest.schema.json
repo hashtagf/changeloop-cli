@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://claude-foundation.dev/schemas/instruction-manifest-v1.json",
+  "title": "Foundation Instruction Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "foundationVersion", "dispatch", "execution", "manifestDigest"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "foundationVersion": { "type": ["string", "null"] },
+    "manifestDigest": { "$ref": "#/$defs/digest" },
+    "dispatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "commandInstruction", "orchestratorInstruction", "rules"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "commandInstruction": { "$ref": "#/$defs/instruction" },
+        "orchestratorInstruction": { "$ref": "#/$defs/instruction" },
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/instruction" } }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skills", "requestedModel", "actualModel"],
+      "properties": {
+        "skills": { "type": "array", "items": { "$ref": "#/$defs/instruction" } },
+        "requestedModel": { "type": ["string", "null"] },
+        "actualModel": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "instruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "digest"],
+      "properties": {
+        "kind": { "enum": ["command", "orchestrator", "rule", "skill"] },
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}

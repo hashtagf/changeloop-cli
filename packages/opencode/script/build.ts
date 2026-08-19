@@ -4,6 +4,7 @@ import { $ } from "bun"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
+import { createEmbeddedFoundationBundle } from "./foundation-bundle"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -48,6 +49,7 @@ const createEmbeddedWebUIBundle = async () => {
 }
 
 const embeddedFileMap = skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
+const embeddedFoundation = (await createEmbeddedFoundationBundle(path.join(dir, "vendor/claude-foundation"))).source
 const treeSitterWorker = await Bun.file(fileURLToPath(import.meta.resolve("@opentui/core/parser.worker"))).text()
 
 const allTargets: {
@@ -182,12 +184,14 @@ for (const item of targets) {
     files: {
       [treeSitterWorkerPath]: treeSitterWorker,
       ...(embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {}),
+      "foundation-runtime.gen.ts": embeddedFoundation,
     },
     entrypoints: [
       "./src/index.ts",
       workerPath,
       treeSitterWorkerPath,
       ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : []),
+      "foundation-runtime.gen.ts",
     ],
     define: {
       FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
