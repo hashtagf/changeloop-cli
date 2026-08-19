@@ -20,6 +20,16 @@ Maintain a private read set of repository, path, role, mode, digest, and support
 fact. Reuse locked decisions. Discoverable facts come from sources; reversible
 safe defaults are recommended; only observable product/scope/risk choices are
 material. Assignee and date are non-blocking unless `--schedule` is present.
+Reuse any compact brainstorming agreement without re-asking its settled answers.
+Challenge fuzzy or conflicting project-specific terms against specifications
+and code. Resolve factual conflicts from source; only a remaining semantic
+choice belongs in the Decision Sheet as one canonical term, its meaning, and
+aliases to avoid.
+
+Model the remaining material choices as a private dependency tree. Each choice
+names its prerequisites, alternatives, and dependent effects. Settle source-owned
+prerequisites from the read set. Do not persist the tree or create an interview
+ledger; it exists only to make the finalized sheet complete.
 
 Before the sheet, trace conditional production entry points, real serialized
 bytes, dormant code being activated, and failure classifiers. For every
@@ -35,13 +45,19 @@ Before asking, draft task outcomes, dependency groups, two-way requirement
 coverage, source grounding, and risk-to-evidence mappings. Present one Decision
 Sheet containing every material choice, recommended defaults, alternatives,
 effects, proposed groups, risk tier, critical test cases, required mutants,
-service interactions, observability, and external blockers. Ask for approval or
-all overrides together. Record the answer; do not ask a second approval question.
+service interactions, observability, and external blockers. When one choice
+changes another, show the prerequisite and every conditional effect in this same
+sheet; do not defer it to a later question round. Ask for approval or all
+overrides together. Record the answer; do not ask a second approval question.
+Flag a tradeoff for durable rationale only when it is hard to reverse,
+surprising without context, and chosen among meaningful alternatives.
 
 Later phases must reuse the locked sheet. Only evidence proving the agreement
 unsafe permits one exception: collect every newly opened decision into one
 reopen sheet, record its reference, and revise the same change atomically.
 Retirement requires separate user authority. Ordinary findings return to Build.
+Carry resolved terms and qualifying tradeoffs into the existing standard
+`design.md`; create no `CONTEXT.md`, glossary, ADR store, or parallel ledger.
 
 ## Output and audit
 

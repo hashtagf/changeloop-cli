@@ -45,6 +45,7 @@ export function createChangeValidationRuntime({
   providerConfig,
   resolvedAcceptance,
   reviewPolicy,
+  reviewAssurancePosture = () => null,
   policyCapabilities,
   policyCapabilityTrigger,
   changedSurfaceResolvable,
@@ -76,6 +77,14 @@ export function createChangeValidationRuntime({
     droppedScenarioFindings,
     newCapabilityOperationFindings
   } = createSpecDeltaValidator({ root, activeChangePath, walk, fail });
+
+  function validationRepositories(id, state, dir) {
+    const rootSource = resolve(dir) === resolve(changePath(id));
+    return selectedRepositories(id, state, fail, {
+      changeDir: dir,
+      useTargetPaths: rootSource
+    });
+  }
 
   function traceabilityAuditValue(id) {
     const state = loadRuntime(id);
@@ -257,7 +266,7 @@ export function createChangeValidationRuntime({
       const riskClasses = new Set((risk.classes || [])
         .map((entry) => String(entry).toLowerCase()));
       const semantics = `${state.intent || ""} ${[...riskClasses].join(" ")}`.toLowerCase();
-      const selected = selectedRepositories(id, state);
+      const selected = validationRepositories(id, state, dir);
       const mandatoryService = state.coupling === "coupled" || selected.length > 1 ||
         ["cross-repo-contract", "integration", "live", "queue", "resilience"]
           .some((capability) => v2Capabilities.has(capability)) ||
@@ -362,7 +371,7 @@ export function createChangeValidationRuntime({
       }
     }
 
-    const repositories = new Map(selectedRepositories(id, state)
+    const repositories = new Map(validationRepositories(id, state, dir)
       .map((repository) => [repository.id, repository]));
     const roles = new Set([
       "requirement", "backlog", "architecture", "contract", "composition-root",
@@ -553,15 +562,19 @@ export function createChangeValidationRuntime({
     if (state.status === "archived") fail(`change '${id}' is already archived`);
     const dir = source === "active" ? activeChangePath(id, state) : changePath(id);
     const missing = changeArtifactGaps(state, dir);
-    if (missing.length) fail(`missing change artifacts: ${missing.join(", ")}`);
+    const preflight = [];
+    if (missing.length)
+      preflight.push(`missing change artifacts: ${missing.join(", ")}`);
+    if (!["low", "medium", "high"].includes(state.impact || ""))
+      preflight.push(`resolve impact for '${id}'`);
+    if (!["isolated", "coupled"].includes(state.coupling || ""))
+      preflight.push(`resolve coupling for '${id}'`);
+    if (state.acceptance?.decision === "undecided")
+      preflight.push(`acceptance decision is unresolved for '${id}'; ask the user whether subjective human acceptance is required, then resolve with --acceptance-required or --acceptance-not-required`);
+    if (preflight.length)
+      fail(`change validation preflight failed:\n  - ${preflight.join("\n  - ")}`);
     assertNoScaffolds(state, dir);
     const grounding = groundingValue(id, state, dir);
-    if (!["low", "medium", "high"].includes(state.impact || ""))
-      fail(`resolve impact for '${id}'`);
-    if (!["isolated", "coupled"].includes(state.coupling || ""))
-      fail(`resolve coupling for '${id}'`);
-    if (state.acceptance?.decision === "undecided")
-      fail(`acceptance decision is unresolved for '${id}'; ask the user whether subjective human acceptance is required, then resolve with --acceptance-required or --acceptance-not-required`);
     assertNewCapabilitiesAreAdditive(id, dir);
     assertExistingCapabilityOperations(id, dir);
     assertNoDroppedScenarios(id, dir);
@@ -592,7 +605,7 @@ export function createChangeValidationRuntime({
 
     const claims = evidence(id, dir).claims;
     const claimById = new Map(claims.map((claim) => [claim.id, claim]));
-    const selectedRepositoryIds = new Set(selectedRepositories(id, state)
+    const selectedRepositoryIds = new Set(validationRepositories(id, state, dir)
       .map((repository) => repository.id));
     for (const claim of claims) {
       if (!["low", "medium", "high"].includes(claim.impact || ""))
@@ -672,7 +685,7 @@ export function createChangeValidationRuntime({
         fail(`task '${task.id}' references claim(s) outside repository '${metadata.repository}': ${outOfScopeClaims.join(", ")}`);
     }
 
-    const selected = selectedRepositories(id, state);
+    const selected = validationRepositories(id, state, dir);
     if (selected.length > 1) {
       const unscopedTasks = parsedTasks.filter((task) =>
         !/\[repo:[a-z0-9-]+\]/i.test(task.text));
@@ -757,8 +770,12 @@ export function createChangeValidationRuntime({
     // Guarded for the same reason as `advisoryCapabilities`: `reviewPolicy`
     // reads the changed surface, which a multi-repository change cannot resolve
     // until its sandboxes exist. A hint must never be able to fail validate.
+    let assurance = null;
     if (!options.quiet && changedSurfaceResolvable(id, state)) {
       const policy = reviewPolicy(id, state, evidence(id, dir));
+      assurance = reviewAssurancePosture(policy);
+      if (assurance)
+        console.error(`NOTE: review assurance posture: ${assurance.summary}`);
       if (policy.required && !policy.independenceWaived) {
         console.error("NOTE: this change requires review evidence; an independent reviewer must exist by Prove");
         console.error("  one-family project: select codex-sol or claude-opus and set review.diversity='single-model'; the reviewer still uses a distinct identity and fresh session");
@@ -766,6 +783,7 @@ export function createChangeValidationRuntime({
     }
     if (!options.quiet)
       console.log(`VALID ${id} (${state.schema}, ${claims.length} claims)\n  next: ${nextAfterValidate(state.status, id)}`);
+    return { version: 1, changeId: id, reviewAssurance: assurance };
   }
 
   function requiredProviders(id) {
@@ -918,7 +936,8 @@ export function createChangeValidationRuntime({
       providerCapability,
       knownProviders,
       commandExists,
-      stableHash
+      stableHash,
+      declaredSurface: state.declaredSurface || []
     });
   }
 

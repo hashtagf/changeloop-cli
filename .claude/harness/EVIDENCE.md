@@ -230,6 +230,13 @@ claim about what the command reads: name too little and a real code edit reuses
 evidence that never saw it. `proof plan` prints each provider's binding, and
 reuse is logged to `.foundation/logs/<change>/reuse.jsonl`.
 
+For an executable provider, every existing workspace-relative input file named
+directly by its command must be covered by `inputs` or by the change's declared
+surface. The configured `report` is an output and is excluded from this check.
+`evidence doctor` refuses incomplete wiring and names the uncovered file. This
+prevents a changed helper script from reusing evidence earned by its older
+bytes; add the script to `inputs` when it is part of the provider.
+
 A receipt records how it was produced. Receipts the harness executed carry
 `execution: "harness"` and their command log; everything recorded by hand is
 `execution: "manual"` and must include `--observed`, `--source` or `--reviewer`,
@@ -251,12 +258,13 @@ Reviewer independence is waived the same way and nowhere else: with
 `"review": { "independence": "self" }`, a reviewer may share an implementer's
 identity and session at any impact, the receipt still records the observed
 `review.policy.independent` as false alongside `independenceWaived`, and each
-waiver relaxes only its own axis. The shipped `foundation.json` requires both
-axes and configures fresh read-only Codex and Claude Code reviewer profiles,
-with Codex selected by default. A Codex-only or Claude-Code-only project may
-commit only the `single-model` diversity waiver while keeping identity/session
-independence required. The runtime also defaults to `required` when either key is
-absent. Risk routing bounds the circuit: low gets one full AI review; medium
+waiver relaxes only its own axis. The shipped `foundation.json` explicitly
+commits both waivers: `independence: "self"` and
+`diversity: "single-model"`. Claude Code Opus is the selected reviewer and
+Codex is the alternate. `doctor` and `change validate` expose the normalized
+posture and consequences; risk-tiered routing does not restore either assurance axis.
+A project may require either axis independently, and the runtime defaults
+an absent key to `required`. Risk routing bounds the circuit: low gets one full AI review; medium
 and high may use one full plus one finding-bound delta after one correction
 batch. High-risk decisions are settled in the initial Decision Sheet, so Prove
 has no mandatory human-final gate. Reviewer infrastructure failures receive one

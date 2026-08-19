@@ -5,21 +5,15 @@ argument-hint: <change>
 
 Build **$ARGUMENTS**.
 
-Validate; `sandbox create <change>` or `sandbox sync`; read `packet <change>
---phase build`. `--unattended` requires the runtime guard. Use `agents plan`
-only for multi-repo work.
+Validate; `sandbox create <change>` or `sandbox sync`; read the Build packet and
+`.claude/commands/references/build-policy.md`.
+Call `agents dispatch <change>` and obey its single action until
+`build-complete`. Run `run-in-session` locally. Before `spawn-group` or `wait`,
+read `.claude/commands/references/build-dispatch.md`. Relay `blocked`; at
+completion run `proof readiness`.
 
-Edit only allowed sandbox paths. Update `tasks.md` after focused checks. Move
-unauthorized infrastructure operations to `handoffs.yaml`; relay `handoff
-packet` once and never ask for credentials. Time long commands with `exec
-<change> -- <command>`.
-
-Host owns leases; workers receive only `packet --task <task>`. Declare new files
-in the owning task's `[paths:]`.
-
-Auto-repair findings inside the locked contract. Provider and permission
-failures follow typed recovery. Ask again only if behavior, compatibility,
-security, data, or rollout must change. Run `proof readiness <change>` before
-fresh Prove. Never replay history, expose raw JSON, archive, commit, or Land.
-Translate readiness; finish with behavior, checks, remaining risk, and next
-action. Ask only for structured decisions.
+Edit only allowed sandbox paths. Host owns leases and task ledger. Declare new
+files in `[paths:]`; move unauthorized operations to `handoffs.yaml`. Auto-repair
+in-contract findings and use typed recovery. Before fresh Prove, run readiness.
+Never replay history, expose raw JSON, archive, commit, or Land. Report
+behavior, checks, remaining risk, and next action.

@@ -112,6 +112,7 @@ claude-foundation doctor --stage prove --change <change>
 | `repos [change]` | Shows discovered topology, drift, and change selection | Setting up or diagnosing multi-repo work |
 | `models` | Shows portable model-tier mappings | Reviewing cost/quality routing |
 | `agents plan <change> [--group <n>] [--pretty]` | Persists the full plan and prints a ≤4 KiB summary or one dispatch group | Before spawning independent workers |
+| `agents dispatch <change> [--pretty]` | Returns one graph- and lease-bound native-host action | Driving the resumable Build loop |
 | `doctor` | Checks runtime and project readiness | After install or when diagnosing setup |
 | `changes` | Lists active changes and readiness | Finding work to resume or land |
 | `packet <change> --phase <phase>` | Prints a compact handoff; review packets are ≤8 KiB and exclude Build history | Starting Build, Prove, or independent Review |
@@ -146,6 +147,13 @@ claude-foundation doctor --stage prove --change <change>
 | `handoff packet <change> [--id H00n]` | Emits one credential-free operator packet | Sending the exact operation to its named owner |
 | `handoff record <change> ...` | Records accepted/completed/rejected with actor and evidence references | Resuming Land without turning operator work into a developer task |
 
+If the whole project directory moves, rerunning `sandbox create <change>` can
+rebind a recorded sandbox to the canonical `.foundation/sandboxes/<change>` in
+the new project location. Recovery requires the old path to be absent, the
+change marker and harness layout to match, and any recorded Git metadata to
+remain valid. A moved worktree with a broken Git pointer is refused and must be
+recreated.
+
 `--unattended` is a presence-only security flag. Valued and duplicate forms are
 rejected before telemetry or workspace mutation. The host first calls `sandbox
 challenge`, signs the canonical challenge with an Ed25519 key installed in a
@@ -173,6 +181,14 @@ diagnostics.
 
 ## Repository and model execution
 
+For multi-repository work, resolve contracts in this order: project topology →
+change read/write selection → task ownership/dependencies → sandbox creation →
+provider repository scope → proof readiness → Land order. Do not begin with
+provider wiring or worker assignment; both consume the earlier scopes and must
+not invent missing repositories. The user confirms write scope and external
+commit decisions. The agent owns manifests, runtime commands, recovery, and a
+plain-language report of what was read, written, proven, and still waiting.
+
 The committed `openspec/repositories.yaml` describes root, submodule, Git, and
 external nodes. A monorepo remains one Git repository and uses task path scopes
 rather than pretending packages are independently landable remotes.
@@ -197,6 +213,14 @@ summary, or one group selected with `--group`. `packet --task` emits only the
 chosen task's claims, files, providers, and model. A small one-repository change
 recommends one agent. The plan is advice and bounded authority for the native
 host; the harness does not invoke a model itself.
+
+`agents dispatch` derives the next host action from that plan plus current task
+leases. It returns `run-in-session`, `spawn-group`, `wait`, `blocked`, or
+`build-complete`. A live lease always returns `wait`, so a restarted host does
+not duplicate a worker it cannot prove abandoned. For a spawn group, the host
+acquires each lease, regenerates the now-leased task packet, and gives the
+native worker only that packet and repository state. Foundation still never
+starts a model process itself.
 
 JSON output is compact by default and `--pretty` is inspection-only. Plan
 schema 4 compiles a deterministic task/provider/repository/Land graph, resumes dependencies satisfied by completed tasks, reports

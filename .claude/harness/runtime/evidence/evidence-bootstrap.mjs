@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 
 const PROVIDER_SCRIPT_ALIASES = {
   "static-analysis": ["check", "typecheck", "type-check", "lint"],
@@ -48,6 +48,32 @@ function packageScriptRisk(tooling, script) {
     .filter((name) => riskyPackageScript(tooling.scripts[name]));
 }
 
+export function safePackageScriptInputs(workspace, raw, declaredSurface = []) {
+  const scripts = (Array.isArray(raw) ? raw : [raw]).map((value) => String(value || ""));
+  if (!declaredSurface.length || scripts.some((value) => /[;&|$`()<>"']/.test(value)))
+    return [];
+  const files = scripts.flatMap((value) =>
+    value.trim().split(/\s+/).slice(1)).flatMap((token) => {
+    if (!token || token.startsWith("-") || isAbsolute(token) ||
+        token.split(/[\\/]+/).includes("..")) return [];
+    const rel = token.replaceAll("\\", "/").replace(/^\.\/+/, "");
+    try { return existsSync(join(workspace, rel)) && statSync(join(workspace, rel)).isFile()
+      ? [rel] : []; }
+    catch { return []; }
+  });
+  return files.length
+    ? [...new Set([...declaredSurface, "package.json", ...files])].sort() : [];
+}
+
+function candidateInputs(tooling, script, repository, declaredSurface) {
+  const lifecycle = [`pre${script}`, script, `post${script}`]
+    .filter((name) => typeof tooling.scripts[name] === "string")
+    .map((name) => tooling.scripts[name]);
+  const inputs = safePackageScriptInputs(repository.workspacePath,
+    lifecycle, declaredSurface);
+  return inputs.length ? { inputs } : {};
+}
+
 function packageTooling(workspace, repository, warnings) {
   const path = join(workspace, "package.json");
   const packageJson = readJsonCandidate(path, warnings,
@@ -78,7 +104,7 @@ function providerCandidate(provider, capability, repository, repositoryCount,
   };
 }
 
-function testCandidates(tooling, repository, repositoryCount) {
+function testCandidates(tooling, repository, repositoryCount, declaredSurface) {
   if (!tooling) return [];
   const { dependencies, scripts, manager } = tooling;
   const script = scripts.test ? "test" :
@@ -114,6 +140,7 @@ function testCandidates(tooling, repository, repositoryCount) {
   return [providerCandidate(null, "test", repository, repositoryCount, {
     adapter: "test-discovery",
     command: packageScriptCommand(manager, script, framework.args),
+    ...candidateInputs(tooling, script, repository, declaredSurface),
     minimum: 1,
     reportFormat: framework.reportFormat || "auto"
   }, source, repositoryCount === 1 ? "high" : "review",
@@ -122,7 +149,7 @@ function testCandidates(tooling, repository, repositoryCount) {
     : `structured ${framework.name} output; multi-repository discovery wiring requires review`)];
 }
 
-function browserCandidates(tooling, repository, repositoryCount) {
+function browserCandidates(tooling, repository, repositoryCount, declaredSurface) {
   if (!tooling) return [];
   const { dependencies, scripts, manager } = tooling;
   if (!dependencies["@playwright/test"] && !dependencies.playwright) return [];
@@ -133,11 +160,12 @@ function browserCandidates(tooling, repository, repositoryCount) {
   return [providerCandidate(null, "browser", repository, repositoryCount, {
     adapter: "playwright",
     command: packageScriptCommand(manager, script),
+    ...candidateInputs(tooling, script, repository, declaredSurface),
     inputMode: "browser-automation"
   }, `package.json#scripts.${script}`, "high", "project-owned Playwright script")];
 }
 
-function scriptCandidates(capability, tooling, repository, repositoryCount) {
+function scriptCandidates(capability, tooling, repository, repositoryCount, declaredSurface) {
   if (!tooling) return [];
   const aliases = PROVIDER_SCRIPT_ALIASES[capability] || [];
   const matches = aliases.filter((name) => typeof tooling.scripts[name] === "string");
@@ -152,7 +180,8 @@ function scriptCandidates(capability, tooling, repository, repositoryCount) {
   const preferred = capability === "static-analysis" && safe.length === 1 && safe[0] !== "check"
     ? safe[0] : null;
   return safe.map((name) => providerCandidate(null, capability, repository, repositoryCount, {
-    adapter: "command", command: packageScriptCommand(tooling.manager, name)
+    adapter: "command", command: packageScriptCommand(tooling.manager, name),
+    ...candidateInputs(tooling, name, repository, declaredSurface)
   }, `package.json#scripts.${name}`, name === preferred ? "high" : "alternative",
   safe.length > 1 ? `alternatives detected: ${safe.join(", ")}` : "project-owned package script"));
 }
@@ -167,7 +196,7 @@ function capabilityRepositories(capability, repositories, contract) {
 
 export function detectEvidenceWiring({
   id, root, contract, repositories, required, providerConfig, providerCapability,
-  knownProviders, commandExists, stableHash
+  knownProviders, commandExists, stableHash, declaredSurface = []
 }) {
   const warnings = [];
   const tooling = new Map(repositories.map((repository) => [
@@ -201,10 +230,10 @@ export function detectEvidenceWiring({
     let found = false;
     for (const repository of targets) {
       const packageInfo = tooling.get(repository.id);
-      const rows = capability === "test" ? testCandidates(packageInfo, repository, repositories.length) :
-        capability === "browser" ? browserCandidates(packageInfo, repository, repositories.length) :
+      const rows = capability === "test" ? testCandidates(packageInfo, repository, repositories.length, declaredSurface) :
+        capability === "browser" ? browserCandidates(packageInfo, repository, repositories.length, declaredSurface) :
         capability === "discovery" ? [] :
-        scriptCandidates(capability, packageInfo, repository, repositories.length);
+        scriptCandidates(capability, packageInfo, repository, repositories.length, declaredSurface);
       if (rows.length) {
         found = true;
         candidates.push(...rows.map((row) =>

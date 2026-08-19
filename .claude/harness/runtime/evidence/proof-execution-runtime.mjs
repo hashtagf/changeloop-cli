@@ -81,6 +81,7 @@ export function createProofExecutionRuntime({
       // or an external-evidence wait. `executedProviders` is per invocation;
       // persisting it would make the next unchanged wait look like progress.
       providers: [...(outcome.providers || [])].sort(),
+      subjectHash: outcome.subjectHash || null,
       recoveryDecisionRef: outcome.recoveryDecisionRef || null,
       updatedAt: now()
     };
@@ -91,6 +92,7 @@ export function createProofExecutionRuntime({
       stage: value.stage || null,
       requestIds: [...(value.requestIds || [])].sort(),
       providers: [...(value.providers || [])].sort(),
+      subjectHash: value.subjectHash || null,
       recoveryDecisionRef: value.recoveryDecisionRef || null
     });
     const progressed = comparable(prior) !== comparable(next);
@@ -380,8 +382,55 @@ export function createProofExecutionRuntime({
   }
 
   function currentProviderHash(id, provider, workspaceHash) {
-    return providerConfig(id, provider)?.repository
-      ? providerWorkspaceHash(id, provider) : workspaceHash;
+    return providerWorkspaceHash(id, provider, workspaceHash) || workspaceHash;
+  }
+
+  function reviewRepairBatch(id) {
+    const latestReview = deliveredAiAttempts(id).at(-1) || null;
+    const findings = (latestReview?.findings || [])
+      .filter((finding) => ["blocker", "major"].includes(finding.severity));
+    return findings.length ? {
+      version: 1,
+      kind: "review-findings",
+      attemptDigest: latestReview.digest,
+      workspaceHash: latestReview.workspaceHash,
+      findingIds: findings.map((finding) => finding.id).sort(),
+      findings: findings.slice(0, 8)
+    } : null;
+  }
+
+  function writeReviewRepairStop(id, readiness, advanceStart, {
+    requests = [], failures = [], executedProviders = []
+  } = {}) {
+    const reviewProvider = requiredProviders(id).find((provider) =>
+      providerCapability(provider, providerConfig(id, provider)) === "review") || "review";
+    const subjectHash = currentProviderHash(
+      id, reviewProvider, readiness.workspaceHash);
+    const repairBatch = reviewRepairBatch(id);
+    const noProgress = advanceStart.stage === "review-rejected" &&
+      advanceStart.subjectHash === subjectHash;
+    return writeAdvance(id, {
+      version: 1,
+      changeId: id,
+      command: "proof advance",
+      status: noProgress ? "REPAIR_NOT_PROGRESSING" : "ACTION_REQUIRED",
+      route: repairBatch ? "AUTO_REPAIR" : "CONTRACT_DECISION_REQUIRED",
+      stage: "review-rejected",
+      completed: false,
+      workspaceHash: readiness.workspaceHash,
+      subjectHash,
+      failures,
+      requests,
+      repairBatch,
+      executedProviders,
+      next: noProgress ? [] : [{
+        kind: "correct-workspace",
+        reason: repairBatch
+          ? "Repair the bounded blocker/major finding batch; the Build packet carries the same repair context."
+          : "The review was inconclusive or errored. Repair its infrastructure or make a contract decision before another request.",
+        command: `claude-foundation packet ${id} --phase build`
+      }]
+    });
   }
 
   function missingByCapability(id, readiness, capability) {
@@ -465,6 +514,7 @@ export function createProofExecutionRuntime({
   }
 
   async function advanceUnlocked(id, flags = {}) {
+    const advanceStart = readAdvance(id);
     let readiness = proofReadinessValue(id, "prove");
     const audit = proofAudit(id, true);
     let forcedSnapshot = null;
@@ -515,7 +565,11 @@ export function createProofExecutionRuntime({
       const capabilities = new Set(failedEvidence.map((row) => row.capability));
       const stage = capabilities.has("review") ? "review-rejected"
         : capabilities.has("acceptance") ? "acceptance-rejected" : "evidence-failed";
-      const outcome = writeAdvance(id, {
+      const outcome = capabilities.has("review")
+        ? writeReviewRepairStop(id, readiness, advanceStart, {
+            failures: failedEvidence
+          })
+        : writeAdvance(id, {
         version: 1,
         changeId: id,
         command: "proof advance",
@@ -531,7 +585,7 @@ export function createProofExecutionRuntime({
           reason: "A provider returned or retained a terminal invalid result. Correct the implementation, evidence, or authority provenance before advancing again.",
           command: `claude-foundation packet ${id} --phase build`
         }]
-      });
+        });
       markBlocked();
       process.exitCode = 2;
       return printOutcome(outcome);
@@ -544,21 +598,8 @@ export function createProofExecutionRuntime({
       id, reviewProviders, readiness.workspaceHash,
       ["rejected"], authorityRequests);
     if (rejected.length) {
-      const outcome = writeAdvance(id, {
-        version: 1,
-        changeId: id,
-        command: "proof advance",
-        status: "ACTION_REQUIRED",
-        stage: "review-rejected",
-        completed: false,
-        workspaceHash: readiness.workspaceHash,
-        requests: rejected,
-        executedProviders: [],
-        next: [{
-          kind: "correct-workspace",
-          reason: "The current workspace was rejected. Correct it before spending another review attempt.",
-          command: `claude-foundation packet ${id} --phase build`
-        }]
+      const outcome = writeReviewRepairStop(id, readiness, advanceStart, {
+        requests: rejected
       });
       markBlocked();
       process.exitCode = 2;
@@ -706,7 +747,8 @@ export function createProofExecutionRuntime({
     if (delivered.length >= 2 && delivered.at(-1)?.resultStatus === "fail" &&
         boundedReviewProviders.length) {
       const closures = boundedReviewProviders.map((provider) =>
-        recordDeterministicReviewClosure(id, provider, readiness.workspaceHash))
+        recordDeterministicReviewClosure(id, provider,
+          currentProviderHash(id, provider, readiness.workspaceHash)))
         .filter(Boolean);
       const blockedClosures = closures.filter((row) => !row.closed);
       if (blockedClosures.length) {
@@ -764,21 +806,8 @@ export function createProofExecutionRuntime({
         id, reviewProviders, readiness.workspaceHash,
         ["rejected"], authorityRequests);
       if (terminal.length) {
-        const outcome = writeAdvance(id, {
-          version: 1,
-          changeId: id,
-          command: "proof advance",
-          status: "ACTION_REQUIRED",
-          stage: "review-rejected",
-          completed: false,
-          workspaceHash: readiness.workspaceHash,
-          requests: terminal,
-          executedProviders,
-          next: [{
-            kind: "correct-workspace",
-            reason: "Review failed, was inconclusive, or errored for this workspace. Correct or explicitly re-plan before another request.",
-            command: `claude-foundation packet ${id} --phase build`
-          }]
+        const outcome = writeReviewRepairStop(id, readiness, advanceStart, {
+          requests: terminal, executedProviders
         });
         markBlocked();
         process.exitCode = 2;

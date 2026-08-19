@@ -18,6 +18,7 @@ writeFileSync(join(fixture, "activation.mjs"), "export const enabled = true;\n")
 const digest = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 const stableHash = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const fail = (message) => { throw new Error(message); };
+const repositorySelections = [];
 const state = { id: "change-a", groundingRequired: true, status: "change",
   intent: "bounded change", impact: "medium", coupling: "isolated" };
 let contract = {
@@ -56,7 +57,10 @@ try {
     loadRuntime: () => state,
     saveRuntime: () => {},
     evidence: () => contract,
-    selectedRepositories: () => [{ id: "root", workspacePath: fixture }],
+    selectedRepositories: (...args) => {
+      repositorySelections.push(args);
+      return [{ id: "root", workspacePath: fixture }];
+    },
     providerCapability: () => null,
     providerConfig: () => null,
     resolvedAcceptance: () => ({ required: false, claimIds: [] }),
@@ -80,6 +84,20 @@ try {
 
   writeGrounding(valid());
   assert.equal(runtime.groundingValue("change-a", state, packet).firstLock, true);
+  assert.deepEqual(repositorySelections.at(-1)[3], {
+    changeDir: packet,
+    useTargetPaths: true
+  }, "root validation selects repositories from the root packet and target tree");
+
+  const sandboxPacket = join(fixture, "sandbox-change");
+  mkdirSync(sandboxPacket, { recursive: true });
+  writeFileSync(join(sandboxPacket, "grounding.yaml"),
+    `${JSON.stringify(valid(), null, 2)}\n`);
+  assert.equal(runtime.groundingValue("change-a", state, sandboxPacket).firstLock, true);
+  assert.deepEqual(repositorySelections.at(-1)[3], {
+    changeDir: sandboxPacket,
+    useTargetPaths: false
+  }, "active validation selects repositories from the active packet and sandbox tree");
 
   const missing = valid();
   missing.claims[0].productionPath[0].path = "missing.mjs";

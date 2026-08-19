@@ -23,6 +23,7 @@ export function createApplyRuntime({
   changePath,
   safeRootPath,
   pathIdentity,
+  pathMode,
   directoryHash,
   applyTransactionRoot,
   copyPath,
@@ -82,9 +83,10 @@ export function createApplyRuntime({
     return state.workspace?.baseHead || "HEAD";
   }
 
-  function sandboxDiffNames(id, sandboxPath, state) {
+  function sandboxDiffNames(id, sandboxPath, state, paths = applyPathspec(id, state)) {
+    if (!paths.length) return [];
     const names = git(["diff", "--name-only", "-z", sandboxBase(state), "--",
-      ...applyPathspec(id, state)], sandboxPath);
+      ...paths], sandboxPath);
     if (names.status !== 0) fail(`cannot inspect sandbox paths: ${names.stderr.trim()}`);
     return names.stdout.split("\0").filter(Boolean).sort();
   }
@@ -92,10 +94,19 @@ export function createApplyRuntime({
   function gitApplyInputs(id, sandboxPath) {
     git(["add", "-N", "."], sandboxPath);
     const state = loadRuntime(id);
-    const pathspec = applyPathspec(id, state);
+    const names = sandboxDiffNames(id, sandboxPath, state);
+    // A previous recovery may already have copied a proven file into the
+    // target before the transaction was recorded. Treat an exact desired-byte
+    // match as already applied. Running `git apply --check` first rejects that
+    // harmless state as "patch does not apply" and forces a manual rewrite of
+    // an already-correct file.
+    const pending = names.filter((path) =>
+      pathIdentity(join(root, path)) !== pathIdentity(join(sandboxPath, path)) ||
+      pathMode(join(root, path)) !== pathMode(join(sandboxPath, path)));
+    if (!pending.length) return names;
     // gitBuffer, not git: a UTF-8 decode of the binary diff corrupts non-UTF-8
     // content and makes `apply --check` report phantom conflicts.
-    const diff = gitBuffer(["diff", "--binary", sandboxBase(state), "--", ...pathspec], sandboxPath);
+    const diff = gitBuffer(["diff", "--binary", sandboxBase(state), "--", ...pending], sandboxPath);
     if (diff.status !== 0) fail("cannot inspect sandbox diff");
     if (!diff.stdout.length) {
       if (state.repositories && Object.keys(state.repositories).length > 1) return [];
@@ -106,7 +117,6 @@ export function createApplyRuntime({
     });
     if (check.status !== 0)
       fail(`sandbox diff conflicts with target: ${check.stderr.trim()}`);
-    const names = sandboxDiffNames(id, sandboxPath, state);
     // `apply --check` validates the patch textually, but application copies
     // whole files — so a target file carrying uncommitted edits the sandbox
     // never saw would be silently overwritten. Two changes landed sequentially
@@ -121,7 +131,7 @@ export function createApplyRuntime({
       if (!stats) return null;
       return stats.isSymbolicLink() ? Buffer.from(readlinkSync(path)) : readFileSync(path);
     };
-    const clobbered = names.filter((path) => {
+    const clobbered = pending.filter((path) => {
       const target = workingBlob(join(root, path));
       if (target === null) return false;
       const sandboxContent = workingBlob(join(sandboxPath, path));
@@ -134,6 +144,8 @@ export function createApplyRuntime({
         (clobbered.length > 10 ? ", ..." : "");
       fail(`apply would overwrite uncommitted target edits at: ${listed} — commit or reconcile the landed work first, then sync the sandbox and prove again`);
     }
+    // Return every changed path, including exact pre-applied paths. They become
+    // no-op journal entries so later recovery still verifies their presence.
     return names;
   }
 
@@ -155,10 +167,14 @@ export function createApplyRuntime({
     if (state.workspace.mode === "copy") {
       const baseline = state.workspace.baseline || {};
       const target = workspaceManifest(root, id, true);
+      const sandbox = workspaceManifest(sandboxPath, id, true);
       codePaths = copyCodePaths(id, state);
-      for (const path of codePaths)
-        if ((target[path] ?? null) !== (baseline[path] ?? null))
+      for (const path of codePaths) {
+        if ((target[path] ?? null) !== (baseline[path] ?? null) &&
+            ((target[path] ?? null) !== (sandbox[path] ?? null) ||
+             pathMode(join(root, path)) !== pathMode(join(sandboxPath, path))))
           fail(`isolated-copy conflict at '${path}'`);
+      }
     } else if (state.workspace.mode === "worktree") {
       assertTargetHeadUnmoved(id, state);
       codePaths = gitApplyInputs(id, sandboxPath);
@@ -172,7 +188,9 @@ export function createApplyRuntime({
         path: rel,
         role: "code",
         before: pathIdentity(target),
-        after: pathIdentity(source)
+        beforeMode: pathMode(target),
+        after: pathIdentity(source),
+        afterMode: pathMode(source)
       };
     });
     const changeRel = currentChangeRelativePath(id);
@@ -180,7 +198,9 @@ export function createApplyRuntime({
       path: changeRel,
       role: "change-artifacts",
       before: pathIdentity(changePath(id)),
-      after: pathIdentity(join(sandboxPath, changeRel))
+      beforeMode: pathMode(changePath(id)),
+      after: pathIdentity(join(sandboxPath, changeRel)),
+      afterMode: pathMode(join(sandboxPath, changeRel))
     });
     return entries;
   }
@@ -217,7 +237,10 @@ export function createApplyRuntime({
         path: rel,
         role: prior?.role || (rel === changeRel ? "change-artifacts" : "code"),
         before: prior ? prior.after : pathIdentity(safeRootPath(rel)),
-        after: pathIdentity(resolve(sandboxPath, rel))
+        beforeMode: prior && Object.prototype.hasOwnProperty.call(prior, "afterMode")
+          ? prior.afterMode : pathMode(safeRootPath(rel)),
+        after: pathIdentity(resolve(sandboxPath, rel)),
+        afterMode: pathMode(resolve(sandboxPath, rel))
       };
     });
   }
@@ -265,7 +288,8 @@ export function createApplyRuntime({
       status: "prepared",
       sandboxPath: state.workspace.path,
       targetPath: root,
-      projectionHash: stableHash(entries.map(({ path, after }) => ({ path, after }))),
+      projectionHash: stableHash(entries.map(({ path, after, afterMode }) =>
+        ({ path, after, afterMode }))),
       entries,
       appliedPaths: [],
       inFlightPaths: [],
@@ -284,13 +308,16 @@ export function createApplyRuntime({
     for (const entry of journal.entries) {
       const source = resolve(state.workspace.path, entry.path);
       const expected = pathIdentity(source);
+      const expectedMode = pathMode(source);
       const current = pathIdentity(safeRootPath(entry.path));
-      if (current !== expected)
+      const currentMode = pathMode(safeRootPath(entry.path));
+      if (current !== expected || currentMode !== expectedMode)
         fail(`cannot refresh diverged applied path '${entry.path}'`);
       entry.after = expected;
+      entry.afterMode = expectedMode;
     }
     journal.projectionHash = stableHash(
-      journal.entries.map(({ path, after }) => ({ path, after }))
+      journal.entries.map(({ path, after, afterMode }) => ({ path, after, afterMode }))
     );
     journal.proofRunId = readJson(proofPath(state.id)).proofRunId;
     journal.status = "verified";
@@ -320,7 +347,8 @@ export function createApplyRuntime({
       const verification = verifyAppliedProjection(state);
       if (!verification.valid) fail(`applied projection is invalid: ${verification.reason}`);
       prepared = buildReapplyEntries(id, state, verification.journal);
-      const desired = stableHash(prepared.map(({ path, after }) => ({ path, after })));
+      const desired = stableHash(prepared.map(({ path, after, afterMode }) =>
+        ({ path, after, afterMode })));
       if (desired === state.workspace.apply.projectionHash) {
         console.log(`APPLIED ${id}\n  resumed: ${state.workspace.apply.transactionId}`);
         return;
@@ -328,7 +356,8 @@ export function createApplyRuntime({
     }
     const journal = prepareApplyTransaction(id, state, prepared);
     const changed = journal.entries.find((entry) =>
-      pathIdentity(safeRootPath(entry.path)) !== entry.before);
+      pathIdentity(safeRootPath(entry.path)) !== entry.before ||
+      pathMode(safeRootPath(entry.path)) !== entry.beforeMode);
     if (changed) {
       journal.status = "aborted";
       journal.failure = `target changed before apply at '${changed.path}'`;
@@ -352,7 +381,8 @@ export function createApplyRuntime({
       journal.entries.forEach((entry, index) =>
         applyTransactionEntry(journal, entry, index));
       const mismatch = journal.entries.find((entry) =>
-        pathIdentity(safeRootPath(entry.path)) !== entry.after);
+        pathIdentity(safeRootPath(entry.path)) !== entry.after ||
+        pathMode(safeRootPath(entry.path)) !== entry.afterMode);
       if (mismatch) throw new Error(`post-apply projection mismatch at '${mismatch.path}'`);
       state = loadRuntime(id);
       state.workspace = {

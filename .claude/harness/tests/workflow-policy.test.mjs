@@ -11,6 +11,7 @@ import { createReviewAttemptStore } from "../runtime/evidence/review-attempt-sto
 import { createReviewProtocol } from "../runtime/evidence/review-protocol.mjs";
 import { createAuthorityStore } from "../runtime/workflow/authority.mjs";
 import { createAuthorityRuntime } from "../runtime/workflow/authority-runtime.mjs";
+import { reviewAssurancePosture } from "../runtime/core/runtime-environment.mjs";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const canonical = (value) => Array.isArray(value)
@@ -40,6 +41,50 @@ const quiet = (fn) => {
 };
 
 try {
+  const bothWaived = reviewAssurancePosture({
+    review: { independence: "self", diversity: "single-model" }
+  });
+  assert.deepEqual(bothWaived.waivers,
+    ["reviewer-independence", "model-diversity"]);
+  assert.match(bothWaived.summary, /review may be non-independent/);
+  assert.match(bothWaived.summary, /same model family/);
+
+  const fullySeparated = reviewAssurancePosture({
+    review: { independence: "required", diversity: "required" }
+  });
+  assert.deepEqual(fullySeparated.waivers, []);
+  assert.equal(fullySeparated.independence.required, true);
+  assert.equal(fullySeparated.diversity.required, true);
+  assert.match(fullySeparated.summary, /no committed assurance waivers/);
+
+  const independenceOnly = reviewAssurancePosture({
+    review: { independence: "self", diversity: "required" }
+  });
+  assert.deepEqual(independenceOnly.waivers, ["reviewer-independence"]);
+  assert.equal(independenceOnly.diversity.required, true);
+
+  const diversityOnly = reviewAssurancePosture({
+    review: { independence: "required", diversity: "single-model" }
+  });
+  assert.deepEqual(diversityOnly.waivers, ["model-diversity"]);
+  assert.equal(diversityOnly.independence.required, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(diversityOnly)), diversityOnly,
+    "review assurance posture is a stable JSON contract");
+
+  const preferredForChange = reviewAssurancePosture({
+    review: { independence: "required", diversity: "required" }
+  }, { independence: "required", diversity: "preferred" });
+  assert.equal(preferredForChange.diversity.required, false);
+  assert.equal(preferredForChange.diversity.waived, false);
+  assert.deepEqual(preferredForChange.waivers, []);
+  assert.match(preferredForChange.summary, /model diversity preferred/);
+
+  const activeSingleModelWaiver = reviewAssurancePosture({
+    review: { independence: "required", diversity: "single-model" }
+  }, { independence: "required", diversity: "preferred", diversityWaived: true });
+  assert.equal(activeSingleModelWaiver.diversity.waived, true);
+  assert.deepEqual(activeSingleModelWaiver.waivers, ["model-diversity"]);
+
   let packetSequence = 0;
   let packetMode = "code";
   let riskTier = null;
@@ -803,10 +848,12 @@ try {
     /High\s+asks material risk decisions in the initial Decision Sheet/i);
   assert.match(feature, /never dispatch a\s+third AI/i);
   const agentContract = readFileSync(join(root, ".claude/harness/AGENT.md"), "utf8");
+  const runtimeApi = readJson(join(root, ".claude/harness/protocol.json")).runtimeApi;
   assert.match(agentContract, /Before developer work, verify Foundation/i);
-  assert.match(agentContract, /runtime API `22`/);
+  assert.match(agentContract, new RegExp("runtime API `" + runtimeApi + "`"));
   const developerSetup = readFileSync(
     join(root, ".claude/harness/DEVELOPER-SETUP.md"), "utf8");
+  assert.match(developerSetup, new RegExp("runtime API\\s+is `" + runtimeApi + "`"));
   assert.match(developerSetup, /scripts\/install-foundation-runtime\.mjs/);
   assert.match(developerSetup, /Node\.js 20\.19 or later/);
   const policy = readJson(join(root, "foundation.json"));

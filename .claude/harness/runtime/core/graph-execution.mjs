@@ -3,6 +3,19 @@ import { findCyclePath } from "./graph.mjs";
 export const EXECUTION_GRAPH_VERSION = 2;
 export const NODE_DATA_SCHEMA = Object.freeze({ name: "foundation.node-data", version: 1 });
 
+// A single host session is valid execution authority when all Build work is
+// confined to one repository and carries no cross-repository claim or shared
+// external resource. Task count is not an authority boundary: the documented
+// single-repository /build path does not dispatch workers merely because the
+// packet split the work into more than two checklist entries.
+export function singleAgentExecutionEligible(tasks = [], claims = []) {
+  return tasks.length > 0 &&
+    new Set(tasks.map((task) => task.repository)).size === 1 &&
+    !claims.some((claim) => (claim.repositories || []).length > 1) &&
+    !tasks.some((task) => (task.resources || [])
+      .some((resource) => !resource.startsWith("workspace:")));
+}
+
 function sorted(values) {
   return [...new Set((values || []).filter(Boolean))].sort();
 }

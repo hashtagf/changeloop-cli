@@ -38,6 +38,7 @@ import {
 import { createProcessRuntime } from "./runtime/core/process-runtime.mjs";
 import { createInstructionRecorder } from "./runtime/core/instruction-recorder.mjs";
 import { createAgentPlanner, createModelRouter } from "./runtime/workflow/agent-planning.mjs";
+import { createAgentDispatchRuntime } from "./runtime/workflow/agent-dispatch.mjs";
 import { createSandboxRuntime } from "./runtime/workflow/sandbox-runtime.mjs";
 import { createSandboxCleanup } from "./runtime/workflow/sandbox-cleanup.mjs";
 import {
@@ -89,8 +90,8 @@ import {
 } from "./runtime/evidence/provider-catalog.mjs";
 import { SECURITY_TERMS } from "./runtime/workflow/security-policy.mjs";
 
-const VERSION = "3.3.0";
-const RUNTIME_API_VERSION = "23";
+const VERSION = "3.3.1";
+const RUNTIME_API_VERSION = "24";
 // Checked here, at load, rather than only inside `doctor`: a torn install —
 // this file from one revision, runtime/** from another — otherwise passed
 // every command up to `archive` and then threw partway through Land.
@@ -101,13 +102,13 @@ if (RUNTIME_MODULE_API !== RUNTIME_API_VERSION) {
     "is a mixture of two revisions. Reinstall it with 'claude-foundation init <project>'.");
   process.exit(1);
 }
-const PROVIDER_PROTOCOL_VERSION = "10";
+const PROVIDER_PROTOCOL_VERSION = "11";
 const ADAPTER_PROTOCOL_VERSION = "5";
 const PROOF_PROTOCOL_VERSION = "7";
 const PACKET_SCHEMA_VERSION = "7";
 const AGENT_PLAN_SCHEMA_VERSION = "4";
 const CONTEXT_EVENT_SCHEMA_VERSION = "2";
-const REVIEW_PROTOCOL_VERSION = "3";
+const REVIEW_PROTOCOL_VERSION = "4";
 const ACCEPTANCE_PROTOCOL_VERSION = "2";
 const REVIEW_PACKET_SCHEMA_VERSION = "4";
 const ATTESTATION_PROTOCOL_VERSION = "1";
@@ -217,7 +218,8 @@ const {
   protocolDescriptor,
   commandExists,
   playwrightAvailability,
-  foundationPolicy
+  foundationPolicy,
+  reviewAssurancePosture
 } = createRuntimeEnvironment({
   root: ROOT,
   // During Foundation's own Build, state remains pinned to the control root
@@ -554,6 +556,8 @@ const evidenceContract = createEvidenceContract({
   policyCapabilities,
   foundationPolicy,
   handoffContract,
+  git,
+  declaredSurfaceMatcher,
   die
 });
 const {
@@ -633,6 +637,7 @@ const changeValidationRuntime = createChangeValidationRuntime({
   providerConfig,
   resolvedAcceptance,
   reviewPolicy,
+  reviewAssurancePosture,
   policyCapabilities,
   policyCapabilityTrigger,
   changedSurfaceResolvable,
@@ -838,6 +843,7 @@ const packetRuntime = createPacketRuntime({
   reviewPolicy,
   resolvedAcceptance,
   handoffReadiness,
+  deliveredAiAttempts,
   serializedJson,
   foundationPolicy,
   recordContextMetric,
@@ -980,6 +986,16 @@ const {
   fail: die
 });
 const {
+  showDispatch: showAgentDispatch
+} = createAgentDispatchRuntime({
+  agentPlanValue,
+  activeChangeLeases,
+  stableHash,
+  policy: foundationPolicy,
+  serializedJson,
+  fail: die
+});
+const {
   activeWorkRecovery,
   changedSurfaceIssues,
   codeChangeRecovery,
@@ -1075,6 +1091,7 @@ const sandboxRuntime = createSandboxRuntime({
   taskBlocks,
   proofPath,
   relevantHash,
+  now,
   fail: die
 });
 const {
@@ -1158,6 +1175,7 @@ const {
   protocolDescriptor,
   repositoryCatalog,
   foundationPolicy,
+  reviewAssurancePosture,
   isolationInspection,
   openSpecCliStatus,
   loadRuntime,
@@ -1185,6 +1203,7 @@ const {
 });
 const {
   pathIdentity,
+  pathMode,
   safeRootPath,
   copyPath,
   transactionRoot: applyTransactionRoot,
@@ -1395,6 +1414,7 @@ const applyRuntime = createApplyRuntime({
   changePath,
   safeRootPath,
   pathIdentity,
+  pathMode,
   directoryHash,
   applyTransactionRoot,
   copyPath,
@@ -1489,7 +1509,7 @@ operationName = command || null;
 const namedChange = (value) =>
   typeof value === "string" && !value.startsWith("-") ? value : null;
 operationChangeId = command === "sandbox" ? namedChange(values[1]) :
-  ["resolve", "validate", "audit-change", "hash", "packet", "agent-plan", "agent-task", "agent-acquire", "agent-release", "metrics", "budget-continue", "proof-plan", "proof-readiness", "proof-advance", "proof-run", "proof-collect", "proof-preflight", "proof-execute", "proof-audit", "evidence-upgrade", "evidence-verify-ci", "authority-request", "authority-dispatch", "authority-run", "authority-abort", "authority-status", "authority-record", "authority-reset-infra", "receipt", "run-provider", "prove",
+  ["resolve", "validate", "audit-change", "hash", "packet", "agent-plan", "agent-dispatch", "agent-task", "agent-acquire", "agent-release", "metrics", "budget-continue", "proof-plan", "proof-readiness", "proof-advance", "proof-run", "proof-collect", "proof-preflight", "proof-execute", "proof-audit", "evidence-upgrade", "evidence-verify-ci", "authority-request", "authority-dispatch", "authority-run", "authority-abort", "authority-status", "authority-record", "authority-reset-infra", "receipt", "run-provider", "prove",
     "evidence-detect", "evidence-init", "evidence-doctor", "handoff-status", "handoff-packet", "handoff-record", "land-check", "land-plan", "land-record", "land-pointers", "land-resume", "archive", "event", "telemetry-sync", "telemetry-import"].includes(command) ? namedChange(values[0]) : null;
 operationStatusAtStart = operationChangeId
   ? readJson(runtimePath(operationChangeId), {}).status ?? null : null;
@@ -1526,6 +1546,7 @@ await routeRuntimeCommand(command, values, {
   showRepositories,
   foundationPolicy,
   showAgentPlan,
+  showAgentDispatch,
   showAgentTask,
   acquireAgentLease,
   releaseAgentLease,

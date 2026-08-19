@@ -33,12 +33,16 @@ phase context comes from `FOUNDATION_ACTIVE_PHASE` or `.foundation/logs/`.
 
 ## Host wiring
 
-| Host | Wiring | Coverage |
-|---|---|---|
-| Claude Code | `.claude/settings.json` hook events (installed automatically) | All guards, live |
-| OpenCode | `.opencode/plugins/foundation.js` (placed by the OpenCode adapter install) replays these hooks via `tool.execute.before/after` | secrets + phase guards live; lint on edit; session digest not injected |
-| Cursor | none — Cursor has no tool hooks | Guards inert; the Cursor adapter install carries commands and rules only |
-| Codex CLI | none — Codex has no tool hooks | Guards inert; the Codex adapter install carries prompts only |
+The machine-readable authority for this table is
+`.claude/harness/adapters/host-capabilities.json`. Native dispatch is a host
+orchestration contract and is reported separately from live mutation guards.
+
+| Host | Native dispatch | Wiring | Live mutation guards |
+|---|---|---|---|
+| Claude Code | available | `.claude/settings.json` hook events (installed automatically) | full: phase live; secrets live; lint live; session digest live |
+| OpenCode | available | `.opencode/plugins/foundation.js` (placed by the OpenCode adapter install) replays these hooks via `tool.execute.before/after` | partial: phase live; secrets live; lint live; session digest unavailable |
+| Cursor | available | none — Cursor has no tool hooks | unavailable: phase unavailable; secrets unavailable; lint unavailable; session digest unavailable |
+| Codex CLI | available | none — Codex has no tool hooks | unavailable: phase unavailable; secrets unavailable; lint unavailable; session digest unavailable |
 
 Hosts without live guards still pass through the runtime's Land gates, and
 `no-direct-main-commit.sh` remains available as an opt-in git hook. When

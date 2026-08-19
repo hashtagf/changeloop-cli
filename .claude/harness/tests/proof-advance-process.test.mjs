@@ -70,7 +70,11 @@ function processFixture(root) {
     runExecutionDag: async (_id, nodes) => {
       appendFileSync(executionLog, `${process.pid}\n`);
       writeFileSync(startedPath, `${process.pid}\n`);
-      if (process.env.PROOF_ADVANCE_HOLD === "1") await delay(500);
+      if (process.env.PROOF_ADVANCE_HOLD === "1") {
+        const releasePath = join(root, "provider-release");
+        const deadline = Date.now() + 5_000;
+        while (!existsSync(releasePath) && Date.now() < deadline) await delay(10);
+      }
       writeJson(worldPath, { ...world(), testValid: true });
       return nodes.map((node) => ({ provider: node.provider, status: "pass" }));
     },
@@ -158,6 +162,7 @@ async function parentTest() {
     assert.equal(concurrent.status, 0, concurrent.stderr);
     const concurrentOutcome = JSON.parse(concurrent.stdout);
     assert.equal(concurrentOutcome.status, "IN_PROGRESS");
+    writeFileSync(join(root, "provider-release"), "release\n");
     const firstResult = await firstDone;
     assert.equal(firstResult.status, 0, firstResult.stderr);
     assert.equal(JSON.parse(firstResult.stdout).status, "PASS");
@@ -184,11 +189,20 @@ async function parentTest() {
       token: "dead-owner",
       acquiredAt: "2026-08-14T00:00:00.000Z"
     });
+    rmSync(join(root, "provider-release"), { force: true });
     const recoveryA = child(root, { PROOF_ADVANCE_HOLD: "1" });
     const recoveryB = child(root, { PROOF_ADVANCE_HOLD: "1" });
-    const recovered = await Promise.all([
-      completion(recoveryA), completion(recoveryB)
+    const recoveryAPromise = completion(recoveryA);
+    const recoveryBPromise = completion(recoveryB);
+    const firstRecovery = await Promise.race([
+      recoveryAPromise.then((result) => ({ index: 0, result })),
+      recoveryBPromise.then((result) => ({ index: 1, result }))
     ]);
+    assert.equal(firstRecovery.result.status, 0, firstRecovery.result.stderr);
+    assert.equal(JSON.parse(firstRecovery.result.stdout).status, "IN_PROGRESS",
+      "the non-owner must return while the elected stale-lock recoverer is held");
+    writeFileSync(join(root, "provider-release"), "release\n");
+    const recovered = await Promise.all([recoveryAPromise, recoveryBPromise]);
     recovered.forEach((result) => assert.equal(result.status, 0, result.stderr));
     assert.deepEqual(recovered.map((result) => JSON.parse(result.stdout).status).sort(),
       ["IN_PROGRESS", "PASS"],

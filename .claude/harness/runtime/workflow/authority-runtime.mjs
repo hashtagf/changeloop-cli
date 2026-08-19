@@ -73,8 +73,7 @@ export function createAuthorityRuntime({
   // invalidated a review already earned elsewhere — on a wide change, review
   // became a moving target.
   function authorityWorkspaceHash(id, provider) {
-    const scoped = providerConfig(id, provider)?.repository;
-    return scoped ? providerWorkspaceHash(id, provider) : relevantHash(id);
+    return providerWorkspaceHash(id, provider);
   }
 
   function authorityPacket(id, type) {

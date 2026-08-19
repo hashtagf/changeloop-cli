@@ -34,6 +34,7 @@ export function createDiagnosticsRuntime({
   protocolDescriptor,
   repositoryCatalog,
   foundationPolicy,
+  reviewAssurancePosture = () => null,
   isolationInspection,
   openSpecCliStatus,
   loadRuntime,
@@ -224,6 +225,14 @@ export function createDiagnosticsRuntime({
       name: "model-policy",
       detail: `fast=${modelPolicy.models.fast.family}; standard=${modelPolicy.models.standard.family}; deep=${modelPolicy.models.deep.family}; max-parallel=${modelPolicy.execution.maxParallelAgents}`
     });
+    const reviewAssurance = reviewAssurancePosture();
+    if (reviewAssurance)
+      checks.push({
+        level: "info",
+        name: "review-assurance",
+        detail: reviewAssurance.summary,
+        posture: reviewAssurance
+      });
     if (stage === "prove") {
       const configuredReviewer = modelPolicy.review.defaultReviewer || null;
       if (configuredReviewer) {
@@ -493,6 +502,7 @@ Commands:
   repos [change]
   models
   agent-plan <change> [--group <n>] [--full] [--pretty]
+  agent-dispatch <change> [--pretty]
   agent-task <change> <task> [--pretty]
   agent-acquire <change> <task> --owner <agent-id>
   agent-release <change> <task> --owner <agent-id> [--force] [--decision-ref <ref>]

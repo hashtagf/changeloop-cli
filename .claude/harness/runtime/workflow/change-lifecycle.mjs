@@ -49,6 +49,14 @@ export function createChangeLifecycle({
     for (const field of ["changes", "nonGoals", "decisions", "risks", "tasks", "claims", "specs"])
       if (!Array.isArray(draft[field]) || draft[field].length === 0)
         fail(`draft requires a non-empty '${field}' array`);
+    if (draft.domainLanguage !== undefined) {
+      if (!Array.isArray(draft.domainLanguage))
+        fail("draft domainLanguage must be an array");
+      for (const [index, term] of draft.domainLanguage.entries())
+        for (const field of ["term", "meaning", "avoid"])
+          if (!String(term?.[field] || "").trim())
+            fail(`draft domainLanguage[${index}].${field} is required`);
+    }
     if (workflowPolicy().workflow.grounding === "required" &&
         draft.grounding?.version !== 2)
       fail("draft requires grounding.version 2 from the single Decision Sheet");
@@ -106,6 +114,10 @@ export function createChangeLifecycle({
     const state = loadRuntime(id);
     const title = draft.title || state.intent;
     const bullets = (items) => items.map((item) => `- ${item}`).join("\n");
+    const domainRows = (draft.domainLanguage || []).length
+      ? draft.domainLanguage.map((term) =>
+        `| ${term.term} | ${term.meaning} | ${term.avoid} |`).join("\n")
+      : "| `none` | This change introduces no project-specific term. | `none` |";
     writeFileSync(join(changePath(id), "proposal.md"),
       `# Change: ${title}\n\n## Why\n\n${draft.why}\n\n` +
       `## What changes\n\n${bullets(draft.changes)}\n\n## Impact\n\n` +
@@ -116,7 +128,9 @@ export function createChangeLifecycle({
       `## Non-goals\n\n${bullets(draft.nonGoals)}\n`);
     if (state.schema === "foundation-standard")
       writeFileSync(join(changePath(id), "design.md"),
-        `# Design\n\n## Current state\n\n${draft.currentState}\n\n## Decisions\n\n` +
+        `# Design\n\n## Current state\n\n${draft.currentState}\n\n` +
+        `## Domain language\n\n| Canonical term | Meaning | Avoid |\n|---|---|---|\n` +
+        `${domainRows}\n\n## Decisions\n\n` +
         draft.decisions.map((decision) =>
           `- **Decision:** ${decision.choice}\n  - **Why:** ${decision.why}\n` +
           `  - **Rejected:** ${decision.rejected || "none"}`).join("\n") +
@@ -277,6 +291,11 @@ export function createChangeLifecycle({
       intent: "Describe one low-impact isolated outcome",
       why: "Explain the user-visible reason",
       currentState: "Describe the bounded current behavior",
+      domainLanguage: [{
+        term: "replace-with-project-specific-term",
+        meaning: "replace-with-tight-domain-meaning",
+        avoid: "replace-with-ambiguous-alias-or-none"
+      }],
       compatibility: "No public compatibility or migration impact",
       changes: ["Describe the intended behavior"],
       nonGoals: ["Name one explicit non-goal"],

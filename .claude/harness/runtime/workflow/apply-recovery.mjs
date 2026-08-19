@@ -6,6 +6,9 @@ import { join } from "node:path";
 // report cannot drift apart.
 export function projectionCounts(entries) {
   return (entries || []).reduce((counts, entry) => {
+    if (entry.before === entry.after &&
+        (entry.beforeMode === undefined || entry.beforeMode === entry.afterMode))
+      return counts;
     if (entry.after === null) counts.delete += 1;
     else if (entry.before === null) counts.create += 1;
     else counts.update += 1;

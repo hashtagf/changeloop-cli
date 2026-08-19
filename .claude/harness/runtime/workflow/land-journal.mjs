@@ -30,6 +30,22 @@ export function createLandJournal({
     }
   }
 
+  function pathMode(path) {
+    try {
+      const stat = lstatSync(path);
+      return stat.isFile() || stat.isDirectory() ? stat.mode & 0o7777 : null;
+    } catch (error) {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    }
+  }
+
+  function matches(path, entry, side) {
+    if (pathIdentity(path) !== entry[side]) return false;
+    const expectedMode = entry[`${side}Mode`];
+    return expectedMode === undefined || pathMode(path) === expectedMode;
+  }
+
   function safeRootPath(rel) {
     const path = resolve(root, rel);
     if (!pathInside(root, path) || path === root)
@@ -62,11 +78,15 @@ export function createLandJournal({
   function applyEntry(journal, entry, index) {
     const target = safeRootPath(entry.path);
     const current = pathIdentity(target);
-    if (current !== entry.before)
+    if (!matches(target, entry, "before"))
       throw new Error(`target changed during apply at '${entry.path}'`);
     journal.inFlightPaths = [entry.path];
     save(journal);
-    if (entry.after === null) {
+    const noOp = entry.before === entry.after &&
+      (entry.beforeMode === undefined || entry.beforeMode === entry.afterMode);
+    if (noOp) {
+      // Exact pre-applied paths remain covered by the journal without a copy.
+    } else if (entry.after === null) {
       if (current !== null) rmSync(target, { recursive: true });
     } else {
       const source = resolve(journal.sandboxPath, entry.path);
@@ -78,7 +98,7 @@ export function createLandJournal({
       if (current !== null) rmSync(target, { recursive: true });
       renameSync(stage, target);
     }
-    if (pathIdentity(target) !== entry.after)
+    if (!matches(target, entry, "after"))
       throw new Error(`post-apply projection mismatch at '${entry.path}'`);
     journal.appliedPaths.push(entry.path);
     journal.inFlightPaths = [];
@@ -92,15 +112,15 @@ export function createLandJournal({
   function restoreEntry(journal, entry) {
     const target = safeRootPath(entry.path);
     const current = pathIdentity(target);
-    if (current === entry.before) return;
+    if (matches(target, entry, "before")) return;
     const possiblyApplied = journal.appliedPaths.includes(entry.path) ||
       journal.inFlightPaths.includes(entry.path);
-    if (!possiblyApplied || (current !== entry.after && current !== null))
+    if (!possiblyApplied || (!matches(target, entry, "after") && current !== null))
       throw new Error(`rollback requires manual recovery at '${entry.path}'`);
     if (current !== null) rmSync(target, { recursive: true });
     if (entry.before !== null)
       copyPath(join(transactionRoot(journal.changeId, journal.transactionId), entry.backup), target);
-    if (pathIdentity(target) !== entry.before)
+    if (!matches(target, entry, "before"))
       throw new Error(`rollback verification failed at '${entry.path}'`);
   }
 
@@ -143,7 +163,8 @@ export function createLandJournal({
       decisionRef,
       before: journal.entries.map((entry) => ({
         path: entry.path,
-        identity: pathIdentity(safeRootPath(entry.path))
+        identity: pathIdentity(safeRootPath(entry.path)),
+        mode: pathMode(safeRootPath(entry.path))
       })),
       startedAt: now()
     };
@@ -156,7 +177,7 @@ export function createLandJournal({
     journal.recoveredPaths ||= [];
     save(journal);
     const pending = [...journal.entries].reverse().filter((entry) =>
-      pathIdentity(safeRootPath(entry.path)) !== entry.before);
+      !matches(safeRootPath(entry.path), entry, "before"));
     for (const entry of pending) {
       if (entry.before === null) continue;
       const index = journal.entries.indexOf(entry);
@@ -164,12 +185,12 @@ export function createLandJournal({
         "recovery-stage", String(index));
       if (existsSync(stage)) rmSync(stage, { recursive: true });
       copyPath(join(transactionRoot(journal.changeId, journal.transactionId), entry.backup), stage);
-      if (pathIdentity(stage) !== entry.before)
+      if (!matches(stage, entry, "before"))
         throw new Error(`manual recovery backup verification failed at '${entry.path}'`);
     }
     for (const entry of pending) {
       const target = safeRootPath(entry.path);
-      if (pathIdentity(target) !== entry.before) {
+      if (!matches(target, entry, "before")) {
         const index = journal.entries.indexOf(entry);
         const transaction = transactionRoot(journal.changeId, journal.transactionId);
         const stage = join(transaction, "recovery-stage", String(index));
@@ -188,7 +209,7 @@ export function createLandJournal({
           throw error;
         }
       }
-      if (pathIdentity(target) !== entry.before)
+      if (!matches(target, entry, "before"))
         throw new Error(`manual recovery verification failed at '${entry.path}'`);
       if (!journal.recoveredPaths.includes(entry.path)) journal.recoveredPaths.push(entry.path);
       save(journal);
@@ -211,7 +232,7 @@ export function createLandJournal({
     if (!existsSync(path)) return { valid: false, reason: "missing-apply-journal" };
     const journal = readJson(path);
     const mismatch = journal.entries.find((entry) =>
-      pathIdentity(safeRootPath(entry.path)) !== entry.after);
+      !matches(safeRootPath(entry.path), entry, "after"));
     if (mismatch) return { valid: false, reason: `projection-mismatch:${mismatch.path}` };
     if (journal.projectionHash !== state.workspace.apply.projectionHash)
       return { valid: false, reason: "projection-identity-mismatch" };
@@ -242,7 +263,7 @@ export function createLandJournal({
   }
 
   return {
-    pathIdentity, safeRootPath, copyPath,
+    pathIdentity, pathMode, safeRootPath, copyPath,
     transactionRoot, journalPath, save,
     applyEntry, rollback, settle, verify, cleanup
   };

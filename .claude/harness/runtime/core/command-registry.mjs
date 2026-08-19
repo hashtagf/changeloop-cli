@@ -16,6 +16,7 @@ const LOOP_COMMAND_ORDER = [
 const RUNTIME_COMMAND_ALIASES = {
   "audit-change": "change audit",
   "agent-plan": "agents plan",
+  "agent-dispatch": "agents dispatch",
   "agent-task": "agents task",
   "agent-acquire": "agents acquire",
   "agent-release": "agents release",

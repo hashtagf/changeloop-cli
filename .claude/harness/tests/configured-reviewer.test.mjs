@@ -6,7 +6,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { REVIEW_SCHEMA, createConfiguredReviewerRuntime } from
+import { REVIEW_SCHEMA, claudeResultEnvelope, createConfiguredReviewerRuntime } from
   "../runtime/evidence/configured-reviewer.mjs";
 import { createRuntimeEnvironment } from
   "../runtime/core/runtime-environment.mjs";
@@ -28,7 +28,12 @@ if (args[0] === "--help") {
   process.stdout.write("--print --output-format --json-schema --model --effort --permission-mode --tools --safe-mode --session-id --no-session-persistence");
   process.exit(0);
 }
+const emit = (value) => process.stdout.write(JSON.stringify([{
+  type: "system", subtype: "init", session_id: value.session_id
+}, value]));
 const sessionId = args[args.indexOf("--session-id") + 1];
+const countPath = path.join(process.cwd(), "claude-invocations.txt");
+fs.appendFileSync(countPath, "review\\n");
 const schema = JSON.parse(args[args.indexOf("--json-schema") + 1]);
 fs.writeFileSync(path.join(process.cwd(), "claude-capture.json"), JSON.stringify({
   args, cwd: process.cwd(), changeId: process.env.FOUNDATION_CHANGE_ID,
@@ -36,6 +41,12 @@ fs.writeFileSync(path.join(process.cwd(), "claude-capture.json"), JSON.stringify
 }));
 const review = process.env.FAKE_CLAUDE_INVALID === "1"
   ? { status: "pass" }
+  : process.env.FAKE_CLAUDE_EMPTY_FAIL === "1"
+    ? { status: "fail", summary: "failed without evidence", findings: [], verifiedFindingIds: [] }
+  : process.env.FAKE_CLAUDE_MINOR_FAIL === "1"
+    ? { status: "fail", summary: "advisory only", verifiedFindingIds: [], findings: [
+        { id: "F-MINOR", severity: "minor", path: "a.mjs", line: 1, message: "advisory", claimIds: [], verificationCaseIds: [] }
+      ] }
   : process.env.FAKE_CLAUDE_DUPLICATE === "1"
     ? { status: "pass", summary: "duplicate ids", findings: [], verifiedFindingIds: ["F1", " F1"] }
     : process.env.FAKE_CLAUDE_DUPLICATE_FINDINGS === "1"
@@ -44,11 +55,11 @@ const review = process.env.FAKE_CLAUDE_INVALID === "1"
           { id: " F2", severity: "minor", path: "a.mjs", line: 2, message: "two", claimIds: ["c"], verificationCaseIds: ["v"] }
         ] }
       : { status: "pass", summary: "same-family fresh review passed", findings: [], verifiedFindingIds: [] };
-process.stdout.write(JSON.stringify({
+emit({
   type: "result", subtype: "success", is_error: false,
   session_id: process.env.FAKE_CLAUDE_SESSION || sessionId,
   structured_output: review
-}));
+});
 `);
 chmodSync(executable, 0o755);
 
@@ -71,6 +82,20 @@ const runtime = createConfiguredReviewerRuntime({
 });
 
 try {
+  assert.equal(claudeResultEnvelope(JSON.stringify({
+    type: "result", session_id: "legacy-object"
+  })).session_id, "legacy-object");
+  assert.equal(claudeResultEnvelope([
+    JSON.stringify({ type: "system", subtype: "init", session_id: "ndjson" }),
+    JSON.stringify({ type: "result", subtype: "success", session_id: "ndjson" })
+  ].join("\n")).session_id, "ndjson");
+  assert.equal(claudeResultEnvelope(JSON.stringify([
+    { type: "system", subtype: "init", session_id: "one" },
+    { type: "result", subtype: "success", session_id: "two" }
+  ])).envelopeError, "conflicting-session-ids");
+  assert.equal(claudeResultEnvelope(JSON.stringify([
+    { type: "system", subtype: "init", session_id: "one" }
+  ])).envelopeError, "missing-result");
   process.env.CLAUDECODE = "1";
   const result = runtime.runReview({
     changeId: "claude-only", workspace,
@@ -94,6 +119,8 @@ try {
   assert(!capture.args.join(" ").includes("Write"));
   assert.deepEqual(capture.schemaRequired,
     ["status", "summary", "findings", "verifiedFindingIds"]);
+  assert.equal(readFileSync(join(workspace, "claude-invocations.txt"), "utf8")
+    .trim().split("\n").length, 1, "one review must use one Claude invocation");
 
   process.env.FAKE_CLAUDE_SESSION = "implementation-session";
   const reused = runtime.runReview({
@@ -111,6 +138,22 @@ try {
   delete process.env.FAKE_CLAUDE_INVALID;
   assert.equal(invalid.status, "error");
   assert.match(invalid.summary, /outside the required schema/);
+
+  process.env.FAKE_CLAUDE_MINOR_FAIL = "1";
+  const advisory = runtime.runReview({
+    changeId: "claude-minor-advisory", workspace, packet: {}
+  });
+  delete process.env.FAKE_CLAUDE_MINOR_FAIL;
+  assert.equal(advisory.status, "pass",
+    "minor-only findings are advisory and cannot keep the review gate cycling");
+
+  process.env.FAKE_CLAUDE_EMPTY_FAIL = "1";
+  const emptyFail = runtime.runReview({
+    changeId: "claude-empty-fail", workspace, packet: {}
+  });
+  delete process.env.FAKE_CLAUDE_EMPTY_FAIL;
+  assert.equal(emptyFail.status, "error");
+  assert.match(emptyFail.summary, /fail without a blocker or major finding/);
 
   // Portability: OpenAI structured output rejects `uniqueItems`, so its
   // presence anywhere in the request schema fails every dispatch as an

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { isExcludedPath } from "../core/workspace-surface.mjs";
 import { classifyReviewRisk } from "./review-routing.mjs";
@@ -16,6 +16,53 @@ export const REVIEW_FORCING_CAPABILITIES = Object.freeze([
 export const REVIEW_DIVERSITY_CAPABILITIES = Object.freeze([
   "security-static", "data-migration", "compatibility"
 ]);
+
+function inputPatternMatches(rel, pattern) {
+  if (pattern.endsWith("/**"))
+    return rel === pattern.slice(0, -3) || rel.startsWith(pattern.slice(0, -2));
+  if (pattern.endsWith("/*")) {
+    const prefix = pattern.slice(0, -1);
+    return rel.startsWith(prefix) && !rel.slice(prefix.length).includes("/");
+  }
+  return rel === pattern || rel.startsWith(`${pattern.replace(/\/$/, "")}/`);
+}
+
+function providerInputCovers(config, repositoryId, rel) {
+  return (config.inputs || []).some((raw) => {
+    const normalized = raw.replaceAll("\\", "/").replace(/^\.\/+/, "");
+    const scoped = normalized.match(/^([a-z0-9][a-z0-9._-]*):(.*)$/i);
+    if (scoped && scoped[1] !== repositoryId) return false;
+    return inputPatternMatches(rel, scoped ? scoped[2] : normalized);
+  });
+}
+
+export function commandWorkspaceFiles(config, workspace) {
+  const files = [];
+  const report = typeof config?.report === "string"
+    ? config.report.replaceAll("\\", "/").replace(/^\.\/+/, "") : null;
+  for (const token of config?.command || []) {
+    if (!token || token.startsWith("-") || isAbsolute(token) ||
+        token.split(/[\\/]+/).includes("..")) continue;
+    const rel = token.replaceAll("\\", "/").replace(/^\.\/+/, "");
+    // A report is an output contract, even when the command receives its path
+    // as an argument. Binding it as an input would reject the first run after
+    // the file appears and would make the provider depend on its own output.
+    if (rel === report) continue;
+    const path = join(workspace, rel);
+    try {
+      if (existsSync(path) && statSync(path).isFile()) files.push(rel);
+    } catch {}
+  }
+  return [...new Set(files)].sort();
+}
+
+export function uncoveredCommandWorkspaceFiles({
+  config, workspace, repositoryId = "root", tracked = () => false,
+  declared = () => false
+}) {
+  return commandWorkspaceFiles(config, workspace).filter((rel) =>
+    !tracked(rel) && !declared(rel) && !providerInputCovers(config, repositoryId, rel));
+}
 
 export function providerEvidencePolicy(config = {}) {
   return {
@@ -58,7 +105,7 @@ export function createEvidenceContract({
   activeChangePath, readJson, repositoryById, selectedRepositories, providerCapability,
   canonicalPath, loadRuntime, relevantHash,
   relevantSnapshot, singleRelevantSnapshot, fileDigest, stableHash,
-  policyCapabilities, foundationPolicy, handoffContract, die
+  policyCapabilities, foundationPolicy, handoffContract, git, declaredSurfaceMatcher, die
 }) {
   function rawExecution(id, dir = activeChangePath(id)) {
     const path = join(dir, "execution.yaml");
@@ -248,6 +295,22 @@ export function createEvidenceContract({
       }
       if (["review", "acceptance"].includes(capability) && config.inputs !== undefined)
         die(`${capability} capability cannot declare reusable inputs; it is bound to the full workspace`);
+      if (!["external", "contract-digest"].includes(config.adapter)) {
+        const repositoryId = config.repository || "root";
+        const repository = selectedRepositories(id).find((row) => row.id === repositoryId);
+        const workspace = canonicalPath(repository?.workspacePath || repository?.path || ROOT);
+        const declared = declaredSurfaceMatcher(id, loadRuntime(id));
+        const uncovered = uncoveredCommandWorkspaceFiles({
+          config,
+          workspace,
+          repositoryId,
+          declared,
+          tracked: (rel) => git(["ls-files", "--error-unmatch", "--", rel], workspace).status === 0
+        });
+        if (uncovered.length)
+          die(`provider '${provider}' command names untracked workspace file(s) outside its inputs and declared surface: ${
+            uncovered.join(", ")}; add provider inputs or declare the paths in the change surface`);
+      }
       if (config.reportFormat !== undefined &&
           !["json", "tap", "auto"].includes(config.reportFormat))
         die(`provider '${provider}' reportFormat must be json|tap|auto`);
@@ -452,7 +515,9 @@ export function createEvidenceContract({
   }
 
   function providerWorkspaceHash(id, provider, fallback = null) {
-    const field = packetBoundCapability(id, provider) ? "workspaceHash" : "codeHash";
+    const capability = providerCapability(provider, providerConfig(id, provider));
+    const field = capability === "review" ? "reviewHash"
+      : packetBoundCapability(id, provider) ? "workspaceHash" : "codeHash";
     const config = providerConfig(id, provider);
     const explicitlyScoped = Boolean(config?.repository || config?.repositories ||
       config?.adapter === "contract-digest");
@@ -513,15 +578,6 @@ export function createEvidenceContract({
       const repositoryRoot = canonicalPath(repositoryById(id, repositoryId).workspacePath);
       roots.set(repositoryRoot, [...(roots.get(repositoryRoot) || []), rest]);
     }
-    const matches = (rel, pattern) => {
-      if (pattern.endsWith("/**"))
-        return rel === pattern.slice(0, -3) || rel.startsWith(pattern.slice(0, -2));
-      if (pattern.endsWith("/*")) {
-        const prefix = pattern.slice(0, -1);
-        return rel.startsWith(prefix) && !rel.slice(prefix.length).includes("/");
-      }
-      return rel === pattern || rel.startsWith(`${pattern.replace(/\/$/, "")}/`);
-    };
     const files = [];
     const collect = (dir, base, scopePatterns, label) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -533,7 +589,7 @@ export function createEvidenceContract({
         }
         if (!entry.isFile()) continue;
         const rel = relative(base, path).replaceAll("\\", "/");
-        if (scopePatterns.some((pattern) => matches(rel, pattern)))
+        if (scopePatterns.some((pattern) => inputPatternMatches(rel, pattern)))
           files.push({ path: label ? `${label}:${rel}` : rel, sha256: fileDigest(path) });
       }
     };

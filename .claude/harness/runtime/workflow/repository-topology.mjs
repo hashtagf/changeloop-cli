@@ -92,13 +92,17 @@ export function createRepositoryTopology({
     return { version: 1, repositories: rows, discovered, drift };
   }
 
-  function changeSelection(id, reportFailure = fail) {
-    const path = join(activeChangePath(id), "repositories.yaml");
+  function changeSelectionAt(id, dir, reportFailure = fail) {
+    const path = join(dir, "repositories.yaml");
     if (!existsSync(path)) return null;
     const value = readJson(path);
     if (value.version !== 1 || !Array.isArray(value.repositories) || value.repositories.length === 0)
       reportFailure(`${id}/repositories.yaml requires version 1 and a non-empty repositories array`);
     return value;
+  }
+
+  function changeSelection(id, reportFailure = fail) {
+    return changeSelectionAt(id, activeChangePath(id), reportFailure);
   }
 
   function selectionIdsAt(dir) {
@@ -110,9 +114,10 @@ export function createRepositoryTopology({
     return value.repositories.map((entry) => typeof entry === "string" ? entry : entry.id).sort();
   }
 
-  function selected(id, state = loadRuntime(id), reportFailure = fail) {
+  function selected(id, state = loadRuntime(id), reportFailure = fail, options = {}) {
     const catalogValue = catalog();
-    const selection = changeSelection(id, reportFailure);
+    const selection = changeSelectionAt(id,
+      options.changeDir || activeChangePath(id), reportFailure);
     const requested = selection?.repositories || [{ id: "root", mode: "write" }];
     const rows = [];
     const seen = new Set();
@@ -127,9 +132,13 @@ export function createRepositoryTopology({
         ...repository,
         mode: normalized.mode || repository.mode,
         dependsOn: normalized.dependsOn || repository.dependsOn || [],
-        baseHead: runtimeState.baseHead || gitHead(repository.path),
-        workspacePath: canonicalPath(runtimeState.path || (repository.id === "root"
-          ? state.workspace?.path || root : repository.path))
+        baseHead: options.useTargetPaths
+          ? gitHead(repository.path)
+          : runtimeState.baseHead || gitHead(repository.path),
+        workspacePath: canonicalPath(options.useTargetPaths
+          ? repository.path
+          : runtimeState.path || (repository.id === "root"
+            ? state.workspace?.path || root : repository.path))
       });
     }
     const selectedIds = new Set(rows.map((repository) => repository.id));

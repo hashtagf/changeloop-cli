@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import {
   compileExecutionGraph, conflictKeysForTask, conflictKeysOverlap,
   compileLandPreparation, dependentClosure, landPreparationMatches,
-  schemasCompatible, validateNodeResult
+  schemasCompatible, singleAgentExecutionEligible, validateNodeResult
 } from "../runtime/core/graph-execution.mjs";
 import { createLeaseRuntime } from "../runtime/workflow/lease-runtime.mjs";
 
@@ -139,6 +139,22 @@ test("scope: parent and child path keys conflict", () => {
 test("scope: repository fallback conflicts with every path in that repository", () => {
   assert.equal(conflictKeysOverlap("repo:root", "path:root:src/api"), true);
   assert.deepEqual(conflictKeysForTask({ repository: "root", paths: [] }), ["repo:root"]);
+});
+
+test("authority: a single-repository host session remains valid beyond two tasks", () => {
+  const tasks = Array.from({ length: 5 }, (_, index) => ({
+    repository: "root", resources: ["workspace:root"], id: `T00${index + 1}`
+  }));
+  assert.equal(singleAgentExecutionEligible(tasks, []), true);
+  assert.equal(singleAgentExecutionEligible([
+    ...tasks, { repository: "api", resources: ["workspace:api"], id: "T006" }
+  ], []), false);
+  assert.equal(singleAgentExecutionEligible([
+    { ...tasks[0], resources: ["workspace:root", "dev-server"] }
+  ], []), false);
+  assert.equal(singleAgentExecutionEligible(tasks, [
+    { repositories: ["root", "contracts"] }
+  ]), false);
 });
 
 const authority = {

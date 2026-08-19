@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "hosts": {
+    "claude-code": {
+      "nativeDispatch": "available",
+      "liveMutationGuards": {
+        "coverage": "full",
+        "phase": "live",
+        "secrets": "live",
+        "lint": "live",
+        "sessionDigest": "live"
+      },
+      "finalEnforcement": "Land gates"
+    },
+    "opencode": {
+      "nativeDispatch": "available",
+      "liveMutationGuards": {
+        "coverage": "partial",
+        "phase": "live",
+        "secrets": "live",
+        "lint": "live",
+        "sessionDigest": "unavailable"
+      },
+      "finalEnforcement": "Land gates"
+    },
+    "cursor": {
+      "nativeDispatch": "available",
+      "liveMutationGuards": {
+        "coverage": "unavailable",
+        "phase": "unavailable",
+        "secrets": "unavailable",
+        "lint": "unavailable",
+        "sessionDigest": "unavailable"
+      },
+      "finalEnforcement": "Land gates"
+    },
+    "codex": {
+      "nativeDispatch": "available",
+      "liveMutationGuards": {
+        "coverage": "unavailable",
+        "phase": "unavailable",
+        "secrets": "unavailable",
+        "lint": "unavailable",
+        "sessionDigest": "unavailable"
+      },
+      "finalEnforcement": "Land gates"
+    }
+  }
+}

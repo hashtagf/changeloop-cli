@@ -194,6 +194,14 @@
       "description": "Plan dispatch only for independently verifiable parallel work."
     },
     {
+      "name": "agents dispatch",
+      "usage": "agents dispatch <change> [--pretty]",
+      "audience": "host",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Return the next graph- and lease-bound native-host Build action without invoking a model."
+    },
+    {
       "name": "evidence detect",
       "usage": "evidence detect <change>",
       "audience": "conditional",
@@ -445,6 +453,14 @@
       "description": "Compatibility alias for packet --task."
     },
     {
+      "name": "host agent-contract",
+      "usage": "host agent-contract [--protocol 1] [--format json]",
+      "audience": "host",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Return the package-owned Foundation agent contract through protocol 1 JSON without project discovery."
+    },
+    {
       "name": "host instruction",
       "usage": "host instruction <command> [--protocol 1] [--format json] [--arguments <text>]",
       "audience": "host",
@@ -628,6 +644,7 @@
     "repos",
     "models",
     "agent-plan",
+    "agent-dispatch",
     "agent-task",
     "agent-acquire",
     "agent-release",

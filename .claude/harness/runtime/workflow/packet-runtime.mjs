@@ -12,6 +12,7 @@ export function createPacketRuntime({
   budgetDecision, scopedReviewClaims, relevantHash, providerCapability,
   receiptPath, contractFingerprint, reviewPolicy, resolvedAcceptance,
   handoffReadiness,
+  deliveredAiAttempts = () => [],
   serializedJson, foundationPolicy, recordContextMetric, recordInstructionManifest,
   fail
 }) {
@@ -217,6 +218,33 @@ export function createPacketRuntime({
       budget: ensureBudgetState(state),
       budgetDecision: budgetDecision(state)
     };
+    const latestReview = deliveredAiAttempts(id).at(-1) || null;
+    if (latestReview?.resultStatus === "fail") {
+      const findings = (latestReview.findings || [])
+        .filter((finding) => ["blocker", "major"].includes(finding.severity))
+        .filter((finding) => !repository ||
+          !finding.path || finding.path.startsWith(`${repository.id}/`) ||
+          fileChanges.includes(finding.path))
+        .slice(0, 8).map((finding) => ({
+          id: finding.id,
+          severity: finding.severity,
+          path: finding.path || null,
+          line: finding.line ?? null,
+          message: String(finding.message || "").slice(0, 600),
+          claimIds: (finding.claimIds || []).slice(0, 12),
+          verificationCaseIds: (finding.verificationCaseIds || []).slice(0, 12)
+        }));
+      if (findings.length) packet.repairContext = {
+        version: 1,
+        kind: "review-findings",
+        attempt: latestReview.attempt,
+        attemptDigest: latestReview.digest,
+        workspaceHash: latestReview.workspaceHash,
+        findings,
+        findingDigest: stableHash(findings),
+        instruction: "Repair this bounded finding batch inside the current contract, then rerun only evidence bound to the affected paths. Do not request another open-ended review."
+      };
+    }
     return { ...packet, packetDigest: stableHash(packet) };
   }
   

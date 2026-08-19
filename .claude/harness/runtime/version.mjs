@@ -13,4 +13,4 @@
 //
 // Bump this together with RUNTIME_API_VERSION in foundation.mjs whenever the
 // boundary between the entrypoint and these modules changes shape.
-export const RUNTIME_MODULE_API = "23";
+export const RUNTIME_MODULE_API = "24";

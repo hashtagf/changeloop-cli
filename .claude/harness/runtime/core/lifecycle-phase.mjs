@@ -37,6 +37,7 @@ export const PHASE_BY_COMMAND = {
 
   sandbox: "build",
   "agent-plan": "build",
+  "agent-dispatch": "build",
   "agent-acquire": "build",
   "agent-release": "build",
 

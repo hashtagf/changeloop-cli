@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
 import {
-  cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync
+  cpSync, existsSync, lstatSync, mkdirSync, readlinkSync, readdirSync,
+  readFileSync, realpathSync, rmSync, statSync, writeFileSync
 } from "node:fs";
 import { constants as fsConstants } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   ROOT_ONLY_EXCLUDED_DIRS, isExcludedPath, sandboxCodePathspec, trackedPathSet
 } from "../core/workspace-surface.mjs";
@@ -46,6 +47,66 @@ function rejectedPaths(output) {
 // these two options for the same reason on the way back out.
 const VERBATIM_COPY = { dereference: false, verbatimSymlinks: true };
 
+export function gitBaseCheckoutStatus(repository, path, gitBuffer) {
+  if (!repository?.baseHead) return null;
+  const paths = [path];
+  let current = resolve(repository.path, path);
+  const visited = new Set();
+  for (;;) {
+    if (visited.has(current)) return "symlink-cycle";
+    if (visited.size >= 64) return "symlink-depth-exceeded";
+    visited.add(current);
+    let stat;
+    try { stat = lstatSync(current); }
+    catch { break; }
+    if (!stat.isSymbolicLink()) break;
+    current = resolve(dirname(current), readlinkSync(current));
+    const target = relative(repository.path, current).replaceAll("\\", "/");
+    if (!target || target === ".." || target.startsWith("../") || isAbsolute(target))
+      return "symlink-target-outside-repository";
+    paths.push(target);
+  }
+  for (const candidate of paths) {
+    const exists = gitBuffer(
+      ["cat-file", "-e", `${repository.baseHead}:${candidate}`], repository.path);
+    if (exists.status !== 0) return "missing-from-base";
+  }
+  const diff = gitBuffer(
+    ["diff", "--quiet", repository.baseHead, "--", ...paths], repository.path);
+  return diff.status === 0 ? null : "differs-from-base";
+}
+
+export function isPacketLocalSource(packetPath, sourcePath) {
+  const inside = (parent, child) => {
+    const rel = relative(parent, child);
+    return rel === "" || rel !== ".." && !rel.startsWith(`..${sep}`) &&
+      !isAbsolute(rel);
+  };
+  try {
+    const packet = resolve(packetPath);
+    const source = resolve(sourcePath);
+    return inside(packet, source) && inside(realpathSync(packet), realpathSync(source));
+  } catch {
+    return false;
+  }
+}
+
+export function groundingPortabilityFindings(grounding, repositories, portable) {
+  if (!Array.isArray(grounding?.readSet)) return [];
+  const selected = new Map(repositories.map((repository) =>
+    [repository.id, repository]));
+  return grounding.readSet.flatMap((source) => {
+    const repository = selected.get(source.repository || "root");
+    if (!repository || !source.path || !repository.baseHead) return [];
+    const reason = portable(repository, source);
+    return reason === null ? [] : [{
+      repository: repository.id,
+      path: source.path,
+      reason
+    }];
+  });
+}
+
 export function createSandboxRuntime({
   root, policy, excludedWorkspaceDirs, sandboxCopyExcludedDirs, hostAttestation,
   loadRuntime, saveRuntime,
@@ -53,7 +114,7 @@ export function createSandboxRuntime({
   gitBuffer, porcelainStatusRecords,
   selectedRepositories, cleanupRepositorySandboxes, cleanupAppliedSandbox,
   clearSnapshotCache, validate, repositorySelectionIdsAt, contractFingerprint,
-  executionFingerprint, taskBlocks, proofPath, relevantHash, fail,
+  executionFingerprint, taskBlocks, proofPath, relevantHash, now, fail,
   markBlocked = () => {}
 }) {
   function sandboxRoot(id) {
@@ -287,6 +348,43 @@ export function createSandboxRuntime({
     }
   }
 
+  function rebindRelocatedSandbox(id, state) {
+    const workspace = state.workspace || {};
+    if (!["worktree", "copy"].includes(workspace.mode) ||
+        !workspace.path || existsSync(workspace.path)) return false;
+    const canonicalSandboxRoot = canonicalPath(join(root, ".foundation", "sandboxes"));
+    const candidate = canonicalPath(sandboxRoot(id));
+    if (!directoryExists(candidate) || candidate === canonicalPath(workspace.path)) return false;
+    if (relative(canonicalSandboxRoot, candidate).replaceAll("\\", "/") !== id)
+      fail(`cannot rebind relocated sandbox '${candidate}': candidate escapes the canonical sandbox directory; recreate the sandbox`);
+    const packet = join(candidate, "openspec", "changes", id);
+    const marker = join(packet, ".openspec.yaml");
+    const expectedMarker = workspace.packetSnapshot?.[".openspec.yaml"];
+    if (!directoryExists(packet) || !expectedMarker || !existsSync(marker) ||
+        fileDigest(marker) !== expectedMarker)
+      fail(`cannot rebind relocated sandbox '${candidate}': change identity does not match '${id}'`);
+    const requiredLayout = [
+      join(candidate, ".claude", "harness", "foundation.mjs"),
+      join(candidate, "openspec", "config.yaml")
+    ];
+    if (requiredLayout.some((path) => !existsSync(path)))
+      fail(`cannot rebind relocated sandbox '${candidate}': sandbox layout is incomplete; recreate the sandbox`);
+    if (workspace.mode === "worktree" && !gitMetadataPresent(candidate))
+      fail(`cannot rebind relocated sandbox '${candidate}': recorded worktree metadata is not valid at the new project location; recreate the sandbox`);
+    if (workspace.mode === "copy" && workspace.git === "carried" &&
+        !gitMetadataPresent(candidate))
+      fail(`cannot rebind relocated sandbox '${candidate}': recorded copied Git metadata is not valid at the new project location; recreate the sandbox`);
+    const relocatedFrom = canonicalPath(workspace.path);
+    workspace.path = candidate;
+    workspace.relocatedFrom = relocatedFrom;
+    workspace.reboundAt = now();
+    state.workspace = workspace;
+    saveRuntime(state);
+    clearSnapshotCache(id);
+    console.log(`REBOUND ${id}\n  workspace: ${candidate}`);
+    return true;
+  }
+
   // A commit read, not executed.
   //
   // Isolation inspection is the diagnostic someone reaches for when the
@@ -401,8 +499,35 @@ export function createSandboxRuntime({
   function createSingle(id) {
     const state = loadRuntime(id);
     if (state.status === "archived") fail(`change '${id}' is already archived`);
+    if (rebindRelocatedSandbox(id, state)) return;
     if (["worktree", "copy"].includes(state.workspace?.mode) && existsSync(state.workspace.path))
       fail(`sandbox already exists: ${state.workspace.path}`);
+    const groundingPath = join(changePath(id), "grounding.yaml");
+    if (state.groundingRequired && existsSync(groundingPath)) {
+      let grounding;
+      try { grounding = JSON.parse(readFileSync(groundingPath, "utf8")); }
+      catch { grounding = null; }
+      const portability = groundingPortabilityFindings(
+        grounding,
+        selectedRepositories(id, state),
+        (repository, source) => {
+          const absolute = resolve(repository.path, source.path);
+          let matchesDigest = false;
+          try {
+            matchesDigest = fileDigest(absolute) === String(source.sha256 || "").toLowerCase();
+          } catch {}
+          if (!matchesDigest) return "working-tree-digest-mismatch";
+          if (repository.id === "root" &&
+              isPacketLocalSource(changePath(id), absolute))
+            return null;
+          return gitBaseCheckoutStatus(repository, source.path, gitBuffer);
+        }
+      );
+      if (portability.length)
+        fail(`grounding readSet is not sandbox-portable: ${
+          portability.map((entry) => `${entry.repository}:${entry.path} (${entry.reason})`).join(", ")
+        } — commit the source or move the required decision/evidence into the change packet before creating a sandbox`);
+    }
     if (!gitHead(root)) {
       createCopy(id, state, "no-git");
       return;

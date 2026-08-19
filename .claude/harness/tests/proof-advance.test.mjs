@@ -16,6 +16,7 @@ function fixture(options = {}) {
   let finalizations = 0;
   let blocked = 0;
   let closures = 0;
+  const closureWorkspaceHashes = [];
   let proof = null;
   const requests = [...(options.requests || [])];
   const now = () => "2026-08-14T00:00:00.000Z";
@@ -98,9 +99,12 @@ function fixture(options = {}) {
     providerConfig: (_id, provider) => ({
       adapter: provider === "test" ? "command" : "external"
     }),
+    providerWorkspaceHash: (_id, provider, fallback) =>
+      options.providerHashes?.[provider] || fallback,
     deliveredAiAttempts: () => options.deliveredAiAttempts || [],
-    recordDeterministicReviewClosure: () => {
+    recordDeterministicReviewClosure: (_id, _provider, closureWorkspaceHash) => {
       closures += 1;
+      closureWorkspaceHashes.push(closureWorkspaceHash);
       const result = options.closureResult || null;
       if (result?.closed) phase = "ready";
       return result;
@@ -135,6 +139,7 @@ function fixture(options = {}) {
       phase = "review";
     },
     counters: () => ({ executions, finalizations, blocked, closures }),
+    closureWorkspaceHashes: () => [...closureWorkspaceHashes],
     state: () => state
   };
 }
@@ -258,8 +263,48 @@ const rejected = fixture({
 const rejectedResult = await quiet(() => rejected.runtime.proofAdvance("change-a"));
 assert.equal(rejectedResult.status, "ACTION_REQUIRED");
 assert.equal(rejectedResult.stage, "review-rejected");
+assert.equal(rejectedResult.cursor.stage, "review-rejected");
+assert.deepEqual(rejectedResult.cursor.requestIds, ["review-rejected"]);
 assert.equal(rejected.requests.length, 1,
   "a rejected unchanged review must not create a doomed follow-up request");
+const rejectedAgain = await quiet(() => rejected.runtime.proofAdvance("change-a"));
+assert.equal(rejectedAgain.status, "REPAIR_NOT_PROGRESSING");
+assert.deepEqual(rejectedAgain.next, [],
+  "an unchanged rejected review terminates instead of emitting Build forever");
+
+const failedReceipt = fixture({
+  receiptOverrides: { review: "fail" },
+  deliveredAiAttempts: [{
+    digest: "attempt-failed", attempt: 1, workspaceHash: "review-subject-a",
+    resultStatus: "fail", findings: [{
+      id: "F-BLOCK", severity: "major", path: "src/app.mjs", line: 1,
+      message: "repair this", claimIds: ["claim-a"],
+      verificationCaseIds: ["CASE-A"]
+    }]
+  }],
+  providerHashes: { review: "review-subject-a" }
+});
+const failedReceiptResult = await quiet(() =>
+  failedReceipt.runtime.proofAdvance("change-a"));
+assert.equal(failedReceiptResult.route, "AUTO_REPAIR");
+assert.deepEqual(failedReceiptResult.repairBatch.findingIds, ["F-BLOCK"],
+  "a real failed review receipt reaches the bounded repair route");
+const failedReceiptAgain = await quiet(() =>
+  failedReceipt.runtime.proofAdvance("change-a"));
+assert.equal(failedReceiptAgain.status, "REPAIR_NOT_PROGRESSING",
+  "a repeated failed receipt terminates against the stable review subject");
+
+const subjectRequest = fixture({
+  requests: [{
+    requestId: "review-subject-request", type: "review", provider: "review",
+    status: "rejected", workspaceHash: "review-subject-a"
+  }],
+  providerHashes: { review: "review-subject-a" }
+});
+const subjectRequestResult = await quiet(() =>
+  subjectRequest.runtime.proofAdvance("change-a"));
+assert.equal(subjectRequestResult.stage, "review-rejected",
+  "proof matches unscoped authority requests in the review-hash domain");
 
 const blocked = fixture({ phase: "blocked" });
 const blockedResult = await quiet(() => blocked.runtime.proofAdvance("change-a"));
@@ -372,6 +417,7 @@ assert.equal(failedProvider.counters().executions, 0,
 process.exitCode = 0;
 const finalDeltaClosure = fixture({
   executionNeeded: false,
+  providerHashes: { review: "review-provider-workspace" },
   deliveredAiAttempts: [
     { resultStatus: "pass" },
     { resultStatus: "fail" }
@@ -386,6 +432,9 @@ const closedDeltaResult = await quiet(() =>
   finalDeltaClosure.runtime.proofAdvance("change-a"));
 assert.equal(closedDeltaResult.status, "PASS");
 assert.equal(finalDeltaClosure.counters().closures, 1);
+assert.deepEqual(finalDeltaClosure.closureWorkspaceHashes(),
+  ["review-provider-workspace"],
+  "deterministic closure must bind the review provider hash, not the global workspace hash");
 assert.equal(finalDeltaClosure.requests.length, 0,
   "current critical-case evidence closes the final AI delta without a third review request");
 

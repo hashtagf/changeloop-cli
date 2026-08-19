@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { validityRecovery } from "./receipt-validity.mjs";
+import { singleAgentExecutionEligible } from "../core/graph-execution.mjs";
 
 export function createProofRuntime({
   root, protocolVersion, loadRuntime, saveRuntime, validate, changedSurfaceIssues,
@@ -92,11 +93,7 @@ export function createProofRuntime({
     }
     const execution = savedAgentPlan?.(id)?.taskExecution?.[taskId];
     const taskNodes = graph.nodes.filter((entry) => entry.kind === "task");
-    const singleAgentEligible = new Set(taskNodes.map((entry) => entry.repository)).size === 1 &&
-      taskNodes.length <= 2 &&
-      !graph.claims.some((claim) => (claim.repositories || []).length > 1) &&
-      !taskNodes.some((entry) => (entry.resources || [])
-        .some((resource) => !resource.startsWith("workspace:")));
+    const singleAgentEligible = singleAgentExecutionEligible(taskNodes, graph.claims);
     const savedSingleAgent = execution?.mode === "single-agent-observed" &&
       execution.graphRevision === graph.revision && execution.graphIdentity === graph.identity;
     if (!savedSingleAgent && !singleAgentEligible)

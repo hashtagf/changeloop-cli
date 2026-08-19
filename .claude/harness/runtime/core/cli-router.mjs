@@ -4,7 +4,7 @@ export async function routeRuntimeCommand(command, values, api) {
   const {
     parseFlags, parseStrictCommandFlags, fail, createChange, rapidStartTemplate,
     startAtomic, resolveChange, abandonChange, waiveGate, showChanges, showProviders, showRepositories,
-    foundationPolicy, showAgentPlan, showAgentTask, acquireAgentLease,
+    foundationPolicy, showAgentPlan, showAgentDispatch, showAgentTask, acquireAgentLease,
     releaseAgentLease, prepareClaudeTelemetry, recordPhaseContext, showPacket,
     showMetrics, execObserved, continueBudget, doctor, validate, showTraceabilityAudit,
     relevantHash, providerWorkspaceHash, proofPlan, proofReadiness, proofAdvance,
@@ -85,6 +85,13 @@ export async function routeRuntimeCommand(command, values, api) {
         boolean: ["full", "pretty"], value: ["group"]
       });
       showAgentPlan(rest[0], flags); break;
+    }
+    case "agent-dispatch": {
+      const { flags, rest } = parseStrictCommandFlags(values, "agents dispatch", {
+        boolean: ["pretty"]
+      });
+      if (rest.length !== 1) die("agents dispatch requires exactly one change");
+      showAgentDispatch(rest[0], flags); break;
     }
     case "agent-task": {
       const { flags, rest } = parseFlags(values);

@@ -305,14 +305,33 @@ export function createStateRuntime({
     // code nobody touched. Review and acceptance still bind the first — a
     // reviewer read the proposal, and editing it must expire their verdict.
     const codeHash = createHash("sha256");
+    // Review identity includes code and semantic contract, but excludes
+    // controller progress and delivery tracking. Checking a task box or
+    // accepting a post-Land handoff must not summon a fresh reviewer for code
+    // and requirements they already inspected.
+    const reviewHash = createHash("sha256");
     const files = [];
     const declared = declaredSurfaceMatcher(id, state);
+    const reviewVolatile = new Set(["execution.yaml", "handoffs.yaml"]);
     function fold(rel, contentIdentity) {
-      for (const digest of [hash, codeHash]) {
+      for (const digest of [hash, codeHash, reviewHash]) {
         if (digest === codeHash && isChangePacketPath(rel, id)) continue;
+        if (digest === reviewHash && isChangePacketPath(rel, id) &&
+            reviewVolatile.has(rel.slice(currentChangeRelativePath(id).length + 1)))
+          continue;
+        let identity = contentIdentity;
+        if (digest === reviewHash &&
+            rel === `${currentChangeRelativePath(id)}/tasks.md`) {
+          const path = join(workspace, rel);
+          if (existsSync(path)) {
+            const normalized = readFileSync(path, "utf8")
+              .replace(/^(\s*-\s*)\[[ xX]\]/gm, "$1[ ]");
+            identity = createHash("sha256").update(normalized).digest("hex");
+          }
+        }
         digest.update(rel);
         digest.update("\0");
-        digest.update(contentIdentity);
+        digest.update(identity);
         digest.update("\0");
       }
     }
@@ -382,6 +401,7 @@ export function createStateRuntime({
       Number(state.contractRevision || state.revision || 0)}`;
     hash.update(revisionMarker);
     codeHash.update(revisionMarker);
+    reviewHash.update(revisionMarker);
     const workspaceHash = hash.digest("hex");
     const value = {
       version: 1,
@@ -390,6 +410,7 @@ export function createStateRuntime({
       workspace,
       workspaceHash,
       codeHash: codeHash.digest("hex"),
+      reviewHash: reviewHash.digest("hex"),
       revision: Number(state.contractRevision || state.revision || 0),
       fileCount: files.length,
       createdAt: now()

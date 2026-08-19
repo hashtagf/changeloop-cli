@@ -8,7 +8,12 @@ description: Resolve genuine ambiguity before creating or materially revising an
 Use the lightest path that resolves the decision.
 
 1. Read existing OpenSpec specs and only the code needed to understand the seam.
-2. Separate verified facts, hypotheses, constraints, and unknowns.
+2. Separate verified facts, hypotheses, constraints, and unknowns. Model the
+   material user decisions as a private dependency tree: each decision names
+   its prerequisites, alternatives, and dependent effects. Do not persist this
+   tree as an artifact or lifecycle state. Challenge fuzzy or conflicting
+   project terms against specifications and code; ask only when more than one
+   material domain meaning remains.
 3. Identify at most three viable approaches and recommend one with concrete
    tradeoffs.
 4. Never ask what you can find. Any fact the specs, code, LSP, or sandbox can
@@ -24,12 +29,15 @@ Use the lightest path that resolves the decision.
    when every material decision has been asked and answered.
 6. End with a compact agreement: outcome, in/out, observable scenarios, chosen
    approach, remaining risk, and each asked question with its chosen answer.
-   Carry the agreement into the change proposal so no answer lives only in
-   chat.
+   Include canonical project terms with meanings and avoided aliases plus any
+   qualifying durable tradeoffs.
+   Carry the agreement into feature or change intake. Reuse its settled answers
+   without asking them again, and record them in the existing change packet so
+   no answer lives only in chat.
 
 Use `/investigate` when the exploration should remain no-stakes. Once the
 agreement is clear, hand it to `/change`; do not create a separate spec, plan,
-interview ledger, or lifecycle state.
+interview ledger, glossary, `CONTEXT.md`, ADR store, or lifecycle state.
 
 No product code lands during investigation. Repository facts must be grounded
 in files actually read; label inference explicitly. Prototypes stay inside the

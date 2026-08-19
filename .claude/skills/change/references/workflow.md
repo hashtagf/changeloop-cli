@@ -1,10 +1,21 @@
 # Change workflow
 
-Read requirements, locked decisions, architecture/contracts, production path,
-tests, dependencies, and repository facts first. Challenge production entry,
-real wire, activation, negative oracles, and environment authority. Ask every
-material choice in one Decision Sheet and hash reads in `grounding.yaml`.
-Only a real contradiction permits one batched `--reopen-grounding`.
+Read any compact brainstorming agreement, approved Decision Sheet, requirements,
+locked decisions, architecture/contracts, production path, tests, dependencies,
+and repository facts first. Reuse settled answers without asking them again.
+Challenge production entry, real wire, activation, negative oracles, and
+environment authority. If no finalized sheet exists, ask every unresolved
+material choice in one Decision Sheet. Always hash reads in `grounding.yaml`.
+Create no decision-tree or interview ledger. Only a real contradiction permits
+one batched `--reopen-grounding`.
+
+For a standard change, source-check project-specific terms from the agreement
+and write only resolved canonical terms, meanings, and avoided aliases under
+`design.md` Domain language; use `none` when the change introduces none. Record
+a durable Decision only when it is hard to reverse, surprising without context,
+and chosen among meaningful alternatives. Keep choice, why, and rejected option
+together. Never create `CONTEXT.md`, a glossary artifact, or an ADR store; never
+add `design.md` to a rapid packet by hand.
 
 Before writing each spec delta, read the canonical
 `openspec/specs/<capability>/spec.md` when it exists and select the operation

@@ -3,7 +3,7 @@
 Use `investigate → change → build → prove → land`. OpenSpec owns intent,
 `tasks.md` implementation, `handoffs.yaml` external work, `.foundation/` state.
 
-Before developer work, verify Foundation 3.3.0/runtime API `22`; run both
+Before developer work, verify Foundation 3.3.1/runtime API `24`; run both
 doctors. On failure relay
 `.claude/harness/DEVELOPER-SETUP.md`; never improvise installation.
 Single-family: select reviewer plus `single-model`; retain distinct identity/session.

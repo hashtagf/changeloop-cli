@@ -180,8 +180,14 @@ export function createHandoffRuntime({
         operation.activation === "safe-before-activation" &&
         check.validity === "valid" && check.status === "accepted";
       const completed = check.validity === "valid" && check.status === "completed";
+      const obligationClass = operation.timing === "post-land" &&
+        operation.activation === "safe-before-activation"
+        ? "production-verification"
+        : operation.activation === "activation-coupled"
+          ? "activation-safety" : "deployment-readiness";
       return {
         ...operation,
+        obligationClass,
         operationDigest: operationDigest(operation),
         status: check.status,
         validity: check.validity,
@@ -282,6 +288,7 @@ export function createHandoffRuntime({
         operation: row.operation,
         timing: row.timing,
         activation: row.activation,
+        obligationClass: row.obligationClass,
         evidence: row.evidence,
         runbook: row.runbook,
         rollback: row.rollback,
@@ -291,8 +298,41 @@ export function createHandoffRuntime({
         status: row.status,
         validity: row.validity,
         reference: row.reference,
-        next: row.status === "completed" && row.validity === "valid" ? null
-          : `claude-foundation handoff record ${id} --id ${row.id} --status accepted|completed|rejected --actor <name> --reference <ticket-or-run> [--evidence <reference>]`
+        userActionRequired: row.landBlocking,
+        decision: !row.landBlocking ? null
+          : row.obligationClass === "production-verification" ? {
+              kind: "post-land-production-verification",
+              summary: "Production verification can happen after Land because activation remains safely disabled.",
+              question: "Should this change Land now with production verification tracked to its owner?",
+              options: [
+                { id: "track-and-land", outcome: "Record the owner and tracking reference, then continue Land." },
+                { id: "wait", outcome: "Wait for the operation to complete before Land." },
+                { id: "split", outcome: "Land only the portion that does not depend on this operation." },
+                { id: "pause", outcome: "Keep the change pending." }
+              ],
+              recommended: "track-and-land",
+              requiredFacts: ["actor", "tracking-reference"],
+              fingerprint: stableHash({ version: 1, changeId: id,
+                operationDigest: row.operationDigest, validity: row.validity,
+                status: row.status })
+            } : {
+              kind: row.obligationClass,
+              summary: row.obligationClass === "activation-safety"
+                ? "This operation is coupled to activation and must be made safe before Land."
+                : "Deployment readiness must be completed before Land.",
+              question: "How should this pre-Land requirement be resolved?",
+              options: [
+                { id: "complete", outcome: "Complete the prerequisite and provide its evidence." },
+                { id: "make-safe", outcome: "Change activation so the merged code remains safely inactive." },
+                { id: "split", outcome: "Land only the independent safe portion." },
+                { id: "pause", outcome: "Keep the change pending." }
+              ],
+              recommended: "complete",
+              requiredFacts: [],
+              fingerprint: stableHash({ version: 1, changeId: id,
+                operationDigest: row.operationDigest, validity: row.validity,
+                status: row.status })
+            }
       }))
     };
   }

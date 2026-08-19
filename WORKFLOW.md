@@ -1,6 +1,6 @@
 # Foundation workflow
 
-**Version 3.3.0**
+**Version 3.3.1**
 
 Foundation is an OpenSpec-native harness for safe, economical software changes
 in brownfield repositories.
@@ -95,6 +95,7 @@ For a selected multi-repository topology:
 claude-foundation repos <change>
 claude-foundation sandbox create <change> --all
 claude-foundation agents plan <change> [--group <n>] [--pretty]
+claude-foundation agents dispatch <change> [--pretty]
 claude-foundation packet <change> --task <task-id> [--pretty]
 ```
 
@@ -105,6 +106,14 @@ edge schemas are checked before dispatch. Scoped path, contract, and resource
 leases are acquired all-or-none and carry a fencing generation, so a late
 worker result cannot advance after takeover. Actual worktree writes, rather
 than worker-reported paths alone, must remain inside the granted scope.
+
+The host drives Build by repeatedly calling `agents dispatch`. A
+`run-in-session` action preserves the main-session path. For `spawn-group`, the
+host acquires the returned leases, regenerates each leased packet, spawns the
+native workers without replaying the parent transcript, waits for the complete
+group, releases observed results, and calls dispatch again. An unexpired lease
+returns `wait`; the harness does not infer that another host's worker died and
+does not invoke a model itself.
 
 The full plan is persisted while stdout stays below 4 KiB; workers
 receive only an 8 KiB task packet. A one-repository change with at most two
@@ -707,6 +716,20 @@ unexpected arguments, and unavailable package instructions fail closed with a
 stable JSON error code. The endpoint is additive and ships before a host adopts
 it; a host that cannot obtain protocol 1 must request a compatible Foundation
 release instead of reading project command files or using a bundled copy.
+
+Hosts can resolve the portable agent contract from the same installed release:
+
+```bash
+claude-foundation host agent-contract --protocol 1 --format json
+```
+
+Agent-contract protocol 1 returns the exact package-owned
+`.claude/harness/AGENT.md` text, protocol, and Foundation version as JSON. It
+does not perform project discovery or return a filesystem path. Unsupported
+protocols or formats, invalid flags, and unavailable or incomplete package
+content fail closed with a stable JSON error code. This resource is separate
+from `host instruction`; adding it does not change command instruction
+responses or argument handling.
 
 `claude-foundation` is the stable public control surface. It searches upward
 from the working directory, or from `--project <path>`, and forwards to the

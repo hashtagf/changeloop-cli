@@ -73,6 +73,14 @@ try {
   });
   assert.equal(validated.operations.length, 1);
   assert.deepEqual(runtime.handoffReadiness(changeId).blocking, ["H001"]);
+  const initialPacket = runtime.handoffPacketValue(changeId);
+  assert.equal(initialPacket.operations[0].obligationClass,
+    "production-verification");
+  assert.equal(initialPacket.operations[0].decision.recommended, "track-and-land");
+  assert.deepEqual(initialPacket.operations[0].decision.requiredFacts,
+    ["actor", "tracking-reference"]);
+  assert.equal(JSON.stringify(initialPacket).includes("claude-foundation"), false,
+    "a user-facing recovery packet must never require the user to type a command");
 
   writeJson(join(change, "handoffs.yaml"), {
     version: 1, operations: [operation({ owner: undefined })]
@@ -107,6 +115,10 @@ try {
   assert.equal(accepted.status, "READY_WITH_TRACKED_HANDOFF");
   assert.equal(accepted.operations[0].landBlocking, false);
   assert.equal(accepted.operations[0].landDisposition, "tracked-post-land");
+  const acceptedPacket = runtime.handoffPacketValue(changeId);
+  assert.equal(acceptedPacket.operations[0].userActionRequired, false);
+  assert.equal(acceptedPacket.operations[0].decision, null,
+    "an already accepted tracked handoff must not ask the user again");
 
   mkdirSync(archivedChange, { recursive: true });
   writeJson(join(archivedChange, "handoffs.yaml"), {
@@ -143,6 +155,9 @@ try {
   } finally { console.log = priorLog; }
   assert.equal(runtime.handoffReadiness(changeId).operations[0].landBlocking, true,
     "accepted activation-coupled work remains a Land blocker");
+  const coupledPacket = runtime.handoffPacketValue(changeId);
+  assert.equal(coupledPacket.operations[0].obligationClass, "activation-safety");
+  assert.equal(coupledPacket.operations[0].decision.recommended, "complete");
   console.log = () => {};
   try {
     runtime.recordHandoff(changeId, {
@@ -151,6 +166,9 @@ try {
     });
   } finally { console.log = priorLog; }
   assert.equal(runtime.handoffReadiness(changeId).status, "COMPLETE");
+  const completedPacket = runtime.handoffPacketValue(changeId);
+  assert.equal(completedPacket.operations[0].userActionRequired, false);
+  assert.equal(completedPacket.operations[0].decision, null);
 
   writeFileSync(join(fixture, ".foundation", "handoffs", changeId, "H001.json"),
     "{not-json");

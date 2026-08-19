@@ -17,6 +17,7 @@ export function createRepositorySnapshot({
           id: control.id,
           workspaceHash: control.workspaceHash,
           codeHash: control.codeHash,
+          reviewHash: control.reviewHash,
           workspace: control.workspace,
           baseHead: repository.baseHead || gitHead(root)
         };
@@ -28,6 +29,7 @@ export function createRepositorySnapshot({
         id: snapshot.id,
         workspaceHash: snapshot.workspaceHash,
         codeHash: snapshot.codeHash,
+        reviewHash: snapshot.reviewHash,
         workspace: snapshot.workspace,
         baseHead: repository.baseHead || gitHead(repository.path)
       };
@@ -56,6 +58,7 @@ export function createRepositorySnapshot({
       workspace: control.workspace,
       workspaceHash,
       codeHash: composite("codeHash"),
+      reviewHash: composite("reviewHash"),
       revision: Number(state.contractRevision || state.revision || 0),
       fileCount: control.fileCount,
       control,

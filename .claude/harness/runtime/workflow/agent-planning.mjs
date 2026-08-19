@@ -4,7 +4,8 @@ import { join, relative } from "node:path";
 // are the ones a silent downgrade must block at Land.
 import { DRIFT_BLOCKING_TASK_KINDS } from "../contracts/model-policy.mjs";
 import {
-  compileExecutionGraph, conflictKeysForTask, conflictKeysOverlap
+  compileExecutionGraph, conflictKeysForTask, conflictKeysOverlap,
+  singleAgentExecutionEligible
 } from "../core/graph-execution.mjs";
 import { findCyclePath } from "../core/graph.mjs";
 
@@ -202,9 +203,7 @@ export function createAgentPlanner({
     }
     const contract = evidence(id);
     const claims = contract.claims;
-    const singleAgent = tasks.length > 0 && repositories.length === 1 && tasks.length <= 2 &&
-      !claims.some((claim) => (claim.repositories || []).length > 1) &&
-      !tasks.some((task) => task.resources.some((resource) => !resource.startsWith("workspace:")));
+    const singleAgent = singleAgentExecutionEligible(tasks, claims);
     const priorPlanPath = join(plans, `${id}.json`);
     const priorPlan = existsSync(priorPlanPath) ? readJson(priorPlanPath, {}) : {};
     const taskExecution = { ...(priorPlan.taskExecution || {}) };

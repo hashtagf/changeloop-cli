@@ -31,6 +31,58 @@ const DEFAULT_POLICY = {
   }
 };
 
+export function reviewAssurancePosture(policy, effectiveReview = null) {
+  const review = policy?.review || {};
+  const independenceWaived = effectiveReview
+    ? effectiveReview.independenceWaived === true
+    : review.independence === "self";
+  const diversityWaived = effectiveReview
+    ? effectiveReview.diversityWaived === true
+    : review.diversity === "single-model";
+  const independenceRequired = effectiveReview
+    ? effectiveReview.independence === "required"
+    : !independenceWaived;
+  const diversityRequired = effectiveReview
+    ? effectiveReview.diversity === "required"
+    : !diversityWaived;
+  const waivers = [
+    ...(independenceWaived ? ["reviewer-independence"] : []),
+    ...(diversityWaived ? ["model-diversity"] : [])
+  ];
+  const consequences = [
+    independenceWaived
+      ? "review may be non-independent"
+      : independenceRequired
+        ? "independent reviewer required"
+        : "reviewer independence preferred",
+    diversityWaived
+      ? "review may use the same model family"
+      : diversityRequired
+        ? "cross-family model diversity required"
+        : "cross-family model diversity preferred"
+  ];
+  return {
+    version: 1,
+    independence: {
+      configured: review.independence,
+      effective: effectiveReview?.independence || review.independence,
+      required: independenceRequired,
+      waived: independenceWaived
+    },
+    diversity: {
+      configured: review.diversity,
+      effective: effectiveReview?.diversity || review.diversity,
+      required: diversityRequired,
+      waived: diversityWaived
+    },
+    waivers,
+    assurance: consequences.join("; "),
+    summary: waivers.length
+      ? `${effectiveReview ? "active" : "committed"} assurance waiver${waivers.length === 1 ? "" : "s"}: ${waivers.join(", ")}; ${consequences.join("; ")}`
+      : `${consequences.join("; ")}; no ${effectiveReview ? "active" : "committed"} assurance waivers`
+  };
+}
+
 export function createRuntimeEnvironment({
   root, protocolPath = join(root, ".claude", "harness", "protocol.json"),
   policyPath = join(root, "foundation.json"),
@@ -187,5 +239,12 @@ export function createRuntimeEnvironment({
     return policy;
   }
 
-  return { protocolDescriptor, commandExists, playwrightAvailability, foundationPolicy };
+  return {
+    protocolDescriptor,
+    commandExists,
+    playwrightAvailability,
+    foundationPolicy,
+reviewAssurancePosture: (effectiveReview = null) =>
+  reviewAssurancePosture(foundationPolicy(), effectiveReview)
+  };
 }
