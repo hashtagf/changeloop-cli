@@ -1,0 +1,24 @@
+{
+  "protocol": "foundation-automated-mutation-v1",
+  "repository": "frontend",
+  "repositoryCommit": "fixture",
+  "workspaceDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "language": "typescript",
+  "tool": {
+    "name": "fixture",
+    "version": "1",
+    "adapterVersion": "1",
+    "configDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "mutants": [
+    {
+      "id": "m1",
+      "path": "src/app.ts",
+      "line": 1,
+      "operator": "BooleanLiteral",
+      "status": "killed",
+      "killedBy": ["test-ready"],
+      "changedSurface": "changed-relevant"
+    }
+  ]
+}

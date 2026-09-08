@@ -5,18 +5,19 @@ argument-hint: <change>
 
 Land **$ARGUMENTS** explicitly.
 
-Start from `packet <change> --phase land`; run read-only `land check`. Execute returned
-`automaticRecovery`, explain the blocker and repair in plain language,
-then continue. For `control-head-moved`, run `sandbox sync`, `proof
-run`, and check again; never restart Change or ask. Stop on replay conflict or
-no automatic route; translate the choice, never raw JSON or hashes.
+Run `claude-foundation land advance <change>` once. It creates the session-bound
+grant and carries one resumable transaction through checks, Apply, verification,
+archive, and cleanup. The user supplies no token, commit, or recovery flag.
 
-Resolve interrupted apply with authorized `land recover --decision-ref`; manual
-recovery also needs `--resolution`. For multi-repo work, bind authorized child
-commits/CI with `land record`, resume, and re-Prove.
+Never edit product or agreement files. Execute actions and `resume`; they are
+agent-only control data. `WAIT` reports cause and owner without a user command.
+`ASK_USER` asks only for a decision;
+record it and resume.
+Only semantic conflicts and unavailable external owners are real boundaries.
+Interrupted Apply, target movement, and host permission are Harness recovery.
+`DONE` requires `archived`; store no credentials.
 
-Check `handoff status`; only accepted, proven-safe `post-land` work may remain.
-On `WAITING_EXTERNAL`, send its packet and resume after evidence. Store no credentials.
+Execute returned authorized `automaticRecovery` (`AUTO_RECOVER`) before asking;
+explain blockers in plain language.
 
-Archive only when ready; `ALREADY ARCHIVED` succeeds. Explain visible effects.
 Never commit, push, or open a PR without separate authority.

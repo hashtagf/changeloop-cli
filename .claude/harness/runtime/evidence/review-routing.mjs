@@ -7,29 +7,47 @@ const HIGH_SEMANTICS =
 const HIGH_CLASSES =
   /money|authori[sz]|secret|destructive|concurren|replay|idempoten|queue|wire|legacy|activation|cutover/;
 
+export function highReviewRiskTriggers({ state, claims, capabilities, grounding }) {
+  const triggers = [];
+  const semantic = `${state.intent || ""} ${(state.securityTriggers || []).join(" ")}`
+    .toLowerCase();
+  if (grounding?.risk?.tier === "high") triggers.push("declared-high-risk");
+  for (const value of grounding?.risk?.classes || []) {
+    if (!HIGH_CLASSES.test(String(value).toLowerCase())) continue;
+    triggers.push("declared-critical-class");
+    break;
+  }
+  if (state.impact === "high" || claims.some((claim) => claim.impact === "high"))
+    triggers.push("high-impact");
+  if ((state.securityTriggers || []).length || capabilities.has("security-static"))
+    triggers.push("authorization-or-secrets");
+  for (const capability of HIGH_CAPABILITIES) {
+    if (!capabilities.has(capability)) continue;
+    triggers.push("destructive-data-or-external-contract");
+    break;
+  }
+  if (HIGH_SEMANTICS.test(semantic)) triggers.push("critical-semantics");
+  return triggers;
+}
+
+export function mediumReviewRiskTriggers({
+  state, claims, grounding, requiredTriggers = []
+}) {
+  const triggers = [];
+  if (grounding?.risk?.tier === "medium") triggers.push("declared-medium-risk");
+  if (state.impact === "medium" || state.coupling === "coupled")
+    triggers.push("medium-impact-or-coupling");
+  if (claims.some((claim) => claim.impact !== "low") || requiredTriggers.length)
+    triggers.push("review-risk");
+  return triggers;
+}
+
 export function classifyReviewRisk({
   state, claims, capabilities, grounding, requiredTriggers = []
 }) {
-  const semantic = `${state.intent || ""} ${(state.securityTriggers || []).join(" ")}`
-    .toLowerCase();
-  const high = [];
-  const medium = [];
-  if (grounding?.risk?.tier === "high") high.push("declared-high-risk");
-  if ((grounding?.risk?.classes || []).some((value) =>
-    HIGH_CLASSES.test(String(value).toLowerCase())))
-    high.push("declared-critical-class");
-  if (state.impact === "high" || claims.some((claim) => claim.impact === "high"))
-    high.push("high-impact");
-  if ((state.securityTriggers || []).length || capabilities.has("security-static"))
-    high.push("authorization-or-secrets");
-  if ([...HIGH_CAPABILITIES].some((capability) => capabilities.has(capability)))
-    high.push("destructive-data-or-external-contract");
-  if (HIGH_SEMANTICS.test(semantic)) high.push("critical-semantics");
-  if (grounding?.risk?.tier === "medium") medium.push("declared-medium-risk");
-  if (state.impact === "medium" || state.coupling === "coupled")
-    medium.push("medium-impact-or-coupling");
-  if (claims.some((claim) => claim.impact !== "low") || requiredTriggers.length)
-    medium.push("review-risk");
+  const input = { state, claims, capabilities, grounding, requiredTriggers };
+  const high = highReviewRiskTriggers(input);
+  const medium = mediumReviewRiskTriggers(input);
   const tier = high.length ? "high" : medium.length ? "medium" : "low";
   return {
     tier,

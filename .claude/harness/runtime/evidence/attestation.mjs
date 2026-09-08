@@ -17,34 +17,38 @@ function isWithinPath(parent, candidate) {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
-function writableControlSocket(path) {
-  if (!path || !existsSync(path)) return false;
+export function writableControlSocket(path, options = {}) {
+  const {
+    exists = existsSync, realpath = realpathSync, stat = statSync, access = accessSync
+  } = options;
+  if (!path || !exists(path)) return false;
   try {
-    const resolved = realpathSync(path);
-    const stat = statSync(resolved);
-    if (!stat.isSocket() && !stat.isFile()) return false;
-    accessSync(resolved, fsConstants.W_OK);
+    const resolved = realpath(path);
+    const metadata = stat(resolved);
+    if (!metadata.isSocket() && !metadata.isFile()) return false;
+    access(resolved, fsConstants.W_OK);
     return true;
   } catch {
     return false;
   }
 }
 
-export function securityBoundaryInspection() {
+export function inspectContainerBoundary(options = {}) {
+  const { exists = existsSync, read = readFileSync, env = process.env } = options;
   const evidence = [];
   let kind = "unknown";
   let status = "not-detected";
-  if (existsSync("/.dockerenv")) {
+  if (exists("/.dockerenv")) {
     kind = "container";
     status = "detected";
     evidence.push({ source: "filesystem", value: "/.dockerenv" });
-  } else if (existsSync("/run/.containerenv")) {
+  } else if (exists("/run/.containerenv")) {
     kind = "container";
     status = "detected";
     evidence.push({ source: "filesystem", value: "/run/.containerenv" });
   } else {
     try {
-      const cgroup = readFileSync("/proc/1/cgroup", "utf8").toLowerCase();
+      const cgroup = read("/proc/1/cgroup", "utf8").toLowerCase();
       const token = ["docker", "containerd", "kubepods", "lxc", "podman"]
         .find((candidate) => cgroup.includes(candidate));
       if (token) {
@@ -56,11 +60,60 @@ export function securityBoundaryInspection() {
       // Platforms without procfs remain unknown unless another strong signal exists.
     }
   }
-  if (kind === "unknown" && process.env.CODESPACES === "true" && existsSync("/workspaces")) {
+  if (kind === "unknown" && env.CODESPACES === "true" && exists("/workspaces")) {
     kind = "container";
     status = "detected";
     evidence.push({ source: "codespaces", value: "/workspaces" });
   }
+  return { kind, status, evidence };
+}
+
+export function controlSocketCandidates(hostRoot = "", env = process.env) {
+  const hostPath = (path) => (hostRoot ? join(hostRoot, path) : path);
+  const candidates = [
+    "/var/run/docker.sock", "/run/docker.sock", "/run/podman/podman.sock",
+    "/run/containerd/containerd.sock", "/var/run/crio/crio.sock"
+  ].map(hostPath);
+  const runtimeDir = env.XDG_RUNTIME_DIR || "";
+  if (runtimeDir) {
+    candidates.push(join(runtimeDir, "docker.sock"));
+    candidates.push(join(runtimeDir, "podman", "podman.sock"));
+  }
+  const dockerHost = env.DOCKER_HOST || "";
+  if (dockerHost.startsWith("unix://")) candidates.push(dockerHost.slice("unix://".length));
+  const containerHost = env.CONTAINER_HOST || "";
+  if (containerHost.startsWith("unix://"))
+    candidates.push(containerHost.slice("unix://".length));
+  return candidates;
+}
+
+export function securityBoundaryHazards(options = {}) {
+  const {
+    hostRoot = "", env = process.env, exists = existsSync,
+    writable = writableControlSocket
+  } = options;
+  const hostPath = (path) => (hostRoot ? join(hostRoot, path) : path);
+  const dockerHost = env.DOCKER_HOST || "";
+  const containerHost = env.CONTAINER_HOST || "";
+  const hazards = [...new Set(controlSocketCandidates(hostRoot, env).filter(writable))]
+    .sort().map((path) => `writable host-control socket: ${path}`);
+  if (dockerHost && !dockerHost.startsWith("unix://"))
+    hazards.push(`remote Docker control endpoint configured (${dockerHost.split(":", 1)[0] || "unknown"})`);
+  if (containerHost && !containerHost.startsWith("unix://"))
+    hazards.push(`remote container control endpoint configured (${containerHost.split(":", 1)[0] || "unknown"})`);
+  if (exists(hostPath("/var/run/secrets/kubernetes.io/serviceaccount/token")))
+    hazards.push("mounted Kubernetes service-account credential");
+  if (env.SSH_AUTH_SOCK && exists(env.SSH_AUTH_SOCK))
+    hazards.push("mounted SSH agent socket");
+  return hazards;
+}
+
+export function securityBoundaryInspection(options = {}) {
+  const {
+    env = process.env, exists = existsSync, read = readFileSync,
+    writable = writableControlSocket
+  } = options;
+  const boundary = inspectContainerBoundary({ exists, read, env });
   // These probes are absolute host paths, which makes the scan depend on the
   // machine running it: a CI runner with Docker installed owns a writable
   // /var/run/docker.sock, so no attestation could ever authorize unattended
@@ -69,40 +122,18 @@ export function securityBoundaryInspection() {
   // contract instead of its host. Production never sets it and keeps the real
   // absolute paths.
   const hostRoot =
-    process.env.FOUNDATION_TESTING === "1" && process.env.FOUNDATION_TEST_HOST_ROOT
-      ? resolve(process.env.FOUNDATION_TEST_HOST_ROOT)
+    env.FOUNDATION_TESTING === "1" && env.FOUNDATION_TEST_HOST_ROOT
+      ? resolve(env.FOUNDATION_TEST_HOST_ROOT)
       : "";
-  const hostPath = (path) => (hostRoot ? join(hostRoot, path) : path);
-  const candidates = [
-    "/var/run/docker.sock", "/run/docker.sock", "/run/podman/podman.sock",
-    "/run/containerd/containerd.sock", "/var/run/crio/crio.sock"
-  ].map(hostPath);
-  const runtimeDir = process.env.XDG_RUNTIME_DIR || "";
-  if (runtimeDir) {
-    candidates.push(join(runtimeDir, "docker.sock"));
-    candidates.push(join(runtimeDir, "podman", "podman.sock"));
-  }
-  const dockerHost = process.env.DOCKER_HOST || "";
-  if (dockerHost.startsWith("unix://")) candidates.push(dockerHost.slice("unix://".length));
-  const containerHost = process.env.CONTAINER_HOST || "";
-  if (containerHost.startsWith("unix://")) candidates.push(containerHost.slice("unix://".length));
-  const hazards = [...new Set(candidates.filter(writableControlSocket))]
-    .sort().map((path) => `writable host-control socket: ${path}`);
-  if (dockerHost && !dockerHost.startsWith("unix://"))
-    hazards.push(`remote Docker control endpoint configured (${dockerHost.split(":", 1)[0] || "unknown"})`);
-  if (containerHost && !containerHost.startsWith("unix://"))
-    hazards.push(`remote container control endpoint configured (${containerHost.split(":", 1)[0] || "unknown"})`);
-  if (existsSync(hostPath("/var/run/secrets/kubernetes.io/serviceaccount/token")))
-    hazards.push("mounted Kubernetes service-account credential");
-  if (process.env.SSH_AUTH_SOCK && existsSync(process.env.SSH_AUTH_SOCK))
-    hazards.push("mounted SSH agent socket");
-  return { kind, status, evidence, hazards };
+  const hazards = securityBoundaryHazards({ hostRoot, env, exists, writable });
+  return { ...boundary, hazards };
 }
 
-export function createHostAttestationRuntime({
-  root, attestations, protocolVersion, loadRuntime, changePath, directoryHash,
-  stableHash, readJson, writeJson, now
-}) {
+export function createHostAttestationRuntime(options) {
+  const {
+    root, attestations, protocolVersion, loadRuntime, changePath, directoryHash,
+    stableHash, readJson, writeJson, now, writeFileExclusive
+  } = Object.assign({ writeFileExclusive: writeFileSync }, options);
   const challengePath = (id) => join(attestations, "challenges", `${id}.json`);
 
   function createChallenge(id) {
@@ -147,83 +178,150 @@ export function createHostAttestationRuntime({
     return roots;
   }
 
+  function loadTrustedHostRoot(path, administered) {
+    if (!existsSync(path)) return null;
+    let stat;
+    try { stat = lstatSync(path); } catch { return null; }
+    if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o022) !== 0) return null;
+    // `chmod 600` on a self-authored file satisfies the mode check, so mode
+    // alone does not establish that an administrator installed this. The
+    // real roots live in root-owned system directories; require that.
+    if (administered && stat.uid !== 0) {
+      console.error(
+        `WARNING: ignoring trust root '${path}': it is not owned by root, so it does not establish administered trust`);
+      return null;
+    }
+    const value = readJson(path, {});
+    if (value.version !== 1 || !value.issuers || typeof value.issuers !== "object") return null;
+    return value;
+  }
+
+  function trustedIssuer(config, trustRoot) {
+    if (config?.algorithm !== "ed25519" ||
+        !String(config.publicKey || "").includes("PUBLIC KEY")) return null;
+    return { ...config, trustRoot };
+  }
+
   function trustedHostIssuers() {
     const issuers = {};
     for (const { path, administered } of trustedHostRoots()) {
-      if (!existsSync(path)) continue;
-      let stat;
-      try { stat = lstatSync(path); } catch { continue; }
-      if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o022) !== 0) continue;
-      // `chmod 600` on a self-authored file satisfies the mode check, so mode
-      // alone does not establish that an administrator installed this. The
-      // real roots live in root-owned system directories; require that.
-      if (administered && stat.uid !== 0) {
-        console.error(
-          `WARNING: ignoring trust root '${path}': it is not owned by root, so it does not establish administered trust`);
-        continue;
+      const value = loadTrustedHostRoot(path, administered);
+      if (!value) continue;
+      for (const [issuer, config] of Object.entries(value.issuers)) {
+        const trusted = trustedIssuer(config, path);
+        if (trusted) issuers[issuer] = trusted;
       }
-      const value = readJson(path, {});
-      if (value.version !== 1 || !value.issuers || typeof value.issuers !== "object") continue;
-      for (const [issuer, config] of Object.entries(value.issuers))
-        if (config?.algorithm === "ed25519" && String(config.publicKey || "").includes("PUBLIC KEY"))
-          issuers[issuer] = { ...config, trustRoot: path };
     }
     return issuers;
   }
 
-  function validate(id, path, consume = false) {
-    if (!path) return { valid: false, reason: "trusted host attestation was not supplied" };
+  const invalidAttestation = (reason) => ({ valid: false, reason });
+
+  function attestationInput(id, path) {
+    if (!path)
+      return { result: invalidAttestation("trusted host attestation was not supplied") };
     const absolute = resolve(path);
-    if (!existsSync(absolute)) return { valid: false, reason: "attestation file is missing" };
+    if (!existsSync(absolute))
+      return { result: invalidAttestation("attestation file is missing") };
     const envelope = readJson(absolute, {});
-    const payload = envelope.payload;
-    const challenge = readJson(challengePath(id), {});
+    return {
+      envelope, payload: envelope.payload,
+      challenge: readJson(challengePath(id), {})
+    };
+  }
+
+  function envelopeValidity(context) {
+    const { envelope, payload } = context;
     if (String(envelope.version) !== protocolVersion || !payload ||
         typeof envelope.signature !== "string")
-      return { valid: false, reason: "attestation envelope is malformed" };
+      return invalidAttestation("attestation envelope is malformed");
+    return null;
+  }
+
+  function issuerValidity(context) {
+    const { envelope, payload } = context;
     const issuer = trustedHostIssuers()[payload.issuer];
-    if (!issuer) return { valid: false, reason: `issuer '${payload.issuer || "unknown"}' is not trusted` };
+    if (!issuer)
+      return { result: invalidAttestation(
+        `issuer '${payload.issuer || "unknown"}' is not trusted`) };
     if (!verifySignedPayload(payload, envelope.signature, issuer.publicKey))
-      return { valid: false, reason: "attestation signature is invalid" };
-    if (String(challenge.version) !== protocolVersion || String(payload.version) !== protocolVersion ||
+      return { result: invalidAttestation("attestation signature is invalid") };
+    return { issuer };
+  }
+
+  function challengeValidity(id, payload, challenge) {
+    if (String(challenge.version) !== protocolVersion ||
+        String(payload.version) !== protocolVersion ||
         payload.nonce !== challenge.nonce || payload.changeId !== id ||
-        payload.projectRoot !== root || payload.agreementHash !== directoryHash(changePath(id)) ||
+        payload.projectRoot !== root ||
+        payload.agreementHash !== directoryHash(changePath(id)) ||
         payload.agreementHash !== challenge.agreementHash)
-      return { valid: false, reason: "attestation does not match the current challenge, project, or agreement" };
+      return invalidAttestation(
+        "attestation does not match the current challenge, project, or agreement");
+    return null;
+  }
+
+  function lifetimeValidity(payload, challenge) {
     const issuedAt = Date.parse(payload.issuedAt || "");
     const expiresAt = Date.parse(payload.expiresAt || "");
     if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) ||
         issuedAt > Date.now() + 60_000 || expiresAt <= Date.now() ||
-        expiresAt - issuedAt > 15 * 60 * 1000 || expiresAt > Date.parse(challenge.expiresAt || ""))
-      return { valid: false, reason: "attestation lifetime is invalid or expired" };
+        expiresAt - issuedAt > 15 * 60 * 1000 ||
+        expiresAt > Date.parse(challenge.expiresAt || ""))
+      return invalidAttestation("attestation lifetime is invalid or expired");
+    return null;
+  }
+
+  function permissionValidity(payload, challenge) {
     const permissions = payload.permissions || {};
     const required = challenge.requiredPermissions || {};
-    const mismatched = Object.entries(required).filter(([key, value]) => permissions[key] !== value);
+    const mismatched = Object.entries(required)
+      .filter(([key, value]) => permissions[key] !== value);
     if (mismatched.length)
-      return { valid: false, reason: `attestation permission mismatch: ${mismatched.map(([key]) => key).join(", ")}` };
+      return invalidAttestation(
+        `attestation permission mismatch: ${mismatched.map(([key]) => key).join(", ")}`);
+    return { permissions };
+  }
+
+  function consumeAttestation(id, payload, issuer, consume) {
     const usedPath = join(attestations, "used", `${stableHash(payload.nonce)}.json`);
-    if (existsSync(usedPath)) return { valid: false, reason: "attestation nonce was already consumed" };
-    if (consume) {
-      // Exclusive create, not check-then-write: writeJson is temp+rename, so
-      // two concurrent unattended runs presenting the same attestation would
-      // both observe "not consumed" and both win. The replay window is not the
-      // only control this should have.
-      mkdirSync(dirname(usedPath), { recursive: true });
-      try {
-        writeFileSync(usedPath, `${JSON.stringify({
-          version: 1, changeId: id, issuer: payload.issuer,
-          nonceDigest: stableHash(payload.nonce), agreementHash: payload.agreementHash,
-          consumedAt: now(), trustRoot: issuer.trustRoot
-        }, null, 2)}\n`, { flag: "wx" });
-      } catch (error) {
-        if (error.code === "EEXIST")
-          return { valid: false, reason: "attestation nonce was already consumed" };
-        throw error;
-      }
+    if (existsSync(usedPath))
+      return invalidAttestation("attestation nonce was already consumed");
+    if (!consume) return null;
+    mkdirSync(dirname(usedPath), { recursive: true });
+    try {
+      writeFileExclusive(usedPath, `${JSON.stringify({
+        version: 1, changeId: id, issuer: payload.issuer,
+        nonceDigest: stableHash(payload.nonce), agreementHash: payload.agreementHash,
+        consumedAt: now(), trustRoot: issuer.trustRoot
+      }, null, 2)}\n`, { flag: "wx" });
+    } catch (error) {
+      if (error.code === "EEXIST")
+        return invalidAttestation("attestation nonce was already consumed");
+      throw error;
     }
+    return null;
+  }
+
+  function validate(id, path, consume = false) {
+    const input = attestationInput(id, path);
+    if (input.result) return input.result;
+    const envelopeIssue = envelopeValidity(input);
+    if (envelopeIssue) return envelopeIssue;
+    const trust = issuerValidity(input);
+    if (trust.result) return trust.result;
+    const challengeIssue = challengeValidity(id, input.payload, input.challenge);
+    if (challengeIssue) return challengeIssue;
+    const lifetimeIssue = lifetimeValidity(input.payload, input.challenge);
+    if (lifetimeIssue) return lifetimeIssue;
+    const permission = permissionValidity(input.payload, input.challenge);
+    if (permission.valid === false) return permission;
+    const consumptionIssue = consumeAttestation(id, input.payload, trust.issuer, consume);
+    if (consumptionIssue) return consumptionIssue;
     return {
-      valid: true, reason: "signed host attestation is valid", issuer: payload.issuer,
-      expiresAt: payload.expiresAt, permissions, trustRoot: issuer.trustRoot
+      valid: true, reason: "signed host attestation is valid", issuer: input.payload.issuer,
+      expiresAt: input.payload.expiresAt, permissions: permission.permissions,
+      trustRoot: trust.issuer.trustRoot
     };
   }
 

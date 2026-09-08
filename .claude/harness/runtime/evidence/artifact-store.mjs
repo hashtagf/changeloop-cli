@@ -8,6 +8,59 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+export function artifactSourceCandidates(root, workspace, artifact) {
+  const projectCandidate = resolve(root, artifact.path);
+  const workspaceCandidate = resolve(workspace, artifact.path);
+  const controlPlaneArtifact = ["command-log", "service-log"].includes(artifact.type) ||
+    String(artifact.path).replaceAll("\\", "/").startsWith(".foundation/");
+  return controlPlaneArtifact
+    ? [projectCandidate, workspaceCandidate]
+    : [workspaceCandidate, projectCandidate];
+}
+
+export function durableArtifactOperation({
+  root,
+  providerWorkspace,
+  proofRunRoot,
+  canonicalPath,
+  pathInside,
+  fileDigest,
+  fail
+}, id, provider, proofRunId, artifact) {
+  if (!artifact?.path || typeof artifact.path !== "string")
+    fail(`provider '${provider}' artifact requires a path`);
+  const workspace = canonicalPath(providerWorkspace(id, provider));
+  const candidates = artifactSourceCandidates(root, workspace, artifact);
+  const source = candidates.find((candidate) => existsSync(candidate)) || candidates[0];
+  if (!existsSync(source)) {
+    if (artifact.required === false) return { ...artifact, missing: true };
+    fail(`required artifact is missing: ${artifact.path}`);
+  }
+  const realSource = realpathSync(source);
+  if (!pathInside(root, realSource) && !pathInside(workspace, realSource))
+    fail(`artifact escapes the project workspace: ${artifact.path}`);
+  if (!statSync(realSource).isFile())
+    fail(`artifact is not a regular file: ${artifact.path}`);
+  const sha256 = fileDigest(realSource);
+  const safeName = basename(realSource).replace(/[^a-zA-Z0-9._-]+/g, "-") || "artifact";
+  const destination = join(
+    proofRunRoot(id, proofRunId), "artifacts", provider,
+    `${sha256.slice(0, 12)}-${safeName}`
+  );
+  mkdirSync(dirname(destination), { recursive: true });
+  if (!existsSync(destination)) cpSync(realSource, destination);
+  return {
+    path: relative(root, destination).replaceAll("\\", "/"),
+    sourcePath: pathInside(root, realSource)
+      ? relative(root, realSource).replaceAll("\\", "/")
+      : relative(workspace, realSource).replaceAll("\\", "/"),
+    type: artifact.type || "artifact",
+    required: artifact.required !== false,
+    sha256,
+    size: statSync(destination).size
+  };
+}
+
 export function createArtifactStore({
   root,
   prototypesRoot,
@@ -75,46 +128,15 @@ export function createArtifactStore({
     return values.find((value) => evidenceInputTargetsPrototype(value, workspace)) || null;
   }
 
-  function durableArtifact(id, provider, proofRunId, artifact) {
-    if (!artifact?.path || typeof artifact.path !== "string")
-      fail(`provider '${provider}' artifact requires a path`);
-    const workspace = canonicalPath(providerWorkspace(id, provider));
-    const projectCandidate = resolve(root, artifact.path);
-    const workspaceCandidate = resolve(workspace, artifact.path);
-    const controlPlaneArtifact = ["command-log", "service-log"].includes(artifact.type) ||
-      String(artifact.path).replaceAll("\\", "/").startsWith(".foundation/");
-    const candidates = controlPlaneArtifact
-      ? [projectCandidate, workspaceCandidate]
-      : [workspaceCandidate, projectCandidate];
-    const source = candidates.find((candidate) => existsSync(candidate)) || candidates[0];
-    if (!existsSync(source)) {
-      if (artifact.required === false) return { ...artifact, missing: true };
-      fail(`required artifact is missing: ${artifact.path}`);
-    }
-    const realSource = realpathSync(source);
-    if (!pathInside(root, realSource) && !pathInside(workspace, realSource))
-      fail(`artifact escapes the project workspace: ${artifact.path}`);
-    if (!statSync(realSource).isFile())
-      fail(`artifact is not a regular file: ${artifact.path}`);
-    const sha256 = fileDigest(realSource);
-    const safeName = basename(realSource).replace(/[^a-zA-Z0-9._-]+/g, "-") || "artifact";
-    const destination = join(
-      proofRunRoot(id, proofRunId), "artifacts", provider,
-      `${sha256.slice(0, 12)}-${safeName}`
-    );
-    mkdirSync(dirname(destination), { recursive: true });
-    if (!existsSync(destination)) cpSync(realSource, destination);
-    return {
-      path: relative(root, destination).replaceAll("\\", "/"),
-      sourcePath: pathInside(root, realSource)
-        ? relative(root, realSource).replaceAll("\\", "/")
-        : relative(workspace, realSource).replaceAll("\\", "/"),
-      type: artifact.type || "artifact",
-      required: artifact.required !== false,
-      sha256,
-      size: statSync(destination).size
-    };
-  }
+  const durableArtifact = durableArtifactOperation.bind(null, {
+    root,
+    providerWorkspace,
+    proofRunRoot,
+    canonicalPath,
+    pathInside,
+    fileDigest,
+    fail
+  });
 
   function validateArtifact(artifact) {
     if (artifact.required === false && artifact.missing) return true;

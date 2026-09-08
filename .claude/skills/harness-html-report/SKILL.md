@@ -1,6 +1,6 @@
 ---
 name: harness-html-report
-description: Publish a self-contained HTML report of Foundation harness state (gates, evidence, receipts, tasks) as an Artifact. Use when the user asks for a harness, change, or evidence HTML report.
+description: Publish a self-contained HTML report of Change Loop state (gates, evidence, receipts, tasks) as an Artifact. Use when the user asks for a harness, change, or evidence HTML report.
 ---
 
 # Harness HTML report

@@ -6,6 +6,49 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { nextCommand } from "./next-step.mjs";
+import { deriveChangeProjection } from "./state-projections.mjs";
+import { upgradeCompatibilityDiagnostics } from "./update-advisory.mjs";
+
+export function changeReadiness(state, proof, current) {
+  return deriveChangeProjection({ state, proof, currentHash: current }).readiness;
+}
+
+export function shouldReportOutOfBandDelivery(state, delivery) {
+  return ["change", "building", "waiting", "proven"].includes(state?.status) &&
+    state?.workspace?.applied !== true &&
+    Boolean(delivery?.observed || delivery?.references?.length);
+}
+
+export function changeListingRow(id, {
+  runtimePath,
+  proofPath,
+  readJson,
+  readJsonOrNull,
+  relevantHash,
+  pathExists = existsSync
+}) {
+  let state;
+  if (!pathExists(runtimePath(id))) state = { status: "untracked" };
+  else {
+    state = readJsonOrNull(runtimePath(id));
+    if (state === null)
+      return `${id}\tinvalid-runtime-json\tunknown\tclaude-foundation change abandon ${id} --reason <reason> --decision-ref <ref>`;
+  }
+
+  const proof = pathExists(proofPath(id)) ? readJson(proofPath(id), {}) : null;
+  let current = null;
+  if (state.status !== "untracked") {
+    try {
+      current = relevantHash(id);
+    } catch (error) {
+      if (error.code !== "FOUNDATION_WORKSPACE_MISSING") throw error;
+      return `${id}\tworkspace-missing\t${state.schema || "unknown"}\tclaude-foundation sandbox create ${id} --all`;
+    }
+  }
+
+  const view = deriveChangeProjection({ state, proof, currentHash: current });
+  return `${id}\t${view.readiness}\t${view.schema}\t${nextCommand(view.readiness, id)}`;
+}
 
 export function createDiagnosticsRuntime({
   root,
@@ -17,8 +60,11 @@ export function createDiagnosticsRuntime({
   packetSchemaVersion,
   agentPlanSchemaVersion,
   contextEventSchemaVersion,
+  metricsSchemaVersion,
+  commandTelemetrySchemaVersion,
   reviewProtocolVersion,
   acceptanceProtocolVersion,
+  semanticAcceptanceProtocolVersion,
   reviewPacketSchemaVersion,
   attestationProtocolVersion,
   authorityProtocolVersion,
@@ -57,6 +103,9 @@ export function createDiagnosticsRuntime({
   reviewerStatus,
   unverifiedDrift,
   unresolvedApplyTransactions,
+  deliveryObservation = null,
+  authorityPreflight = () => ({ status: "READY", blockers: [] }),
+  executionContract = null,
   parseFlags,
   parseStrictCommandFlags,
   fail
@@ -111,45 +160,14 @@ export function createDiagnosticsRuntime({
     const ids = activeChanges();
     const orphans = orphanRuntimeChanges();
     if (!ids.length) console.log("No active changes.");
-    for (const id of ids) {
-      // One unreadable state file used to kill the whole listing — every other
-      // change became invisible because of a neighbour. `changes` is how a
-      // stuck project is diagnosed, so it degrades per row instead.
-      let state;
-      if (!existsSync(runtimePath(id))) state = { status: "untracked" };
-      else {
-        state = readJsonOrNull(runtimePath(id));
-        if (state === null) {
-          console.log(`${id}\tinvalid-runtime-json\tunknown\tclaude-foundation change abandon ${id} --reason <reason> --decision-ref <ref>`);
-          continue;
-        }
-      }
-      const proof = existsSync(proofPath(id)) ? readJson(proofPath(id), {}) : null;
-      // Same degradation for a change whose recorded workspace is gone: the
-      // snapshot throws with the exit instruction, and this listing is where
-      // that instruction has to reach the operator.
-      let current = null;
-      if (state.status !== "untracked") {
-        try {
-          current = relevantHash(id);
-        } catch (error) {
-          // Only the typed missing-workspace case degrades; anything else
-          // (permissions, git failure) is a real fault this label would hide.
-          if (error.code !== "FOUNDATION_WORKSPACE_MISSING") throw error;
-          console.log(`${id}\tworkspace-missing\t${state.schema || "unknown"
-            }\tclaude-foundation sandbox create ${id}`);
-          continue;
-        }
-      }
-      const readiness = proof?.status === "pass" && proof.workspaceHash === current
-        ? "ready-to-land"
-        : state.status === "proven" ? "stale-proof" : state.status;
-      // A listed change without a real next command reads as a dead entry, so
-      // every reachable status names the operation that moves it. The map now
-      // lives in core/next-step.mjs because this was the only place that knew
-      // it — a listing nobody thinks to run.
-      console.log(`${id}\t${readiness}\t${state.schema || "unknown"}\t${nextCommand(readiness, id)}`);
-    }
+    for (const id of ids)
+      console.log(changeListingRow(id, {
+        runtimePath,
+        proofPath,
+        readJson,
+        readJsonOrNull,
+        relevantHash
+      }));
     for (const orphan of orphans)
       console.log(`${orphan.id}\torphan-runtime\t${orphan.schema}\t${orphan.reason}`);
   }
@@ -173,7 +191,8 @@ export function createDiagnosticsRuntime({
     const stage = flags.stage || "prove";
     if (!["change", "build", "prove"].includes(stage))
       fail("doctor --stage must be change|build|prove");
-
+    function collectFoundationChecks() {
+    function collectUnattendedCheck() {
     if (flags.unattended) {
       if (!flags.change) fail("doctor --unattended requires --change <id>");
       const isolation = isolationInspection(flags.change, flags);
@@ -185,10 +204,13 @@ export function createDiagnosticsRuntime({
           : isolation.execution.reasons.join("; ")
       });
     }
+    }
+    collectUnattendedCheck();
 
     const nodeParts = process.versions.node.split(".").map(Number);
     const nodeOk = nodeParts[0] > 20 || (nodeParts[0] === 20 && nodeParts[1] >= 19);
     checks.push({ level: nodeOk ? "ok" : "error", name: "node", detail: process.versions.node });
+    function collectProtocolCheck() {
     const protocols = protocolDescriptor();
     const protocolOk = String(protocols.runtimeApi) === runtimeApiVersion &&
       String(protocols.providerProtocol) === providerProtocolVersion &&
@@ -197,8 +219,11 @@ export function createDiagnosticsRuntime({
       String(protocols.packetSchema) === packetSchemaVersion &&
       String(protocols.agentPlanSchema) === agentPlanSchemaVersion &&
       String(protocols.contextEventSchema) === contextEventSchemaVersion &&
+      String(protocols.metricsSchema) === metricsSchemaVersion &&
+      String(protocols.commandTelemetrySchema) === commandTelemetrySchemaVersion &&
       String(protocols.reviewProtocol) === reviewProtocolVersion &&
       String(protocols.acceptanceProtocol) === acceptanceProtocolVersion &&
+      String(protocols.semanticAcceptanceProtocol) === semanticAcceptanceProtocolVersion &&
       String(protocols.reviewPacketSchema) === reviewPacketSchemaVersion &&
       String(protocols.attestationProtocol) === attestationProtocolVersion &&
       String(protocols.authorityProtocol) === authorityProtocolVersion &&
@@ -207,9 +232,11 @@ export function createDiagnosticsRuntime({
       level: protocolOk ? "ok" : "error",
       name: "protocol-bundle",
       detail: protocolOk
-        ? `runtime API ${runtimeApiVersion}; provider ${providerProtocolVersion}; proof ${proofProtocolVersion}; packet ${packetSchemaVersion}; review ${reviewProtocolVersion}/${reviewPacketSchemaVersion}; acceptance ${acceptanceProtocolVersion}; attestation ${attestationProtocolVersion}; authority ${authorityProtocolVersion}; signed-ci ${ciEvidenceProtocolVersion}; plan ${agentPlanSchemaVersion}; context ${contextEventSchemaVersion}`
+        ? `runtime API ${runtimeApiVersion}; provider ${providerProtocolVersion}; proof ${proofProtocolVersion}; packet ${packetSchemaVersion}; review ${reviewProtocolVersion}/${reviewPacketSchemaVersion}; acceptance ${acceptanceProtocolVersion}; semantic-acceptance ${semanticAcceptanceProtocolVersion}; attestation ${attestationProtocolVersion}; authority ${authorityProtocolVersion}; signed-ci ${ciEvidenceProtocolVersion}; plan ${agentPlanSchemaVersion}; context ${contextEventSchemaVersion}; metrics ${metricsSchemaVersion}; command-telemetry ${commandTelemetrySchemaVersion}`
         : "protocol.json is incompatible with foundation.mjs; reinstall Foundation"
     });
+    }
+    collectProtocolCheck();
 
     const catalog = repositoryCatalog();
     checks.push({
@@ -251,6 +278,25 @@ export function createDiagnosticsRuntime({
         ? `task=${modelPolicy.execution.packetBytes.task}; review=${modelPolicy.execution.packetBytes.review}; repository=${modelPolicy.execution.packetBytes.repository}; global=${modelPolicy.execution.packetBytes.global}`
         : `legacy numeric limit ${modelPolicy.execution.legacyNumericPacketBytes}; migrate to scoped task/repository/global limits`
     });
+    const upgradeDiagnostics = upgradeCompatibilityDiagnostics({
+      currentVersion: version,
+      configuredPolicy: readJson(join(root, "foundation.json"), {}),
+      activeChanges: activeChanges()
+        .map((id) => readJsonOrNull(runtimePath(id)))
+        .filter(Boolean)
+    });
+    for (const finding of upgradeDiagnostics.policyFindings) checks.push({
+      level: "warn",
+      name: `upgrade-policy:${finding.code}`,
+      detail: `${finding.summary}; changed=${finding.changed}; ${finding.recovery}`
+    });
+    if (upgradeDiagnostics.activeChangeEffects.length) checks.push({
+      level: "info",
+      name: "upgrade-active-changes",
+      detail: upgradeDiagnostics.activeChangeEffects.map((effect) =>
+        `${effect.changeId} (${effect.status}): ${effect.effects.join(", ")}; ${effect.recovery}`
+      ).join("; ")
+    });
 
     const openspec = openSpecCliStatus(root);
     checks.push({
@@ -260,7 +306,10 @@ export function createDiagnosticsRuntime({
       name: "openspec",
       detail: openspec.detail
     });
+    }
+    collectFoundationChecks();
 
+    function collectChangeChecks() {
     const requestedChange = flags.change || null;
     const orphanRuntimes = orphanRuntimeChanges();
     checks.push({
@@ -281,14 +330,40 @@ export function createDiagnosticsRuntime({
       });
     } else if (requestedChange) {
       const state = loadRuntime(requestedChange);
+      const compiled = executionContract?.(requestedChange) || null;
+      const authority = compiled?.authority || authorityPreflight(requestedChange);
+      if (compiled) checks.push({
+        level: "ok",
+        name: "execution-contract",
+        detail: `v${compiled.version}; ${compiled.fingerprint}`
+      });
+      checks.push({
+        level: authority.status === "READY" ? "ok" : "error",
+        name: "authority-preflight",
+        detail: authority.status === "READY" ? "required authority is configured"
+          : authority.blockers.map((blocker) => `${blocker.code}: ${blocker.next}`).join("; ")
+      });
       const workspace = state.workspace?.path || root;
       const contract = evidence(requestedChange);
       const selected = selectedRepositories(requestedChange, state);
+      if (deliveryObservation) {
+        const delivery = deliveryObservation(requestedChange, state);
+        if (shouldReportOutOfBandDelivery(state, delivery)) checks.push({
+          level: "warn",
+          name: "out-of-band-delivery",
+          detail: `change bytes or a recorded delivery reference are present while lifecycle=${
+            state.status}; this is not Proof or archive completion; recover with 'claude-foundation sandbox sync ${
+              requestedChange}', then re-prove and Land until archived`,
+          delivery: { authoritative: false, proofStatus: "unchanged", ...delivery }
+        });
+      }
+      function collectRepositoryChecks() {
       for (const repository of selected) {
         const available = existsSync(repository.path);
-        const initialized = available && (
-          repository.type === "external" || Boolean(gitHead(repository.path))
-        );
+        // `external` describes topology/containment, not a weaker isolation
+        // contract. Every selected repository must still be Git-backed so the
+        // sandbox can pin it to a commit.
+        const initialized = available && Boolean(gitHead(repository.path));
         checks.push({
           level: initialized ? "ok" : (repository.mode === "write" ? "error" : "warn"),
           name: `repository:${repository.id}`,
@@ -297,9 +372,36 @@ export function createDiagnosticsRuntime({
               : "not initialized as Git"
         });
       }
+      }
+      collectRepositoryChecks();
+      function collectPlaywrightProviderChecks(config, providerCwd) {
+        if (config.adapter !== "playwright") return;
+        const providerPlaywright = playwrightAvailability(providerCwd);
+        checks.push({
+          level: providerPlaywright.packageOwned && providerPlaywright.binaryAvailable
+            ? "ok" : (stage === "prove" ? "error" : "info"),
+          name: "playwright:package",
+          detail: providerPlaywright.packageOwned && providerPlaywright.binaryAvailable
+            ? "project-owned dependency available"
+            : "install and lock @playwright/test in the project"
+        });
+        checks.push({
+          level: providerPlaywright.config ? "ok" : "warn",
+          name: "playwright:config",
+          detail: providerPlaywright.config || "no config found; command must provide complete setup"
+        });
+        checks.push({
+          level: config.readiness?.url ? "ok" : "info",
+          name: "playwright:readiness",
+          detail: config.readiness?.url || "delegated to Playwright webServer configuration"
+        });
+      }
+      function collectProviderChecks() {
       // Keep the eager host inspection from the original diagnostics path.
       playwrightAvailability(workspace);
-      for (const provider of requiredProviders(requestedChange)) {
+      const contractProviders = compiled?.evidence?.providers ||
+        requiredProviders(requestedChange);
+      for (const provider of contractProviders) {
         const config = providerConfig(requestedChange, provider);
         const current = receiptValidity(requestedChange, provider);
         if (!config) {
@@ -330,28 +432,11 @@ export function createDiagnosticsRuntime({
             ? executable
             : `${executable || "missing"} ${stage === "prove" ? "unavailable" : "planned"}`
         });
-        if (config.adapter === "playwright") {
-          const providerPlaywright = playwrightAvailability(providerCwd);
-          checks.push({
-            level: providerPlaywright.packageOwned && providerPlaywright.binaryAvailable
-              ? "ok" : (stage === "prove" ? "error" : "info"),
-            name: "playwright:package",
-            detail: providerPlaywright.packageOwned && providerPlaywright.binaryAvailable
-              ? "project-owned dependency available"
-              : "install and lock @playwright/test in the project"
-          });
-          checks.push({
-            level: providerPlaywright.config ? "ok" : "warn",
-            name: "playwright:config",
-            detail: providerPlaywright.config || "no config found; command must provide complete setup"
-          });
-          checks.push({
-            level: config.readiness?.url ? "ok" : "info",
-            name: "playwright:readiness",
-            detail: config.readiness?.url || "delegated to Playwright webServer configuration"
-          });
-        }
+        collectPlaywrightProviderChecks(config, providerCwd);
       }
+      }
+      collectProviderChecks();
+      function collectTopologyAndApplyChecks() {
       for (const issue of topologyIssues(requestedChange))
         checks.push({
           level: stage === "prove" ? "error" : "warn",
@@ -373,6 +458,9 @@ export function createDiagnosticsRuntime({
             divergent.length ? "; Land will stop until this is resolved" : "; recovers on the next apply"}`
           : "no unresolved apply transaction"
       });
+      }
+      collectTopologyAndApplyChecks();
+      function collectPolicyChecks() {
       const policy = policyCapabilities(requestedChange);
       checks.push({
         level: "info",
@@ -399,13 +487,29 @@ export function createDiagnosticsRuntime({
       // the capability a change under time pressure omits, and its absence looks
       // identical to a change that considered it and decided against. Naming it
       // is not the same as requiring it — the contract stays the author's.
-      const proves = requiredProviders(requestedChange).some((provider) =>
-        providerCapability(provider, providerConfig(requestedChange, provider)) === "mutation");
-      if (state.impact === "high" && !proves)
-        checks.push({
-          level: "warn",
-          name: "mutation-coverage",
-          detail: "high-impact change declares no 'mutation' provider; nothing proves the evidence suite detects a deliberate fault"
+      const qualityMode = foundationPolicy().quality?.changeGate || "warn";
+      const highRisk = state.impact === "high" ||
+        (state.securityTriggers || []).length > 0;
+      const executableSurface = (state.declaredSurface || []).some((path) =>
+        typeof path === "string" && /\.(?:[cm]?js|jsx|tsx?|go|py|php|sh|bash)$/i.test(path));
+      const qualityConfigured = existsSync(join(root, "quality", "foundation-quality.json"));
+      if (qualityMode !== "off" && executableSurface && !qualityConfigured) checks.push({
+        level: qualityMode === "enforce-high-risk" && highRisk ? "error" : "warn",
+        name: "consumer-quality",
+        detail: "QUALITY_NOT_CONFIGURED: missing quality/foundation-quality.json; " +
+          "CRAP_NOT_MEASURED; run 'claude-foundation quality discover' and " +
+          "'claude-foundation quality init --write' after configuring project-owned providers"
+      });
+      const configuredCapabilities = new Set(Object.entries(contract.providers || {})
+        .map(([provider, config]) => providerCapability(provider, config)));
+      if (qualityMode !== "off" && highRisk)
+        for (const [capability, detail] of [
+          ["mutation", "nothing proves the evidence suite detects a deliberate fault"],
+          ["changed-quality", "nothing proves changed functions meet coverage, complexity, and CRAP-score policy"]
+        ]) if (!configuredCapabilities.has(capability)) checks.push({
+          level: qualityMode === "enforce-high-risk" ? "error" : "warn",
+          name: capability === "mutation" ? "mutation-coverage" : "changed-quality",
+          detail: `high-risk change declares no '${capability}' provider; ${detail}; quality.changeGate=${qualityMode}`
         });
       // "could not be checked" must not read like "checked and matched".
       const unverified = unverifiedDrift ? unverifiedDrift(requestedChange) : [];
@@ -422,8 +526,13 @@ export function createDiagnosticsRuntime({
           name: "evidence-schema",
           detail: "v1 manual-compatible; v2 enables executable adapters"
         });
+      }
+      collectPolicyChecks();
     }
+    }
+    collectChangeChecks();
 
+    function collectInstallationChecks() {
     for (const hook of ["protect-secrets.sh", "lint.sh"]) {
       const installed = existsSync(join(root, ".claude", "hooks", hook));
       checks.push({
@@ -453,6 +562,8 @@ export function createDiagnosticsRuntime({
       name: "no-direct-main",
       detail: directMainEnabled ? "enabled" : "disabled (opt-in policy)"
     });
+    }
+    collectInstallationChecks();
 
     if (flags.json) console.log(JSON.stringify({ version: 1, stage, checks }, null, 2));
     else for (const check of checks)
@@ -495,7 +606,7 @@ export function createDiagnosticsRuntime({
   }
 
   function usage() {
-    console.log(`Foundation harness ${version}
+    console.log(`Change Loop ${version}
 
 Commands:
   doctor [--stage change|build|prove] [--require-archive] [--change <id>] [--unattended --attestation <file>] [--json]
@@ -513,6 +624,7 @@ Commands:
   providers
   packet <change> [--phase change|build|prove|review|land] [--repo <id>] [--task <id>] [--pretty]
   metrics <change>
+  budget-checkpoint <change>
   budget-continue <change> --reason <reason> --decision-ref <ref> [--run <id>]
   validate <change>
   audit-change <change> [--json]

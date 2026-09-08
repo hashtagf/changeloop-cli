@@ -1,8 +1,12 @@
 # Executable evidence adapters
 
-Foundation separates the stable behavioral contract from replaceable execution
-wiring. Foundation does not install test frameworks, browsers, or project
+Change Loop separates the stable behavioral contract from replaceable execution
+wiring. Change Loop does not install test frameworks, browsers, or project
 dependencies; the project owns and locks every executable named by an adapter.
+
+This is the canonical provider/receipt reference for maintainers and evidence
+authors. For the installed user journey, start with `WORKFLOW.md`; for runtime
+file ownership and commands, use `README.md` in this directory.
 
 ## Behavioral contract
 
@@ -24,6 +28,21 @@ dependencies; the project owns and locks every executable named by an adapter.
 
 Discovery is an implicit suite-level obligation whenever `test` is selected; do
 not repeat `discovery` on every claim.
+
+## Readiness and selective execution
+
+Before Build, the harness records an execution-preparation identity covering
+the agreement revisions, selected repository bases/setup state, and provider
+wiring. It prepares only missing project-local tools and failed repository
+setups; ready sibling repositories are reused. Provider execution still occurs
+only in Prove and remains bound to the exact isolated repository set.
+
+Review packets and provider receipts carry repository-qualified inputs. A
+changed producer invalidates dependent consumers, while an unrelated repository
+or provider with the same fingerprint is reused. An active proof lock is waited
+on rather than duplicated. Infrastructure exhaustion leaves a non-dispatchable
+external or Harness-owned boundary; it cannot remain a review request that gets
+invoked repeatedly. No unavailable measurement is converted to zero or pass.
 
 ## Execution wiring
 
@@ -58,6 +77,7 @@ reports. Wiring changes invalidate only affected provider fingerprints.
   "services": {
     "web": {
       "command": ["npm", "run", "start", "--", "--port", "4173"],
+      "resources": ["port:4173"],
       "readiness": {
         "url": "http://127.0.0.1:4173",
         "expectHeader": {"x-foundation-app": "profile"}
@@ -112,15 +132,53 @@ command prints the change's workspace hash. An invalid signature,
 stale workspace, wrong issuer, or unsigned passing artifact is rejected before
 a receipt is written.
 
-Use `proof advance` as the normal resumable path:
+`land.riskBasedCi` is read when a change is created and again on every
+`change resolve`. When a project cannot produce signed CI, the user decides:
+`change resolve <change> --ci-not-required --decision-ref <ref>` records a
+per-change waiver, or `land.riskBasedCi: false` in `foundation.json` followed
+by `change resolve` lifts the requirement for that change. Neither is made
+from inside Build, where the phase guard keeps project policy out of reach.
+
+### Signed semantic acceptance
+
+`semantic-acceptance` is the first-class proof boundary for hidden or
+independent behavioral cases. Configure it as an external provider with a
+trusted Ed25519 issuer/key and declare stable case IDs, their claims, input
+partitions, and whether each case is required. A case may also bind a critical
+case observation from another provider. Defect reproductions can require a
+signed before-fail/after-pass transition.
+
+The external runner returns a signed envelope containing only the change,
+provider, workspace hash, case IDs, statuses, observation digests, and optional
+transition digests. Hidden inputs and oracle implementation never enter the
+agent packet. The integration records that envelope through the existing
+command surface:
 
 ```bash
-claude-foundation proof advance <change>
+claude-foundation evidence record <change> semantic-acceptance \
+  --envelope signed-semantic-result.json
 ```
 
-It executes missing project evidence once, routes review before acceptance, and
-returns a stable waiting handoff. Repeating it against an unchanged open request
-does not rerun evidence or dispatch another reviewer. Configured AI review uses
+The runtime verifies the signature, issuer, workspace, complete required-case
+set, uniqueness, claim/partition binding, transition, and any referenced source
+receipt before writing the receipt. A review pass cannot override a failed or
+missing semantic case. Workspace edits, envelope tampering, or a stale/missing
+source critical-case receipt invalidate it and block Proof and Land.
+
+Use unified `advance` as the normal resumable path:
+
+```bash
+claude-foundation advance <change> --through proven
+```
+
+It invokes the compatible `proof advance` primitive internally, executes
+missing project evidence for the current gate, aggregates findings,
+and reuses current receipts while repaired inputs selectively invalidate their
+providers and downstream dependencies. Product repairs may repeat until all
+required evidence passes. A decision, authority, resource, conflict, or
+no-progress boundary preserves the change and returns an exact resume route.
+Repeating it against an unchanged open request does not rerun evidence or
+dispatch another reviewer. Configured AI review uses
 `authority run`; a named human review uses `authority dispatch` before
 `authority record`; acceptance uses request/status/record without a review
 dispatch. Requests contain bounded packets and expire or become stale with the
@@ -141,7 +199,16 @@ not the normal interactive recovery flow.
 | `test-discovery` | Run a test command once and emit both test and discovery receipts |
 | `playwright` | Run project-owned Playwright tests and map structured claim annotations |
 | `contract-digest` | Hash one declared artifact in two or more repositories and pass only when the bytes agree |
-| `external` | Require a receipt from a system Foundation does not execute |
+| `external` | Require a receipt from a system Change Loop does not execute |
+
+For a repository-scoped provider, `FOUNDATION_REPOSITORIES_FILE` binds every
+selected ID to the same path, access mode, and base head used by changed-surface
+and review-packet identity. A selected source head may seed this before
+isolation. After isolation, every non-root repository requires its recorded
+runtime base and a worktree owned by the selected catalog target; a missing,
+incomplete, or foreign binding is infrastructure failure before hashing, never
+fallback to the live target and never a zero/pass measurement. Its recovery is
+the existing `sandbox create <change> --all` route.
 
 ### Test and discovery in more than one repository
 
@@ -191,6 +258,14 @@ changed-surface policy inferred and nobody wired is not a required provider at
 all: it appears under `advisories` in readiness, `proof plan`, and the proof
 record, and does not block.
 
+When `quality/foundation-quality.json` is committed, evidence bootstrap can
+wire `claude-foundation quality run --enforce` as the change's static-analysis
+provider. It resolves `FOUNDATION_CHANGE_ID`, runs in selected repository
+workspaces, and emits one non-averaged lane per repository. Missing quality
+capabilities remain explicit `unsupported` or `unavailable` assurance and are
+never converted to passing evidence. Setup, adapter authoring, rollout,
+baseline, and scope rules are documented in `CONSUMER-QUALITY.md`.
+
 Prototype files under `.foundation/prototypes/` are non-authoritative. The
 runtime rejects them, including local-path references and symlinked origins,
 before copying any artifact or writing a receipt.
@@ -199,10 +274,25 @@ Valid receipts are reused. Commands with identical executable arguments,
 environment, working directory, and timeout are deduplicated within one proof
 execution. Providers with non-conflicting resources run concurrently.
 
+For a single selected writable npm repository containing both `package.json`
+and `package-lock.json`, Change Loop supplies the built-in
+`dependency-supply-chain` lockfile provider automatically. No
+`execution.yaml` entry is needed. A manifest/lock mismatch fails Proof; a
+repaired lockfile is checked again and can pass. Multi-repository or ambiguous
+ownership remains explicit rather than guessing which repository to execute in.
+
+Built-in provider version 2 validates the dependency graph with the installed
+`npm ci --dry-run --offline --ignore-scripts` after comparing root metadata.
+It preserves manifests and `node_modules` and does not run lifecycle scripts.
+Unavailable npm or cache data cannot produce a passing receipt. The provider
+binds the workspace, including workspace/local manifests and npm configuration;
+its version change invalidates receipts from the metadata-only provider.
+
 What expires a receipt is what it is bound to. A provider that runs a command
 binds the workspace minus the change packet, so editing `proposal.md`,
 `design.md`, `tasks.md`, or a spec delta after proving re-finalizes the proof
-without re-executing anything. `review` and `acceptance` bind the whole
+without re-executing anything. `review`, `acceptance`, and
+`semantic-acceptance` bind the whole
 workspace including the packet — a reviewer read it — and cannot narrow that.
 In a multi-repository snapshot, both hashes compose repository content rather
 than recorded Git base commits. Base heads remain explicit sandbox/Land state,
@@ -250,7 +340,13 @@ Review receipts additionally identify reviewer type/identity, the actual model
 session for AI reviewers, one or more structured implementation-subject tuples,
 finding IDs/details, verified closure IDs, and changed-artifact scope after the
 first round. The review packet unions committed base-to-HEAD and dirty paths per
-repository with all review contract artifacts. Critical policy
+repository with all review contract artifacts. Contract directories are expanded
+to individual file identities in the dispatch manifest, including nested spec
+files. Workspace-relative contract paths are accepted only when they uniquely
+bind to the same scoped file; escaping symlinks remain invalid. Packet paths
+are checked before launching a configured reviewer. Immutable older packets
+with contract-directory scopes remain resumable; this compatibility does not
+widen a new file-scoped delta. Critical policy
 requires a different provider/model family or a human, unless the project has
 declared `"review": { "diversity": "single-model" }` in `foundation.json`; that
 waiver is named in the packet and recorded as `review.policy.diversityWaived`.
@@ -263,6 +359,20 @@ commits both waivers: `independence: "self"` and
 `diversity: "single-model"`. Claude Code Opus is the selected reviewer and
 Codex is the alternate. `doctor` and `change validate` expose the normalized
 posture and consequences; risk-tiered routing does not restore either assurance axis.
+A configured `defaultReviewer` runs first, followed by `fallbackReviewers` in
+order only after infrastructure errors. `fail` and `inconclusive` are delivered
+verdicts and never trigger fallback. Uninspectable packets and finding/closure
+binding errors retain an error attempt and exhaust that request immediately,
+without spending a full review on another model for unchanged validation input.
+Rejected findings remain diagnostic data, not passing evidence.
+On the existing `advance --through proven|archived` route, the backend revalidates
+the retained packet and rejected result. It may restore missing control-workspace
+location metadata without widening scope. Only a now-valid binding with a ready
+reviewer reopens the request; unchanged failures stay stopped, inspection is
+read-only, and the immutable error attempt still consumes infrastructure budget.
+`main-session` is allowed in that list only
+with `review.independence: "self"`; the request binds observed implementation
+provenance and current-session telemetry rather than guessing identity or model.
 A project may require either axis independently, and the runtime defaults
 an absent key to `required`. Risk routing bounds the circuit: low gets one full AI review; medium
 and high may use one full plus one finding-bound delta after one correction
@@ -308,7 +418,7 @@ Install and lock Playwright in the application repository. A typical command is:
 For a direct Playwright command, the adapter adds `--reporter=json` and the
 configured `--project` unless they are already supplied. Wrapper commands such
 as `npm run e2e` must forward those options themselves or write the configured
-`report` file. Use Playwright `webServer` configuration or a named Foundation
+`report` file. Use Playwright `webServer` configuration or a named Change Loop
 service for server startup. Every explicit readiness probe requires an expected
 body or header identity. A status-only probe is rejected because a different
 process could occupy the port.
@@ -323,8 +433,22 @@ test("owner updates profile", {
 });
 ```
 
+Bind a stable critical case on the same test with a `critical-case` annotation:
+
+```ts
+test("owner updates profile", {
+  annotation: [
+    { type: "claim", description: "profile-update" },
+    { type: "critical-case", description: "case-profile-owner-update" }
+  ]
+}, async ({ page }) => {
+  // interaction and assertions
+});
+```
+
 A successful exit without all required annotations is `inconclusive`, never
-`pass`. Playwright attachments present in the JSON report are referenced from
+`pass`. A skipped annotated test does not satisfy its claim or critical case.
+Playwright attachments present in the JSON report are referenced from
 the receipt. One Playwright adapter may declare `outputs`, for example
 `["accessibility"]`; it emits separate capability receipts from one command
 execution. Configure traces, screenshots, and videos in the project.
@@ -334,7 +458,7 @@ Browser automation is not physical operating-system input. Use
 evidence that genuinely requires a focused native window.
 
 Projects should also install an automatic Playwright fixture that fails on
-unexpected `console.error` and uncaught page errors. Foundation cannot infer
+unexpected `console.error` and uncaught page errors. Change Loop cannot infer
 that policy from a successful browser exit.
 
 ## Resources and dependencies
@@ -356,6 +480,11 @@ Override with `resources` and order providers with `dependsOn`. Read-only
 providers may run together. `workspace-write` conflicts with all workspace
 readers, and named exclusive resources such as `browser`, `dev-server`, or
 `database` cannot overlap.
+
+Required services use the same explicit resource vocabulary and start in
+bounded parallel batches. Their declared port is also an implicit `port:<n>`
+resource. If one startup fails, the harness stops every successful sibling
+before returning the aggregate failure.
 
 Use parameterized names such as `port:4173`, `database:test`, or
 `browser:chromium` when independent instances may run concurrently. Provider

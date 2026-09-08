@@ -13,9 +13,10 @@ answers gets the full guard set without changing a hook.
                 "path": "...", "glob": "...", "output_mode": "..."}}
 ```
 
-Only the fields relevant to the tool are read. `session-context.sh` is the
-exception: it reads a session event (`session_id`, `transcript_path`), not a
-tool event.
+Only the fields relevant to the tool are read. `session-context.sh` and
+`dev-terminal-guard.sh` read session events (`session_id`, `transcript_path`),
+not tool events. The terminal guard is wired to `Stop` and applies only when
+the active transcript's prompt starts with `/dev`.
 
 ## Answer contract
 
@@ -26,10 +27,36 @@ tool event.
   host must surface stderr to the model. Used by `lint.sh`.
 - Exit 0 with no output means allow. Hooks fail open when a toolchain is
   missing (no jq, no node): absence of a guard must not brick a session.
+- **Refuse a false terminal success**: the `/dev` Stop hook returns
+  `{"decision":"block","reason":"DEV_TERMINAL ..."}` while the coordinator has
+  an automatic action available. It allows Stop when exactly one active change
+  has a passing, audited proof bound to the current workspace hash, or when the
+  coordinator returns a real `WAIT`/`ASK_USER` boundary. A boundary remains
+  recorded as incomplete and cannot be mistaken for passing proof. A host
+  permission denial is Harness-owned integration recovery: the hook keeps the
+  session active and never tells the user to run an internal command.
 
 Environment: `CLAUDE_PROJECT_DIR` names the project root (default: cwd).
-`FOUNDATION_GUARDRAIL_MODE` (`off|audit|block`) governs the phase guard;
+`FOUNDATION_GUARDRAIL_MODE` (`off|audit|block|auto`) governs the phase guard;
 phase context comes from `FOUNDATION_ACTIVE_PHASE` or `.foundation/logs/`.
+The normal slash-command path records that context through the unified
+`advance` coordinator; read-only Stop inspection uses `advance --inspect`, does
+not record a new phase, and agents do not have to prepare a packet solely to
+make a hook recognize the phase. Session identity selects the exact active
+change even when another session has a newer change.
+The default `auto` mode blocks mutations during every active lifecycle phase
+and stays out of adoption-only sessions with no phase context. A recorded Build
+phase recovers every selected repository workspace root from runtime state when
+the host does not export `FOUNDATION_WORKSPACE_ROOT`.
+Mutating Build shell commands must explicitly begin inside a granted workspace;
+unanchored package-manager/formatter commands and obvious path escapes are
+blocked before the shell starts. When the host reports the shell already inside
+the workspace, the guard pins that directory as the anchor instead of refusing.
+
+Hooks constrain unsafe mutations; they do not own lifecycle completion. A
+refusal must preserve state and point back to `claude-foundation advance
+<change>` (or its exact typed recovery), so an unavailable live hook or stale
+phase row cannot become an artificial dead end.
 
 ## Host wiring
 

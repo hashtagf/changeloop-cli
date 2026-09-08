@@ -112,13 +112,19 @@ export function createInstructionManifest({
   return { ...manifest, manifestDigest: sha256(canonicalJson(manifest)) };
 }
 
-export function verifyInstructionManifest(manifest) {
+export function instructionManifestShapeReason(manifest) {
   if (!manifest || manifest.schemaVersion !== INSTRUCTION_MANIFEST_SCHEMA_VERSION)
-    return { valid: false, reason: "unsupported-schema" };
+    return "unsupported-schema";
   if (!manifest.dispatch?.command || !manifest.dispatch?.commandInstruction?.digest)
-    return { valid: false, reason: "missing-dispatch-instruction" };
+    return "missing-dispatch-instruction";
   if (!Array.isArray(manifest.dispatch.rules) || !Array.isArray(manifest.execution?.skills))
-    return { valid: false, reason: "invalid-instruction-collections" };
+    return "invalid-instruction-collections";
+  return null;
+}
+
+export function verifyInstructionManifest(manifest) {
+  const shapeReason = instructionManifestShapeReason(manifest);
+  if (shapeReason) return { valid: false, reason: shapeReason };
   const { manifestDigest, ...unsigned } = manifest;
   const expected = sha256(canonicalJson(unsigned));
   return manifestDigest === expected

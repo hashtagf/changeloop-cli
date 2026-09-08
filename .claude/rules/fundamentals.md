@@ -15,7 +15,11 @@ procedure; do not preload them.
   smallest new implementation.
 - Keep every changed line traceable to the request. Do not bundle cleanup.
 - Define a checkable outcome and continue until it is met.
-- Code/tests outrank specs; specs outrank investigation notes. Resolve conflicts.
+- For a standard change, surface material NFRs in requirements and evidence;
+  use Grounding v3 only for decisions the compiler cannot derive.
+- The compiled OpenSpec agreement is the behavioral source of truth. Code and
+  tests provide evidence; discoveries that change the agreement use one
+  semantic amendment before implementation continues.
 - Choose the faster of equally safe paths. Never cut security, error/data-loss
   handling, accessibility, evidence, regression contracts, or Land guards.
 - Be terse but complete. Durable intent belongs in OpenSpec; machine status
@@ -23,6 +27,9 @@ procedure; do not preload them.
 - Skills supply judgment and procedures; the harness owns lifecycle, authority,
   evidence execution, receipts, budgets, and Land. Never create parallel state
   or treat a skill checklist as proof.
+- Author one semantic draft or amendment with meaningful keys. The compiler
+  owns artifact selection, stable IDs, cross-links, defaults, and validation;
+  after Change, use `advance` instead of composing lifecycle primitives.
 
 Load `coding-discipline` only when scope, assumptions, or diff shape remain
 unclear after this digest.

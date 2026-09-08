@@ -16,9 +16,61 @@
         "description": { "type": "string", "minLength": 1 },
         "instruction": { "type": "string", "minLength": 1 },
         "argumentMode": { "enum": ["required", "none"] },
-        "foundationVersion": { "type": "string", "minLength": 1 }
+        "foundationVersion": { "type": "string", "minLength": 1 },
+        "update": { "$ref": "#/$defs/update" },
+        "notification": { "$ref": "#/$defs/updateNotification" }
       },
       "additionalProperties": true
+    },
+    "update": {
+      "type": "object",
+      "required": [
+        "status", "installedVersion", "latestVersion", "checkedAt",
+        "freshness", "source", "blocking", "reason", "actions", "trigger"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "current", "cli-update-available", "project-refresh-required",
+            "both-outdated", "unknown", "head-installation", "disabled"
+          ]
+        },
+        "installedVersion": { "type": "string", "minLength": 1 },
+        "projectVersion": { "type": "string", "minLength": 1 },
+        "latestVersion": { "type": ["string", "null"] },
+        "checkedAt": { "type": ["string", "null"] },
+        "freshness": { "enum": ["fresh", "stale", "unavailable"] },
+        "source": { "enum": ["remote", "cache", "none", "disabled"] },
+        "blocking": { "const": false },
+        "reason": { "type": ["string", "null"] },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "command"],
+            "properties": {
+              "type": { "enum": ["upgrade-cli", "refresh-project"] },
+              "command": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "trigger": { "enum": ["investigate", "change", "build"] }
+      },
+      "additionalProperties": false
+    },
+    "updateNotification": {
+      "type": "object",
+      "required": ["surface", "kind", "timing", "dedupeKey", "blocking", "reason"],
+      "properties": {
+        "surface": { "type": "boolean" },
+        "kind": { "enum": ["update-available", "update-reminder"] },
+        "timing": { "enum": ["phase-entry", "before-build"] },
+        "dedupeKey": { "type": ["string", "null"] },
+        "blocking": { "const": false },
+        "reason": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
     },
     "error": {
       "type": "object",

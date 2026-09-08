@@ -19,7 +19,7 @@
     },
     {
       "name": "packet",
-      "usage": "packet <change> [--phase change|build|prove|review|land] [--repo <id>] [--task <id>] [--pretty]",
+      "usage": "packet <change> [--resume] [--phase change|build|prove|review|land] [--repo <id>] [--task <id>] [--pretty]",
       "audience": "agent",
       "kind": "read",
       "idempotent": true,
@@ -32,6 +32,22 @@
       "kind": "read",
       "idempotent": true,
       "description": "Inspect measured usage, active budget, cost, and execution timing."
+    },
+    {
+      "name": "advance",
+      "usage": "advance <change> [--through build|proven|archived] [--host-result <result.json>] [--inspect] [--pretty]",
+      "audience": "host",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Run deterministic lifecycle work through a requested target and return one bounded action at the next real model, user, resource, or authority boundary."
+    },
+    {
+      "name": "feedback",
+      "usage": "feedback <change> [--pretty] [--diagnostics]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Project repair-aware timing, guard provenance, evidence reuse, usage availability, and the next safe action without mutating state."
     },
     {
       "name": "exec",
@@ -59,7 +75,7 @@
     },
     {
       "name": "change start",
-      "usage": "change start --template | <draft.json>",
+      "usage": "change start --template | <draft.json> [--consume-draft]",
       "audience": "agent",
       "kind": "write",
       "idempotent": false,
@@ -67,11 +83,19 @@
     },
     {
       "name": "change resolve",
-      "usage": "change resolve <change> [--impact low|medium|high] [--coupling isolated|coupled] [--ambiguity clear|unclear] [--surface <glob,glob>] [--security <terms>] [--review] [--size xs|s|m|l] [--acceptance-not-required | --acceptance-required --acceptance-reason <why> [--acceptance-claims <ids>]] [--reopen-grounding --decision-ref <ref> --reopen-reason <why>]",
+      "usage": "change resolve <change> [--impact low|medium|high] [--coupling isolated|coupled] [--ambiguity clear|unclear] [--surface <glob,glob>] [--security <terms>] [--review] [--size xs|s|m|l] [--acceptance-not-required | --acceptance-required --acceptance-reason <why> [--acceptance-claims <ids>]] [--reopen-grounding --decision-ref <ref> --reopen-reason <why>] [--ci-not-required --decision-ref <ref>]",
       "audience": "agent",
       "kind": "write",
       "idempotent": true,
       "description": "Persist agreement decisions or open one audited batched grounding revision."
+    },
+    {
+      "name": "change amend",
+      "usage": "change amend <change> <amendment.json> [--consume-amendment]",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Transactionally add semantic requirements during Build while preserving the canonical agreement."
     },
     {
       "name": "change validate",
@@ -116,7 +140,7 @@
     {
       "name": "proof collect",
       "usage": "proof collect <change>",
-      "audience": "agent",
+      "audience": "conditional",
       "kind": "write",
       "idempotent": false,
       "description": "Collect executable evidence before an external boundary."
@@ -132,7 +156,7 @@
     {
       "name": "proof run",
       "usage": "proof run <change>",
-      "audience": "agent",
+      "audience": "conditional",
       "kind": "write",
       "idempotent": false,
       "description": "Run readiness, providers, finalization, and audit atomically."
@@ -144,6 +168,14 @@
       "kind": "read",
       "idempotent": true,
       "description": "Validate that the proven projection remains landable."
+    },
+    {
+      "name": "land advance",
+      "usage": "land advance <change>",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Advance the resumable Land saga and archive when every repository is ready."
     },
     {
       "name": "handoff status",
@@ -290,6 +322,14 @@
       "description": "Acknowledge consumed reviewer infrastructure retries after the provider diagnosis passes, restoring AI review dispatch under an explicit host-recorded user decision."
     },
     {
+      "name": "authority reset-base-move",
+      "usage": "authority reset-base-move <change> --decision-ref <ref>",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Release the one delivered passing AI review attempt a sandbox-sync base move expired from the wave budget, under an explicit host-recorded user decision, so the forced fresh review does not exhaust the cap."
+    },
+    {
       "name": "authority record",
       "usage": "authority record <change> --request <id> --response <file>",
       "audience": "conditional",
@@ -320,6 +360,14 @@
       "kind": "write",
       "idempotent": true,
       "description": "Resume an interrupted or multi-repository Land saga."
+    },
+    {
+      "name": "budget checkpoint",
+      "usage": "budget checkpoint <change>",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Show measured remaining allowance, unfinished work, the user decision boundary, and the exact resume route."
     },
     {
       "name": "budget continue",
@@ -378,6 +426,62 @@
       "description": "Inspect model-tier policy."
     },
     {
+      "name": "quality discover",
+      "usage": "quality discover [--change <id>]",
+      "audience": "admin",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Detect repository languages, profiles, and quality capabilities without executing project commands."
+    },
+    {
+      "name": "quality init",
+      "usage": "quality init [--change <id>] [--write] [--force] [--ci github]",
+      "audience": "admin",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Preview or explicitly write the committed consumer quality configuration."
+    },
+    {
+      "name": "quality doctor",
+      "usage": "quality doctor [--change <id>] [--enforce]",
+      "audience": "admin",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Validate quality profiles, adapters, tools, isolation, and fallback readiness."
+    },
+    {
+      "name": "quality run",
+      "usage": "quality run [--change <id>] [--repo <id>] [--capability <name>] [--full] [--shard-index <n> --shard-count <n>] [--enforce]",
+      "audience": "conditional",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Run configured quality lanes and apply changed-code and affected-mutant ratchets."
+    },
+    {
+      "name": "quality report",
+      "usage": "quality report",
+      "audience": "conditional",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Show the latest per-repository consumer quality result."
+    },
+    {
+      "name": "quality baseline",
+      "usage": "quality baseline [--repo <id>] [--capability crap|automated-mutation] [--write --decision-ref <ref> --reason <why>]",
+      "audience": "admin",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Preview or explicitly update versioned repository quality baselines."
+    },
+    {
+      "name": "quality debt",
+      "usage": "quality debt",
+      "audience": "conditional",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Render the latest non-silent quality debt inventory without widening change scope."
+    },
+    {
       "name": "migrate",
       "usage": "migrate [legacy-id] [--apply]",
       "audience": "admin",
@@ -392,6 +496,14 @@
       "kind": "read",
       "idempotent": true,
       "description": "Print the installed package version."
+    },
+    {
+      "name": "update check",
+      "usage": "update check [--refresh] [--json]",
+      "audience": "admin",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Inspect the cached latest stable release advisory without applying an update."
     },
     {
       "name": "help",
@@ -478,11 +590,11 @@
     },
     {
       "name": "agents release",
-      "usage": "agents release <change> <task> --owner <id> [--force] [--decision-ref <ref>]",
+      "usage": "agents release <change> <task> --owner <id> [--lease-id <id>] [--force] [--decision-ref <ref>]",
       "audience": "host",
       "kind": "write",
       "idempotent": true,
-      "description": "Release a host-managed resource lease; --force takes over another owner's lease, and one that has not expired also needs --decision-ref because a worker may still be running it."
+      "description": "Release a host-managed resource lease; after takeover, --lease-id must identify the acquired generation. --force takes over another owner's lease, and one that has not expired also needs --decision-ref because a worker may still be running it."
     },
     {
       "name": "telemetry sync",
@@ -636,6 +748,7 @@
     "new",
     "start",
     "resolve",
+    "amend",
     "abandon",
     "waive",
     "audit-change",
@@ -643,6 +756,13 @@
     "providers",
     "repos",
     "models",
+    "quality-discover",
+    "quality-init",
+    "quality-doctor",
+    "quality-run",
+    "quality-report",
+    "quality-baseline",
+    "quality-debt",
     "agent-plan",
     "agent-dispatch",
     "agent-task",
@@ -650,6 +770,9 @@
     "agent-release",
     "packet",
     "metrics",
+    "advance",
+    "feedback",
+    "budget-checkpoint",
     "budget-continue",
     "doctor",
     "validate",
@@ -674,6 +797,7 @@
     "authority-status",
     "authority-record",
     "authority-reset-infra",
+    "authority-reset-base-move",
     "receipt",
     "run-provider",
     "prove",
@@ -681,6 +805,7 @@
     "handoff-packet",
     "handoff-record",
     "land-check",
+    "land-advance",
     "land-recover",
     "land-plan",
     "land-record",

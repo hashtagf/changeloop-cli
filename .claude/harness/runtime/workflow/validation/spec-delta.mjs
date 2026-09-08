@@ -4,6 +4,46 @@ import {
   parseSpecDocument, parseSpecRequirements, specDeltaOperation
 } from "../../contracts/change-artifacts.mjs";
 
+export function existingCapabilityRequirementFindings(
+  capability, current, requirements
+) {
+  const findings = [];
+  const declarations = new Map();
+  for (const requirement of requirements) {
+    const operation = specDeltaOperation(requirement.section);
+    const seen = declarations.get(requirement.name) || [];
+    declarations.set(requirement.name, [
+      ...seen, operation || requirement.section || "unrecognized"
+    ]);
+    if (operation === "ADDED" && current.has(requirement.name))
+      findings.push({
+        kind: "added-preexisting", capability, requirement: requirement.name,
+        detail: "the canonical spec already declares it; use '## MODIFIED Requirements'"
+      });
+    if (["MODIFIED", "REMOVED"].includes(operation) &&
+        !current.has(requirement.name))
+      findings.push({
+        kind: "target-absent", capability, requirement: requirement.name,
+        detail: `'${operation} Requirements' targets a requirement the canonical spec does not declare; use '## ADDED Requirements'`
+      });
+    if (operation === "REMOVED" &&
+        !/^\*\*(?:Migration|Compatibility)(?::\*\*|\*\*:)[ \t]*\S/im.test(
+          requirement.body))
+      findings.push({
+        kind: "removal-migration-missing", capability,
+        requirement: requirement.name,
+        detail: "'REMOVED Requirements' must state a non-empty '**Migration:**' or '**Compatibility:**' consequence"
+      });
+  }
+  for (const [requirement, operations] of declarations)
+    if (operations.length > 1)
+      findings.push({
+        kind: "ambiguous", capability, requirement,
+        detail: `the same requirement is declared in multiple operations (${operations.join(", ")}); use one operation per requirement name`
+      });
+  return findings;
+}
+
 export function createSpecDeltaValidator({ root, activeChangePath, walk, fail }) {
   function changeSpecScenarios(id, dir = activeChangePath(id)) {
     const specsRoot = join(dir, "specs");
@@ -90,35 +130,8 @@ export function createSpecDeltaValidator({ root, activeChangePath, walk, fail })
       const current = new Set(parseSpecDocument(readFileSync(currentPath, "utf8"))
         .map((requirement) => requirement.name));
       const requirements = parseSpecDocument(readFileSync(path, "utf8"));
-      const declarations = new Map();
-      for (const requirement of requirements) {
-        const operation = specDeltaOperation(requirement.section);
-        const seen = declarations.get(requirement.name) || [];
-        declarations.set(requirement.name, [...seen, operation || requirement.section || "unrecognized"]);
-        if (operation === "ADDED" && current.has(requirement.name))
-          findings.push({
-            kind: "added-preexisting", capability, requirement: requirement.name,
-            detail: "the canonical spec already declares it; use '## MODIFIED Requirements'"
-          });
-        if (["MODIFIED", "REMOVED"].includes(operation) && !current.has(requirement.name))
-          findings.push({
-            kind: "target-absent", capability, requirement: requirement.name,
-            detail: `'${operation} Requirements' targets a requirement the canonical spec does not declare; use '## ADDED Requirements'`
-          });
-        if (operation === "REMOVED" &&
-            !/^\*\*(?:Migration|Compatibility)(?::\*\*|\*\*:)[ \t]*\S/im.test(requirement.body))
-          findings.push({
-            kind: "removal-migration-missing", capability,
-            requirement: requirement.name,
-            detail: "'REMOVED Requirements' must state a non-empty '**Migration:**' or '**Compatibility:**' consequence"
-          });
-      }
-      for (const [requirement, operations] of declarations)
-        if (operations.length > 1)
-          findings.push({
-            kind: "ambiguous", capability, requirement,
-            detail: `the same requirement is declared in multiple operations (${operations.join(", ")}); use one operation per requirement name`
-          });
+      findings.push(...existingCapabilityRequirementFindings(
+        capability, current, requirements));
     });
     return findings;
   }

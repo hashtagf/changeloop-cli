@@ -1,5 +1,5 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { classifyDrift, isBlockingDrift, isUnverifiedDrift } from "./model-drift.mjs";
 
 export const HOST_EXECUTION_SCHEMA_VERSION = 1;
@@ -33,7 +33,7 @@ function nullableTimestamp(value, field) {
   return new Date(value).toISOString();
 }
 
-function normalizedUsage(usage = {}) {
+export function normalizedUsage(usage = {}) {
   if (usage === null) usage = {};
   if (typeof usage !== "object" || Array.isArray(usage))
     throw new Error("usage must be an object or null");
@@ -51,7 +51,7 @@ function nullableCount(value, field) {
   return count;
 }
 
-function normalizedAttempt(attempt, index) {
+export function normalizedAttempt(attempt, index) {
   const number = nullableFinite(attempt?.attempt ?? index + 1, `attempts[${index}].attempt`);
   if (!Number.isInteger(number) || number < 1)
     throw new Error(`attempts[${index}].attempt must be a positive integer`);
@@ -76,6 +76,36 @@ function normalizedAttempt(attempt, index) {
   };
 }
 
+export function normalizedAttempts(input) {
+  const attempts = (Array.isArray(input.attempts) ? input.attempts : [])
+    .map(normalizedAttempt).sort((left, right) => left.attempt - right.attempt);
+  if (new Set(attempts.map((attempt) => attempt.attempt)).size !== attempts.length)
+    throw new Error("attempt numbers must be unique");
+  return attempts;
+}
+
+export function normalizedExecutionIdentity(input, changeId) {
+  return {
+    dispatchId: requiredString(input.dispatchId ?? input.dispatch_id, "dispatchId"),
+    changeId: nullableString(changeId || input.changeId || input.change_id, "changeId"),
+    host: nullableString(input.host ?? input.source, "host"),
+    requestedModel: nullableString(input.requestedModel ?? input.requested_model,
+      "requestedModel"),
+    actualModel: nullableString(input.actualModel ?? input.actual_model, "actualModel"),
+    instructionManifestDigest: nullableString(
+      input.instructionManifestDigest ?? input.instruction_manifest_digest,
+      "instructionManifestDigest")
+  };
+}
+
+export function normalizedExecutionTiming(input) {
+  return {
+    startedAt: nullableTimestamp(input.startedAt ?? input.started_at, "startedAt"),
+    finishedAt: nullableTimestamp(input.finishedAt ?? input.finished_at, "finishedAt"),
+    durationMs: nullableFinite(input.durationMs ?? input.duration_ms, "durationMs")
+  };
+}
+
 /**
  * Normalize a host result to the fields Foundation is allowed to persist.
  * Unknown fields and payload-shaped fields (prompt, messages, tool arguments,
@@ -86,29 +116,14 @@ export function normalizeHostExecution(input, { changeId = null, importedAt = nu
     throw new Error("host execution result must be an object");
   if (input.schemaVersion !== undefined && Number(input.schemaVersion) !== HOST_EXECUTION_SCHEMA_VERSION)
     throw new Error(`unsupported host execution schema: ${input.schemaVersion}`);
-  const dispatchId = requiredString(input.dispatchId ?? input.dispatch_id, "dispatchId");
   const status = requiredString(input.result?.status ?? input.status, "result.status");
   if (!STATUSES.has(status)) throw new Error(`unsupported result.status: ${status}`);
-  const attempts = (Array.isArray(input.attempts) ? input.attempts : [])
-    .map(normalizedAttempt).sort((left, right) => left.attempt - right.attempt);
-  if (new Set(attempts.map((attempt) => attempt.attempt)).size !== attempts.length)
-    throw new Error("attempt numbers must be unique");
 
   return {
     schemaVersion: HOST_EXECUTION_SCHEMA_VERSION,
-    dispatchId,
-    changeId: nullableString(changeId || input.changeId || input.change_id, "changeId"),
-    host: nullableString(input.host ?? input.source, "host"),
-    requestedModel: nullableString(input.requestedModel ?? input.requested_model,
-      "requestedModel"),
-    actualModel: nullableString(input.actualModel ?? input.actual_model, "actualModel"),
-    instructionManifestDigest: nullableString(
-      input.instructionManifestDigest ?? input.instruction_manifest_digest,
-      "instructionManifestDigest"),
-    startedAt: nullableTimestamp(input.startedAt ?? input.started_at, "startedAt"),
-    finishedAt: nullableTimestamp(input.finishedAt ?? input.finished_at, "finishedAt"),
-    durationMs: nullableFinite(input.durationMs ?? input.duration_ms, "durationMs"),
-    attempts,
+    ...normalizedExecutionIdentity(input, changeId),
+    ...normalizedExecutionTiming(input),
+    attempts: normalizedAttempts(input),
     usage: normalizedUsage(input.usage),
     tools: {
       calls: nullableCount(input.tools?.calls, "tools.calls"),
@@ -171,7 +186,7 @@ export function hostExecutionTelemetryRows(execution) {
 
 // Unknown is never zero: a null on either side leaves the sum unknown only
 // when both are null, so a partially-reported total still measures what it can.
-function sum(left, right) {
+export function sum(left, right) {
   if (left === null || left === undefined) return right ?? null;
   if (right === null || right === undefined) return left;
   return left + right;
@@ -247,6 +262,107 @@ export function createHostExecutionStore({ root, now = () => new Date().toISOStr
   }
 
   return { executionPath, importExecution };
+}
+
+export function resolveHostExecutionSource(cwd, source) {
+  return resolve(cwd, source);
+}
+
+export function createHostExecutionImporter(context) {
+  return function importHostExecution(id, source) {
+    context.loadRuntime(id);
+    const path = context.resolveSource(source);
+    if (!context.exists(path))
+      return context.fail(`host execution result not found: ${source}`);
+    // A malformed host file is the host's input being wrong, not the harness
+    // breaking. Convert it to the same blocked command outcome as other bad
+    // external evidence instead of letting it escape as a harness failure.
+    let result;
+    try {
+      result = context.store.importExecution(id, context.readJson(path));
+    } catch (error) {
+      return context.fail(`host execution result is invalid: ${error.message}`);
+    }
+    const imported = context.appendTelemetryRows(
+      id,
+      hostExecutionTelemetryRows(result.execution),
+      "host-execution",
+      { snapshot: context.readJson(context.snapshotPath(id), {}) }
+    );
+    context.log(
+      `HOST EXECUTION ${id}: ${result.duplicate ? "duplicate" : "recorded"}; ` +
+      `imported ${imported}`
+    );
+    return { imported, result };
+  };
+}
+
+export function driftAttribution(digest, manifest, kinds) {
+  const candidates = [];
+  for (const scope of manifest?.scopes || [])
+    candidates.push({ id: scope, kind: kinds.get(scope.toUpperCase()) ?? null });
+  const known = [];
+  for (const candidate of candidates)
+    if (candidate.kind !== null) known.push(candidate);
+  let provenance = "non-task-scope";
+  if (!digest) provenance = "no-digest";
+  else if (!manifest) provenance = "no-manifest";
+  else if (candidates.length > 1) provenance = "ambiguous-scope";
+  else if (known.length) provenance = "task";
+  return { candidates, known, provenance };
+}
+
+export function applyDriftTaskFields(row, candidates, blocking, unverified) {
+  if (candidates.length === 1) {
+    row.taskId = candidates[0].id;
+    row.taskKind = candidates[0].kind;
+  }
+  if (candidates.length > 1)
+    row.ambiguousTasks = candidates.map((candidate) => candidate.id);
+  if (blocking.length && candidates.length > 1)
+    row.blockingTasks = blocking.map((candidate) => candidate.id);
+  if (unverified.length && candidates.length > 1)
+    row.unverifiedTasks = unverified.map((candidate) => candidate.id);
+  return row;
+}
+
+export function executionDriftRows(execution, manifest, kinds, selectedPolicy, digest) {
+  const { candidates, known, provenance } = driftAttribution(digest, manifest, kinds);
+  const attempts = Array.isArray(execution.attempts) && execution.attempts.length
+    ? execution.attempts : [null];
+  const rows = [];
+  for (const attempt of attempts) {
+    const actualModel = attempt?.model || execution.actualModel || null;
+    const drift = classifyDrift({
+      requestedTier: manifest?.requestedModel ?? null,
+      actualModelId: actualModel,
+      policy: selectedPolicy
+    });
+    const blocking = [];
+    const unverified = [];
+    for (const candidate of known) {
+      if (isBlockingDrift(drift.kind, candidate.kind)) blocking.push(candidate);
+      if (isUnverifiedDrift(drift.kind, candidate.kind)) unverified.push(candidate);
+    }
+    const row = {
+      dispatchId: execution.dispatchId ?? null,
+      attempt: attempt?.attempt ?? null,
+      taskId: null,
+      taskKind: null,
+      requestedTier: drift.requestedTier,
+      actualModel,
+      actualTier: drift.actualTier,
+      kind: drift.kind,
+      blocking: blocking.length > 0,
+      // Never blocks Land; exists so "could not be checked" stops reading
+      // exactly like "checked and matched" on a risk-sensitive task.
+      unverified: unverified.length > 0,
+      provenance,
+      reason: drift.reason
+    };
+    rows.push(applyDriftTaskFields(row, candidates, blocking, unverified));
+  }
+  return rows;
 }
 
 /**
@@ -325,47 +441,7 @@ export function createModelDriftInspector({
       const digest = typeof execution.instructionManifestDigest === "string" &&
         execution.instructionManifestDigest ? execution.instructionManifestDigest : null;
       const manifest = digest ? manifests.get(digest) || null : null;
-      const candidates = (manifest?.scopes || [])
-        .map((scope) => ({ id: scope, kind: kinds.get(scope.toUpperCase()) ?? null }));
-      const known = candidates.filter((candidate) => candidate.kind !== null);
-      const provenance = !digest ? "no-digest"
-        : !manifest ? "no-manifest"
-          : candidates.length > 1 ? "ambiguous-scope"
-            : known.length ? "task" : "non-task-scope";
-      const attempts = Array.isArray(execution.attempts) && execution.attempts.length
-        ? execution.attempts : [null];
-      for (const attempt of attempts) {
-        const actualModel = attempt?.model || execution.actualModel || null;
-        const drift = classifyDrift({
-          requestedTier: manifest?.requestedModel ?? null,
-          actualModelId: actualModel,
-          policy: selectedPolicy
-        });
-        const blocking = known.filter((candidate) => isBlockingDrift(drift.kind, candidate.kind));
-        const unverified = known.filter((candidate) => isUnverifiedDrift(drift.kind, candidate.kind));
-        rows.push({
-          dispatchId: execution.dispatchId ?? null,
-          attempt: attempt?.attempt ?? null,
-          taskId: candidates.length === 1 ? candidates[0].id : null,
-          taskKind: candidates.length === 1 ? candidates[0].kind : null,
-          ...(candidates.length > 1
-            ? { ambiguousTasks: candidates.map((candidate) => candidate.id) } : {}),
-          requestedTier: drift.requestedTier,
-          actualModel,
-          actualTier: drift.actualTier,
-          kind: drift.kind,
-          blocking: blocking.length > 0,
-          // Never blocks Land; exists so "could not be checked" stops reading
-          // exactly like "checked and matched" on a risk-sensitive task.
-          unverified: unverified.length > 0,
-          ...(blocking.length && candidates.length > 1
-            ? { blockingTasks: blocking.map((candidate) => candidate.id) } : {}),
-          ...(unverified.length && candidates.length > 1
-            ? { unverifiedTasks: unverified.map((candidate) => candidate.id) } : {}),
-          provenance,
-          reason: drift.reason
-        });
-      }
+      rows.push(...executionDriftRows(execution, manifest, kinds, selectedPolicy, digest));
     }
     return rows;
   }

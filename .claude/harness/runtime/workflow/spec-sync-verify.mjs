@@ -51,6 +51,60 @@ function listDetail(names) {
   return names.map((name) => `'${name}'`).join(", ");
 }
 
+function verifyUntouchedRequirements(beforeIndex, afterIndex, mentioned, report) {
+  for (const [name, requirement] of beforeIndex) {
+    if (mentioned.has(name)) continue;
+    const merged = afterIndex.get(name);
+    if (!merged) {
+      report("untouched-requirement-missing", name,
+        "present before archive and not mentioned by the delta, but absent from the archived spec; the merge deleted a requirement the change never declared");
+      continue;
+    }
+    if (merged.body !== requirement.body)
+      report("untouched-requirement-modified", name,
+        "present before archive and not mentioned by the delta, but its text changed during archive; the merge rewrote a requirement the change never declared");
+  }
+}
+
+function ambiguousDeltaNames(deltaRequirements, report) {
+  const sectionsByName = new Map();
+  for (const requirement of deltaRequirements) {
+    const operation = specDeltaOperation(requirement.section);
+    const seen = sectionsByName.get(requirement.name) || [];
+    sectionsByName.set(requirement.name,
+      [...seen, operation || requirement.section || "(no section)"]);
+    if (!operation)
+      report("delta-section-unrecognized", requirement.name,
+        `delta requirement sits under '${requirement.section || "(no section)"}'; OpenSpec only merges requirements under '## ADDED Requirements', '## MODIFIED Requirements', '## REMOVED Requirements', or '## RENAMED Requirements'`);
+  }
+  const ambiguous = new Set();
+  for (const [name, sections] of sectionsByName) {
+    if (sections.length < 2) continue;
+    ambiguous.add(name);
+    report("delta-name-ambiguous", name,
+      `declared ${sections.length} times in the delta (${listDetail(sections)}); OpenSpec rejects one requirement name in two sections, so rename the requirement instead of reusing the name`);
+  }
+  return ambiguous;
+}
+
+function verifyAddedRequirement(name, merged, beforeIndex, report) {
+  if (!merged)
+    report("added-requirement-missing", name,
+      "declared under '## ADDED Requirements' but absent from the archived spec; the merge dropped it");
+  if (beforeIndex.has(name))
+    report("added-requirement-preexisting", name,
+      "declared under '## ADDED Requirements' but the spec already declared it before archive; use '## MODIFIED Requirements' or rename the requirement");
+}
+
+function verifyRemovedRequirement(name, merged, beforeIndex, report) {
+  if (merged)
+    report("removed-requirement-present", name,
+      "declared under '## REMOVED Requirements' but still present in the archived spec; the merge did not apply the removal");
+  if (!beforeIndex.has(name))
+    report("removed-requirement-absent", name,
+      "declared under '## REMOVED Requirements' but the spec did not declare it before archive; the removal targets a requirement that never existed");
+}
+
 /**
  * @param {{ before?: string|null, after?: string|null, delta?: string|null }} input
  *   `before` is the capability's openspec/specs/<capability>/spec.md content
@@ -71,22 +125,7 @@ export function verifySpecSync({ before, after, delta } = {}) {
   // 5. One requirement name may not carry two intents. OpenSpec rejects a name
   // reused across REMOVED and ADDED, so guessing which section wins would be
   // guessing at a spec the change never actually declared.
-  const sectionsByName = new Map();
-  for (const requirement of deltaRequirements) {
-    const operation = specDeltaOperation(requirement.section);
-    const seen = sectionsByName.get(requirement.name) || [];
-    sectionsByName.set(requirement.name, [...seen, operation || requirement.section || "(no section)"]);
-    if (!operation)
-      report("delta-section-unrecognized", requirement.name,
-        `delta requirement sits under '${requirement.section || "(no section)"}'; OpenSpec only merges requirements under '## ADDED Requirements', '## MODIFIED Requirements', '## REMOVED Requirements', or '## RENAMED Requirements'`);
-  }
-  const ambiguous = new Set();
-  for (const [name, sections] of sectionsByName) {
-    if (sections.length < 2) continue;
-    ambiguous.add(name);
-    report("delta-name-ambiguous", name,
-      `declared ${sections.length} times in the delta (${listDetail(sections)}); OpenSpec rejects one requirement name in two sections, so rename the requirement instead of reusing the name`);
-  }
+  const ambiguous = ambiguousDeltaNames(deltaRequirements, report);
 
   const mentioned = new Set([
     ...deltaRequirements.map((requirement) => requirement.name),
@@ -101,23 +140,13 @@ export function verifySpecSync({ before, after, delta } = {}) {
 
     // 1. ADDED introduces behavior that did not exist yet.
     if (operation === "ADDED") {
-      if (!merged)
-        report("added-requirement-missing", name,
-          "declared under '## ADDED Requirements' but absent from the archived spec; the merge dropped it");
-      if (beforeIndex.has(name))
-        report("added-requirement-preexisting", name,
-          "declared under '## ADDED Requirements' but the spec already declared it before archive; use '## MODIFIED Requirements' or rename the requirement");
+      verifyAddedRequirement(name, merged, beforeIndex, report);
       continue;
     }
 
     // 2. REMOVED retires behavior that existed.
     if (operation === "REMOVED") {
-      if (merged)
-        report("removed-requirement-present", name,
-          "declared under '## REMOVED Requirements' but still present in the archived spec; the merge did not apply the removal");
-      if (!beforeIndex.has(name))
-        report("removed-requirement-absent", name,
-          "declared under '## REMOVED Requirements' but the spec did not declare it before archive; the removal targets a requirement that never existed");
+      verifyRemovedRequirement(name, merged, beforeIndex, report);
       continue;
     }
 
@@ -153,18 +182,7 @@ export function verifySpecSync({ before, after, delta } = {}) {
   }
 
   // 4. Anything the delta never mentioned must survive archive verbatim.
-  for (const [name, requirement] of beforeIndex) {
-    if (mentioned.has(name)) continue;
-    const merged = afterIndex.get(name);
-    if (!merged) {
-      report("untouched-requirement-missing", name,
-        "present before archive and not mentioned by the delta, but absent from the archived spec; the merge deleted a requirement the change never declared");
-      continue;
-    }
-    if (merged.body !== requirement.body)
-      report("untouched-requirement-modified", name,
-        "present before archive and not mentioned by the delta, but its text changed during archive; the merge rewrote a requirement the change never declared");
-  }
+  verifyUntouchedRequirements(beforeIndex, afterIndex, mentioned, report);
 
   return { valid: violations.length === 0, violations };
 }

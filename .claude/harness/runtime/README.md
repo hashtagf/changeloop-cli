@@ -3,8 +3,11 @@
 `foundation.mjs` is the compatibility entrypoint and composition root. Runtime
 implementation is grouped by domain:
 
-- `core/` — CLI parsing/routing, process execution, and shared trust primitives.
-- `evidence/` — evidence contracts, artifacts, proof, review, CI, and provider execution.
+- `core/` — CLI parsing/routing, process execution, shared trust, the compiled
+  execution contract, convergent gates, authority policy, lifecycle reducer,
+  and read-only runtime/proof/journal projections.
+- `evidence/` — evidence contracts, artifacts, proof, review, CI, signed semantic
+  acceptance, and provider execution.
 - `workflow/` — change, agent, repository, sandbox, authority, Land, and archive state machines.
 - `observability/` — telemetry ingestion, normalization, and read-only metrics reporting.
 - `contracts/` — portable schemas for instruction provenance and host execution results.

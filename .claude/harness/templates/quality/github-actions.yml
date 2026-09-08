@@ -1,0 +1,50 @@
+name: foundation-consumer-quality
+
+on:
+  workflow_call:
+    inputs:
+      change:
+        description: Foundation change id whose sandbox and repository topology are being proven
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      change:
+        description: Foundation change id
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-quality-${{ inputs.change }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      FOUNDATION_CHANGE_ID: ${{ inputs.change }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Add language/tool setup before these commands. `quality doctor
+      # --enforce` fails with a named missing executable instead of silently
+      # dropping a configured repository lane.
+      - name: Validate consumer quality capabilities
+        run: node .claude/harness/foundation.mjs quality-doctor --enforce
+
+      - name: Enforce changed-code quality
+        run: node .claude/harness/foundation.mjs quality-run --enforce
+
+      - name: Upload quality evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-quality-${{ github.run_id }}
+          path: .foundation/quality/results/
+          if-no-files-found: error
+          retention-days: 30

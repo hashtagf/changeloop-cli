@@ -1,8 +1,7 @@
 # Tasks
 
-> Add `[claims:<claim-id>]` after each stable task ID once evidence claims exist.
-> A multi-repository change also annotates `[repo:<id>]`, `[kind:<kind>]`,
-> `[paths:<glob,glob>]`, `[depends:<T00n>]`, and `[resources:<token>]` for any
-> genuinely shared resource. Annotations are what let tasks run in parallel.
+> Semantic draft v3 generates IDs and annotations from task keys, `covers`,
+> paths, dependencies, and resources. Do not copy links across files by hand.
+> This placeholder remains only for compatible manual `change new` packets.
 
 - [ ] **T001** <small implementation outcome> — verify: `<focused check>`

@@ -1,16 +1,26 @@
 #!/usr/bin/env node
 
 import {
-  appendFileSync, existsSync, mkdirSync
+  appendFileSync, existsSync, lstatSync, mkdirSync, rmSync
 } from "node:fs";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createMetricsRuntime } from "./runtime/observability/metrics-runtime.mjs";
-import { createExecRuntime } from "./runtime/observability/exec-runtime.mjs";
-import { createTelemetryRuntime } from "./runtime/observability/telemetry-runtime.mjs";
-import { createJsonlReader } from "./runtime/observability/telemetry.mjs";
 import {
-  createHostExecutionStore, createModelDriftInspector, hostExecutionTelemetryRows
+  createMetricsRuntime, createSourceCohortProvider
+} from "./runtime/observability/metrics-runtime.mjs";
+import { createExecRuntime } from "./runtime/observability/exec-runtime.mjs";
+import {
+  createFeedbackRuntime, FEEDBACK_SCHEMA_VERSION
+} from "./runtime/observability/feedback-runtime.mjs";
+import {
+  blockerTelemetryValue, createTelemetryRuntime, createCommandPhaseRecorder
+} from "./runtime/observability/telemetry-runtime.mjs";
+import { createJsonlReader } from "./runtime/observability/telemetry.mjs";
+import { operationInputFingerprint } from "./runtime/observability/operation-profile.mjs";
+import {
+  createHostExecutionImporter, createHostExecutionStore, createModelDriftInspector,
+  resolveHostExecutionSource
 } from "./runtime/observability/host-execution-contract.mjs";
 import { createHostAttestationRuntime } from "./runtime/evidence/attestation.mjs";
 import { validateSignedCiEnvelope } from "./runtime/evidence/signed-ci.mjs";
@@ -24,6 +34,7 @@ import {
   configuredCommand,
   mutationProtocolResult,
   numericReportValue,
+  parseNodeTestSpecOutput,
   parseJsonOutput,
   parseTapOutput,
   playwrightReportSummary,
@@ -31,20 +42,28 @@ import {
 } from "./runtime/evidence/evidence-results.mjs";
 import { createFlagParser } from "./runtime/core/cli-flags.mjs";
 import { createCommandRegistry } from "./runtime/core/command-registry.mjs";
-import { createRuntimeEnvironment } from "./runtime/core/runtime-environment.mjs";
+import {
+  createRuntimeEnvironment, policyExecutionLimit
+} from "./runtime/core/runtime-environment.mjs";
 import {
   phaseForCommand, telemetryPhaseForCommand
 } from "./runtime/core/lifecycle-phase.mjs";
-import { createProcessRuntime } from "./runtime/core/process-runtime.mjs";
+import { createProcessRuntime, serviceWorkspace } from "./runtime/core/process-runtime.mjs";
 import { createInstructionRecorder } from "./runtime/core/instruction-recorder.mjs";
 import { createAgentPlanner, createModelRouter } from "./runtime/workflow/agent-planning.mjs";
 import { createAgentDispatchRuntime } from "./runtime/workflow/agent-dispatch.mjs";
+import {
+  ADVANCE_PROTOCOL_VERSION, createAdvanceRuntime, hasValidLandGrant,
+  prepareAdvanceBuild, runAdvanceProof
+} from "./runtime/workflow/advance-runtime.mjs";
 import { createSandboxRuntime } from "./runtime/workflow/sandbox-runtime.mjs";
 import { createSandboxCleanup } from "./runtime/workflow/sandbox-cleanup.mjs";
 import {
   createLandJournal, transactionJournals as readTransactionJournals
 } from "./runtime/workflow/land-journal.mjs";
-import { createProofRuntime } from "./runtime/evidence/proof-runtime.mjs";
+import {
+  createProofRuntime, taskPacketWasPrecompletedOperation
+} from "./runtime/evidence/proof-runtime.mjs";
 import { createRepositoryTopology } from "./runtime/workflow/repository-topology.mjs";
 import { createRepositorySnapshot } from "./runtime/workflow/repository-snapshot.mjs";
 import { createPacketRuntime } from "./runtime/workflow/packet-runtime.mjs";
@@ -55,11 +74,14 @@ import { createLeaseRuntime } from "./runtime/workflow/lease-runtime.mjs";
 import { createAuthorityRuntime } from "./runtime/workflow/authority-runtime.mjs";
 import { createHandoffRuntime } from "./runtime/workflow/handoff-runtime.mjs";
 import {
-  assertOpenSpecCli, createLandRuntime, openSpecCliStatus
+  advanceLandOperation, assertOpenSpecCli, createLandRuntime, openSpecCliStatus,
+  recordedDeliveryReferences, targetProjectionObservationValue
 } from "./runtime/workflow/land-runtime.mjs";
 import { createApplyRuntime } from "./runtime/workflow/apply-runtime.mjs";
 import { createApplyRecovery } from "./runtime/workflow/apply-recovery.mjs";
 import { createDiagnosticsRuntime } from "./runtime/core/diagnostics-runtime.mjs";
+import { authorityPreflightValue } from "./runtime/core/authority-policy.mjs";
+import { compileExecutionContractValue } from "./runtime/core/execution-contract.mjs";
 import { createStateRuntime } from "./runtime/core/state-runtime.mjs";
 import {
   createEvidenceContract,
@@ -79,6 +101,11 @@ import { createAdapterRuntime } from "./runtime/evidence/adapter-runtime.mjs";
 import { createProofExecutionRuntime } from "./runtime/evidence/proof-execution-runtime.mjs";
 import { createConfiguredReviewerRuntime } from "./runtime/evidence/codex-reviewer.mjs";
 import { createBlockedDecision } from "./runtime/core/blocked-decision.mjs";
+import { createLandGrantRuntime } from "./runtime/core/land-grant.mjs";
+import {
+  assertExecutionPreparationReady, ensureProjectOpenSpec,
+  executionPreparationValue, prependFoundationToolPath
+} from "./runtime/core/tool-preparation.mjs";
 import { createAbandonRuntime } from "./runtime/workflow/abandon-runtime.mjs";
 import { RUNTIME_MODULE_API } from "./runtime/version.mjs";
 import { createBootstrap } from "./runtime/composition/bootstrap.mjs";
@@ -89,9 +116,10 @@ import {
   ADAPTERS, INPUT_MODES, PROVIDER_CONTRACTS, PROVIDERS, providerCapability
 } from "./runtime/evidence/provider-catalog.mjs";
 import { SECURITY_TERMS } from "./runtime/workflow/security-policy.mjs";
+import { createQualityRuntime } from "./runtime/quality/quality-runtime.mjs";
 
-const VERSION = "3.3.1";
-const RUNTIME_API_VERSION = "24";
+const VERSION = "3.5.14";
+const RUNTIME_API_VERSION = "33";
 // Checked here, at load, rather than only inside `doctor`: a torn install —
 // this file from one revision, runtime/** from another — otherwise passed
 // every command up to `archive` and then threw partway through Land.
@@ -102,30 +130,65 @@ if (RUNTIME_MODULE_API !== RUNTIME_API_VERSION) {
     "is a mixture of two revisions. Reinstall it with 'claude-foundation init <project>'.");
   process.exit(1);
 }
-const PROVIDER_PROTOCOL_VERSION = "11";
-const ADAPTER_PROTOCOL_VERSION = "5";
+const PROVIDER_PROTOCOL_VERSION = "13";
+const ADAPTER_PROTOCOL_VERSION = "6";
 const PROOF_PROTOCOL_VERSION = "7";
-const PACKET_SCHEMA_VERSION = "7";
-const AGENT_PLAN_SCHEMA_VERSION = "4";
+const PACKET_SCHEMA_VERSION = "11";
+const AGENT_PLAN_SCHEMA_VERSION = "5";
 const CONTEXT_EVENT_SCHEMA_VERSION = "2";
+const METRICS_SCHEMA_VERSION = "9";
+const COMMAND_TELEMETRY_SCHEMA_VERSION = "5";
 const REVIEW_PROTOCOL_VERSION = "4";
 const ACCEPTANCE_PROTOCOL_VERSION = "2";
-const REVIEW_PACKET_SCHEMA_VERSION = "4";
+const SEMANTIC_ACCEPTANCE_PROTOCOL_VERSION = "1";
+const REVIEW_PACKET_SCHEMA_VERSION = "5";
 const ATTESTATION_PROTOCOL_VERSION = "1";
 const AUTHORITY_PROTOCOL_VERSION = "2";
 const CI_EVIDENCE_PROTOCOL_VERSION = "1";
+const QUALITY_CAPABILITIES_PROTOCOL_VERSION = "1";
+const CRAP_PROTOCOL_VERSION = "1";
+const AUTOMATED_MUTATION_PROTOCOL_VERSION = "1";
 // A refusal is a lifecycle stop, not a crash. Recording it as a failure would
 // bury real breakage under the guards that are working as designed.
 let operationBlocked = false;
+let operationBlocker = null;
+let trappedFailureDepth = 0;
 // A command that prints a structured non-ready result and returns has also
 // ended in a refusal, not a crash — but it never reaches `die`. `block()` is
 // that second spelling: it records the decision without exiting, so the exit
 // handler reports what the command decided instead of inferring it.
-function markBlocked() { operationBlocked = true; }
-function die(message, code = 1) {
-  markBlocked();
+function markBlocked(message) {
+  operationBlocked = true;
+  operationBlocker = blockerTelemetryValue(message, {
+    changeId: operationChangeId,
+    operationName,
+    phase: process.env.FOUNDATION_PUBLIC_OPERATION || operationPhase
+  });
+}
+function die(message, code = 1, details = null) {
+  markBlocked(message);
+  if (trappedFailureDepth > 0) {
+    const error = new Error(String(message));
+    error.exitCode = code;
+    error.foundationBlocked = true;
+    if (details?.decision) error.decision = details.decision;
+    if (details?.boundary) error.boundary = details.boundary;
+    if (details?.owner) error.owner = details.owner;
+    if (details?.code) error.code = details.code;
+    throw error;
+  }
   console.error(`BLOCKED: ${message}`);
   process.exit(code);
+}
+function trapFailures(operation) {
+  trappedFailureDepth += 1;
+  try { return operation(); }
+  finally { trappedFailureDepth -= 1; }
+}
+async function trapFailuresAsync(operation) {
+  trappedFailureDepth += 1;
+  try { return await operation(); }
+  finally { trappedFailureDepth -= 1; }
 }
 const { parseFlags, parseStrictCommandFlags } = createFlagParser({ fail: die });
 const { blockedDecisionValue, blockWithDecision } = createBlockedDecision({ fail: die });
@@ -147,6 +210,11 @@ const {
   warn: console.error
 });
 
+// Project-local tools are machine-owned and survive between lifecycle
+// invocations. Put them on PATH before any validation or Land check probes a
+// binary; the user's global environment is never modified.
+prependFoundationToolPath(ROOT);
+
 const { readJsonLines, readJsonLinesTolerant } = createJsonlReader({
   root: ROOT,
   fail: die
@@ -157,52 +225,42 @@ let operationChangeId = null;
 let operationName = null;
 let operationPhase = null;
 let operationStatusAtStart = null;
-// Commands that only read. `showMetrics` buckets every row of operations.jsonl
-// and then this handler appended a row for the read itself, so each inspection
-// permanently inflated the next one — and an archived change, which is
-// finished evidence, still accumulated rows from sessions that only looked at
-// it. A read is not an operation the change performed.
+let operationFingerprint = null;
+// Commands that only read. They are observed in inspections.jsonl so the
+// benchmark can measure agent probing, but never enter operations.jsonl:
+// `showMetrics` treats that ledger as work the change performed for rework and
+// phase accounting. Archived evidence remains immutable and records neither.
 // Lifecycle commands stay: metrics derives rework and typed-stop signals from
 // their rows, so proof-* and land-* are measurements, not inspections.
 const READ_ONLY_OPERATIONS = new Set([
-  "metrics", "hash", "changes", "providers", "repos", "models", "describe",
+  "metrics", "feedback", "hash", "changes", "providers", "repos", "models", "describe",
+  "budget-checkpoint",
   "packet", "agent-task", "audit-change", "authority-status",
   "handoff-status", "handoff-packet", "evidence-detect", "evidence-doctor",
-  "doctor", "api-version", "version"
+  "doctor", "quality-discover", "quality-doctor", "quality-report",
+  "api-version", "version"
 ]);
-process.on("exit", (code) => {
-  if (process.env.FOUNDATION_TELEMETRY === "0" || !operationChangeId || !operationName) return;
-  if (READ_ONLY_OPERATIONS.has(operationName)) return;
-  // An archived change is finished. Nothing this session did belongs in it —
-  // judged by the status the change had when the command started, so the
-  // archive that finishes it still logs its own row while later sessions that
-  // merely touch the finished change stay silent.
-  if (operationStatusAtStart === "archived") return;
-  try {
-    const path = join(LOGS, operationChangeId, "operations.jsonl");
-    mkdirSync(dirname(path), { recursive: true });
-    appendFileSync(path, `${JSON.stringify({
-      version: 2, changeId: operationChangeId, operation: operationName,
-      phase: process.env.FOUNDATION_PUBLIC_OPERATION || operationPhase || null,
-      // Blocked is declared by the command through `block()`/`die()`, never
-      // inferred here. The previous spelling guessed from (exit code 2,
-      // operation name) against a hardcoded list, so any path that set an exit
-      // code without going through `die` was filed as a failure: the same
-      // `validate` refusal read `failed` in one change and `blocked` in
-      // another, and `metrics` counted the difference as rework.
-      status: code === 0 ? "completed"
-        : operationBlocked ? "blocked" : "failed", exitCode: code,
-      startedAt: new Date(operationStartedAt).toISOString(), finishedAt: now(),
-      durationMs: Date.now() - operationStartedAt,
-      requests: null, inputTokens: null, outputTokens: null,
-      cacheCreationTokens: null, cacheReadTokens: null, cacheTokens: null, cost: null,
-      measurement: "command-observed; model usage requires host telemetry ingestion"
-    })}\n`);
-  } catch (error) {
-    if (process.env.FOUNDATION_TELEMETRY_DEBUG === "1")
-      console.error(`WARNING: telemetry unavailable: ${error.message}`);
-  }
-});
+const commandPhaseRecorder = createCommandPhaseRecorder(() => ({
+    telemetryDisabled: process.env.FOUNDATION_TELEMETRY === "0",
+    telemetryDebug: process.env.FOUNDATION_TELEMETRY_DEBUG === "1",
+    changeId: operationChangeId,
+    operationName,
+    operationPhase,
+    operationStatusAtStart,
+    operationInputFingerprint: operationFingerprint,
+    publicOperation: process.env.FOUNDATION_PUBLIC_OPERATION,
+    blocked: operationBlocked,
+    blocker: operationBlocker,
+    operationStartedAt,
+    readOnlyOperations: READ_ONLY_OPERATIONS,
+    logs: LOGS,
+    mkdir: mkdirSync,
+    append: appendFileSync,
+    now,
+    timestamp: Date.now,
+    warn: console.error
+}));
+process.on("exit", (code) => commandPhaseRecorder.finish(code));
 
 const {
   commandRegistry,
@@ -236,15 +294,31 @@ const {
     packetSchema: PACKET_SCHEMA_VERSION,
     agentPlanSchema: AGENT_PLAN_SCHEMA_VERSION,
     contextEventSchema: CONTEXT_EVENT_SCHEMA_VERSION,
+    metricsSchema: METRICS_SCHEMA_VERSION,
+    advanceProtocol: String(ADVANCE_PROTOCOL_VERSION),
+    feedbackSchema: String(FEEDBACK_SCHEMA_VERSION),
+    commandTelemetrySchema: COMMAND_TELEMETRY_SCHEMA_VERSION,
     reviewProtocol: REVIEW_PROTOCOL_VERSION,
     acceptanceProtocol: ACCEPTANCE_PROTOCOL_VERSION,
+    semanticAcceptanceProtocol: SEMANTIC_ACCEPTANCE_PROTOCOL_VERSION,
     reviewPacketSchema: REVIEW_PACKET_SCHEMA_VERSION,
     attestationProtocol: ATTESTATION_PROTOCOL_VERSION,
     authorityProtocol: AUTHORITY_PROTOCOL_VERSION,
-    ciEvidenceProtocol: CI_EVIDENCE_PROTOCOL_VERSION
+    ciEvidenceProtocol: CI_EVIDENCE_PROTOCOL_VERSION,
+    qualityCapabilitiesProtocol: QUALITY_CAPABILITIES_PROTOCOL_VERSION,
+    crapProtocol: CRAP_PROTOCOL_VERSION,
+    automatedMutationProtocol: AUTOMATED_MUTATION_PROTOCOL_VERSION
   },
   readJson,
   fail: die
+});
+const maxParallelProviders = policyExecutionLimit.bind(
+  null, foundationPolicy, "maxParallelProviders");
+
+const sourceCohort = createSourceCohortProvider({
+  runtimeVersion: VERSION,
+  protocolBundle: protocolDescriptor(),
+  directory: dirname(fileURLToPath(import.meta.url))
 });
 const { recordInstructionManifest } = createInstructionRecorder({
   root: ROOT,
@@ -304,6 +378,8 @@ const {
   listCount,
   fileDigest,
   singleRelevantSnapshot,
+  inspectSnapshots,
+  writeSnapshot,
   clearSnapshotCache,
   registerPolicyCacheClearer,
   workspaceManifest,
@@ -333,7 +409,8 @@ const {
   reviewAttempts,
   deliveredAiAttempts,
   infrastructureAiAttempts,
-  acknowledgeInfrastructureAttempts
+  acknowledgeInfrastructureAttempts,
+  acknowledgeBaseMoveAttempts
 } = createReviewAttemptStore({
   receiptsRoot: RECEIPTS,
   evidenceVault: EVIDENCE_VAULT,
@@ -372,6 +449,7 @@ const {
   initialBudget,
   knownNumber,
   ensureBudgetState,
+  calibrationForState,
   activateBudgetWindow,
   budgetDecision,
   applyBudgetDecision,
@@ -379,7 +457,7 @@ const {
   synchronizeBudgetUsage
 } = createBudgetRuntime({ policy: foundationPolicy, now });
 const { reportBudget } = createBudgetReporter({ applyBudgetDecision });
-const { showMetrics } = createMetricsRuntime({
+const { metricsValue, showMetrics } = createMetricsRuntime({
   logs: LOGS,
   receipts: RECEIPTS,
   readJson,
@@ -388,11 +466,14 @@ const { showMetrics } = createMetricsRuntime({
   loadRuntime,
   ensureBudgetState,
   budgetDecision,
+  calibrationForState,
   instructionManifests: INSTRUCTION_MANIFESTS,
   activeChangePath,
   policy: foundationPolicy,
   taskBlocks,
-  taskMetadata
+  taskMetadata,
+  metricsSchemaVersion: Number(METRICS_SCHEMA_VERSION),
+  sourceCohort
 });
 const { execObserved } = createExecRuntime({
   logs: LOGS,
@@ -425,7 +506,7 @@ const { relevantSnapshot, relevantHash } = createRepositorySnapshot({
   runtimePath,
   snapshotPath,
   readJson,
-  writeJson,
+  writeJson: writeSnapshot,
   singleRelevantSnapshot,
   selectedRepositories,
   gitHead,
@@ -461,11 +542,35 @@ const {
 // cache invalidates with it or not at all.
 registerPolicyCacheClearer(clearPolicyCache);
 const {
+  showDiscovery: showQualityDiscovery,
+  initialize: initializeQuality,
+  doctor: qualityDoctor,
+  run: runQuality,
+  report: showQualityReport,
+  baseline: updateQualityBaseline,
+  debt: showQualityDebt
+} = createQualityRuntime({
+  root: ROOT,
+  repositoryCatalog,
+  selectedRepositories,
+  canonicalChangedSurface,
+  declaredSurfaceMatcher,
+  loadRuntime,
+  git,
+  gitHead,
+  readJson,
+  writeJson,
+  pathInside,
+  workspaceManifest,
+  fail: die
+});
+const {
   appendTelemetryRows,
   bindClaudeSession,
   claudeHostContext,
   importTelemetry,
   modelUsageRecorded,
+  telemetryReadiness,
   prepareClaudeTelemetry,
   recordContextMetric,
   recordEvent,
@@ -493,27 +598,17 @@ const {
   fail: die
 });
 const hostExecutionStore = createHostExecutionStore({ root: ROOT, now });
-function importHostExecution(id, source) {
-  loadRuntime(id);
-  const path = resolve(process.cwd(), source);
-  if (!existsSync(path)) die(`host execution result not found: ${source}`);
-  // A malformed host file is the host's input being wrong, not the harness
-  // breaking. Letting the throw escape reported it as a crash and logged the
-  // operation "failed" rather than "blocked".
-  let result;
-  try {
-    result = hostExecutionStore.importExecution(id, readJson(path));
-  } catch (error) {
-    die(`host execution result is invalid: ${error.message}`);
-  }
-  const imported = appendTelemetryRows(
-    id,
-    hostExecutionTelemetryRows(result.execution),
-    "host-execution",
-    { snapshot: readJson(snapshotPath(id), {}) }
-  );
-  console.log(`HOST EXECUTION ${id}: ${result.duplicate ? "duplicate" : "recorded"}; imported ${imported}`);
-}
+const importHostExecution = createHostExecutionImporter({
+  loadRuntime,
+  resolveSource: resolveHostExecutionSource.bind(null, process.cwd()),
+  exists: existsSync,
+  store: hostExecutionStore,
+  readJson,
+  appendTelemetryRows,
+  snapshotPath,
+  fail: die,
+  log: console.log
+});
 const handoffRuntime = createHandoffRuntime({
   root: ROOT,
   handoffsRoot: HANDOFFS,
@@ -552,6 +647,7 @@ const evidenceContract = createEvidenceContract({
   relevantSnapshot,
   singleRelevantSnapshot,
   fileDigest,
+  filesystemEntryIdentity,
   stableHash,
   policyCapabilities,
   foundationPolicy,
@@ -621,7 +717,11 @@ const { receiptValidity } = createReceiptValidity({
   providerWorkspaceHash,
   providerInputIdentity,
   validateArtifact,
-  relevantHash
+  relevantHash,
+  relevantSnapshot,
+  // Late-bound: the sandbox runtime is composed after evidence, and receipt
+  // validity only consults diff identity at command time, long after both.
+  changeDiffIdentity: (id, state) => sandboxRuntime.changeDiffIdentity(id, state)
 });
 const changeValidationRuntime = createChangeValidationRuntime({
   markBlocked,
@@ -652,6 +752,9 @@ const changeValidationRuntime = createChangeValidationRuntime({
   knownProviders: PROVIDERS,
   writeJson,
   now,
+  foundationPolicy,
+  authorityPreflight,
+  executionContract,
   fail: die
 });
 const {
@@ -671,16 +774,59 @@ const {
   validate,
   waiveGate
 } = changeValidationRuntime;
+
+function authorityPreflight(id) {
+  const state = loadRuntime(id);
+  const contract = evidence(id, activeChangePath(id, state));
+  return authorityPreflightValue({
+    changeId: id,
+    state,
+    reviewRisk: changedSurfaceResolvable(id, state)
+      ? reviewPolicy(id, state, contract)
+      : null,
+    providers: Object.keys(contract.providers || {}),
+    providerConfig: (provider) => providerConfig(id, provider),
+    providerCapability,
+    acceptance: resolvedAcceptance(id, state, contract),
+    grounding: {
+      required: state.groundingRequired === true,
+      locked: Boolean(state.groundingDigest),
+      reopenPending: Boolean(state.groundingReopenPending)
+    },
+    handoffs: handoffReadiness(id, { state })
+  });
+}
+
+function executionContract(id) {
+  const state = loadRuntime(id);
+  const contract = evidence(id, activeChangePath(id, state));
+  const resolvable = changedSurfaceResolvable(id, state);
+  const review = resolvable ? reviewPolicy(id, state, contract) : null;
+  const configured = Object.keys(contract.providers || {});
+  const providerNames = resolvable ? requiredProviders(id) : configured;
+  let repositories = [];
+  try { repositories = selectedRepositories(id, state); } catch { repositories = []; }
+  const handoffs = handoffReadiness(id, { state });
+  return compileExecutionContractValue({
+    changeId: id,
+    state,
+    review,
+    providers: providerNames,
+    providerCapabilities: Object.fromEntries(providerNames.map((provider) => [
+      provider, providerCapability(provider, providerConfig(id, provider))
+    ])),
+    authority: authorityPreflight(id),
+    repositories,
+    handoffs
+  });
+}
 const { runCommand, startServiceSession } = createProcessRuntime({
   root: ROOT,
   logs: LOGS,
   now,
-  resolveServiceCwd(id, config) {
-    const state = loadRuntime(id);
-    return config.repository
-      ? repositoryById(id, config.repository, state).workspacePath
-      : state.workspace?.path || ROOT;
-  }
+  resolveServiceCwd: serviceWorkspace.bind(null, {
+    root: ROOT, loadRuntime, repositoryById
+  })
 });
 const receiptRuntime = createReceiptRuntime({
   ROOT,
@@ -715,6 +861,9 @@ const receiptRuntime = createReceiptRuntime({
   contractFingerprint,
   executionFingerprint,
   stableHash,
+  relevantSnapshot,
+  // Late-bound for the same composition-order reason as receipt validity.
+  changeDiffIdentity: (id, state) => sandboxRuntime.changeDiffIdentity(id, state),
   adapterFingerprint,
   environmentDescriptor,
   reviewPolicy,
@@ -739,6 +888,7 @@ const receiptRuntime = createReceiptRuntime({
 const {
   proofPlan,
   rebindReusableReceipt,
+  rebindDiffBoundReceipt,
   recordReceipt,
   recordDeterministicReviewClosure
 } = receiptRuntime;
@@ -767,11 +917,16 @@ const adapterRuntime = createAdapterRuntime({
   providerClaims,
   parseJsonOutput,
   parseTapOutput,
+  parseNodeTestSpecOutput,
   numericReportValue,
   playwrightReportSummary,
   requiredProviders,
   mutationProtocolResult,
   now,
+  serviceResourcesConflict: resourcesConflict,
+  maxParallelServices: maxParallelProviders,
+  recordScheduler: commandPhaseRecorder.scheduler,
+  timestamp: Date.now,
   die
 });
 const {
@@ -798,6 +953,9 @@ const {
   adapterResources,
   resourcesConflict,
   executeAdapter,
+  maxParallelProviders,
+  recordScheduler: commandPhaseRecorder.scheduler,
+  timestamp: Date.now,
   fail: die
 });
 const { modelForTask } = createModelRouter({
@@ -806,10 +964,15 @@ const { modelForTask } = createModelRouter({
   fail: die
 });
 const packetRuntime = createPacketRuntime({
+  inspectSnapshots,
   ROOT,
   PACKET_SCHEMA_VERSION,
   REVIEW_PACKET_SCHEMA_VERSION,
+  foundationVersion: VERSION,
+  installedCliVersion: process.env.FOUNDATION_INSTALLED_CLI_VERSION || VERSION,
   leasesRoot: LEASES,
+  resumeAction: (id) => advanceValue(id, { inspect: true }),
+  activeLeases: (id) => activeChangeLeases(id),
   loadRuntime,
   readJson,
   activeChangePath,
@@ -844,6 +1007,8 @@ const packetRuntime = createPacketRuntime({
   resolvedAcceptance,
   handoffReadiness,
   deliveredAiAttempts,
+  authorityPreflight,
+  executionContract,
   serializedJson,
   foundationPolicy,
   recordContextMetric,
@@ -863,6 +1028,8 @@ const {
   runAuthorityReviewer,
   abortAuthority,
   resetInfrastructureAuthority,
+  recoverReviewBindings,
+  resetBaseMoveAuthority,
   authorityStatusValue,
   showAuthorityStatus,
   recordAuthority,
@@ -901,6 +1068,7 @@ const {
   reviewerStatus,
   runConfiguredReview,
   acknowledgeInfrastructureAttempts,
+  acknowledgeBaseMoveAttempts,
   writeJson,
   receiptPath,
   recordReceipt,
@@ -945,6 +1113,8 @@ const {
   providerConfig,
   providerRepositories,
   resourcesConflict,
+  authorityPreflight,
+  executionContract,
   relevantHash,
   contractFingerprint,
   stableHash,
@@ -957,6 +1127,7 @@ const {
   recordInstructionManifest,
   modelForTask,
   showPacket,
+  recordScheduler: commandPhaseRecorder.scheduler,
   fail: die
 });
 const {
@@ -980,12 +1151,17 @@ const {
       .filter((row) => row.repositoryId === repository.id)
       .map((row) => {
         const path = join(repository.workspacePath, row.path);
-        return { path: row.path, identity: existsSync(path) ? fileDigest(path) : "deleted" };
+        return {
+          path: row.path,
+          identity: lstatSync(path, { throwIfNoEntry: false })
+            ? filesystemEntryIdentity(path) : "deleted"
+        };
       });
   },
   fail: die
 });
 const {
+  dispatchValue: agentDispatchValue,
   showDispatch: showAgentDispatch
 } = createAgentDispatchRuntime({
   agentPlanValue,
@@ -1008,8 +1184,10 @@ const {
   recoveryLines,
   topologyIssues,
   unavailableProviderRecovery,
+  workspaceIsolationIssues,
   upgradeEvidence
 } = createProofReadinessRuntime({
+  root: ROOT,
   markBlocked,
   evidence,
   loadRuntime,
@@ -1023,6 +1201,7 @@ const {
   providerRepositories,
   requiredProviders,
   git,
+  gitHead,
   advisoryCapabilities,
   evidenceDetectionValue,
   validate,
@@ -1038,9 +1217,11 @@ const {
   readJson,
   writeJson,
   saveRuntime,
+  authorityPreflight,
+  executionContract,
   fail: die
 });
-const { continueBudget } = createBudgetContinuation({
+const { continueBudget, checkpointBudget } = createBudgetContinuation({
   logs: LOGS,
   loadRuntime,
   saveRuntime,
@@ -1064,6 +1245,7 @@ const {
 } = createSandboxCleanup({ root: ROOT, canonicalPath, git });
 const sandboxRuntime = createSandboxRuntime({
   markBlocked,
+  recordScheduler: commandPhaseRecorder.scheduler,
   root: ROOT,
   policy: foundationPolicy,
   excludedWorkspaceDirs: EXCLUDED_WORKSPACE_DIRS,
@@ -1081,6 +1263,7 @@ const sandboxRuntime = createSandboxRuntime({
   gitBuffer,
   porcelainStatusRecords,
   selectedRepositories,
+  repositoryCatalog,
   cleanupRepositorySandboxes,
   cleanupAppliedSandbox,
   clearSnapshotCache,
@@ -1101,9 +1284,80 @@ const {
   showInspection: showSandboxInspection,
   createSingle: createSingleSandbox,
   create: createSandbox,
+  prepareBuild: prepareBuildSandbox,
+  retryFailedSetups,
   mergeTaskProgress,
   sync: syncSandbox
 } = sandboxRuntime;
+function rollbackAtomicStart(id) {
+  const issues = [];
+  const state = readJson(runtimePath(id), {
+    id,
+    workspace: { mode: "current", path: ROOT }
+  });
+  const repositories = cleanupRepositorySandboxes(id, state);
+  for (const [repositoryId, result] of Object.entries(repositories))
+    if (["failed", "refused"].includes(result.status))
+      issues.push(`repository sandbox '${repositoryId}': ${result.reason || result.status}`);
+  // Multi-repository setup can fail after worktrees were created but before
+  // their in-memory records were saved. Re-resolve the already-validated
+  // selection and clean only its fixed Foundation-owned paths.
+  let selected = [];
+  const repositorySandboxRoot = join(
+    ROOT, ".foundation", "repository-sandboxes", id);
+  if (existsSync(repositorySandboxRoot)) {
+    try {
+      trapFailures(() => { selected = selectedRepositories(id, state); });
+    } catch (error) {
+      issues.push(`repository sandbox discovery: ${error.message || error}`);
+    }
+  }
+  const unrecordedRepositories = {};
+  for (const repository of selected) {
+    if (repository.id === "root") continue;
+    const path = join(ROOT, ".foundation", "repository-sandboxes", id, repository.id);
+    if (!existsSync(path)) continue;
+    unrecordedRepositories[repository.id] = {
+      mode: "worktree", path, targetPath: repository.path
+    };
+  }
+  const unrecorded = cleanupRepositorySandboxes(id, {
+    repositories: unrecordedRepositories
+  });
+  for (const [repositoryId, result] of Object.entries(unrecorded))
+    if (["failed", "refused"].includes(result.status))
+      issues.push(`unrecorded repository sandbox '${repositoryId}': ${
+        result.reason || result.status}`);
+  const applied = cleanupAppliedSandbox(id, state);
+  if (["failed", "refused"].includes(applied.status))
+    issues.push(`sandbox: ${applied.reason || applied.status}`);
+
+  // A worktree/copy can exist before createSingle persists it in runtime state
+  // (for example when copying the packet into a new worktree fails). Clean the
+  // one fixed Foundation-owned path as a fallback; never infer a broad target.
+  const expectedSandbox = join(ROOT, ".foundation", "sandboxes", id);
+  if (existsSync(expectedSandbox) && state.workspace?.path !== expectedSandbox) {
+    const metadata = join(expectedSandbox, ".git");
+    let mode = "copy";
+    try {
+      if (existsSync(metadata) && lstatSync(metadata).isFile()) mode = "worktree";
+    } catch { /* cleanup as a bounded copy when metadata disappeared */ }
+    const fallback = cleanupAppliedSandbox(id, {
+      workspace: { mode, path: expectedSandbox }
+    });
+    if (["failed", "refused"].includes(fallback.status))
+      issues.push(`unrecorded sandbox: ${fallback.reason || fallback.status}`);
+  }
+
+  for (const path of [
+    changePath(id), runtimePath(id), join(RECEIPTS, id),
+    join(EVIDENCE_VAULT, id), join(HANDOFFS, id), snapshotPath(id)
+  ]) {
+    try { rmSync(path, { recursive: true, force: true }); }
+    catch (error) { issues.push(`${path}: ${error.message}`); }
+  }
+  return issues;
+}
 const {
   templateDir,
   instantiate,
@@ -1112,6 +1366,7 @@ const {
   createChange,
   rapidStartTemplate,
   startAtomic,
+  amendChange,
   resolveChange
 } = createChangeLifecycle({
   root: ROOT,
@@ -1132,8 +1387,10 @@ const {
   now,
   bindClaudeSession,
   validate,
-  createSandbox,
-  showPacket
+  showPacket,
+  measureStage: commandPhaseRecorder.measure,
+  trapFailures,
+  rollbackStart: rollbackAtomicStart
 });
 function unresolvedApplyTransactions(id) {
   return readTransactionJournals(TRANSACTIONS, id, readJson).filter((journal) =>
@@ -1150,6 +1407,12 @@ const {
 } = createDiagnosticsRuntime({
   root: ROOT,
   unresolvedApplyTransactions,
+  deliveryObservation: (_id, state) => ({
+    ...targetProjectionObservationValue({ root: ROOT, state, git, fileDigest }),
+    references: recordedDeliveryReferences(state)
+  }),
+  authorityPreflight,
+  executionContract,
   version: VERSION,
   runtimeApiVersion: RUNTIME_API_VERSION,
   providerProtocolVersion: PROVIDER_PROTOCOL_VERSION,
@@ -1158,8 +1421,11 @@ const {
   packetSchemaVersion: PACKET_SCHEMA_VERSION,
   agentPlanSchemaVersion: AGENT_PLAN_SCHEMA_VERSION,
   contextEventSchemaVersion: CONTEXT_EVENT_SCHEMA_VERSION,
+  metricsSchemaVersion: METRICS_SCHEMA_VERSION,
+  commandTelemetrySchemaVersion: COMMAND_TELEMETRY_SCHEMA_VERSION,
   reviewProtocolVersion: REVIEW_PROTOCOL_VERSION,
   acceptanceProtocolVersion: ACCEPTANCE_PROTOCOL_VERSION,
+  semanticAcceptanceProtocolVersion: SEMANTIC_ACCEPTANCE_PROTOCOL_VERSION,
   reviewPacketSchemaVersion: REVIEW_PACKET_SCHEMA_VERSION,
   attestationProtocolVersion: ATTESTATION_PROTOCOL_VERSION,
   authorityProtocolVersion: AUTHORITY_PROTOCOL_VERSION,
@@ -1238,6 +1504,9 @@ const { recoverPendingApply, pendingApplyTransactions } = createApplyRecovery({
   blockWithDecision,
   fail: die
 });
+const taskPacketWasPrecompleted = taskPacketWasPrecompletedOperation.bind(null, {
+  loadRuntime, activeChangePath, exists: existsSync, fileDigest
+});
 const { finalize: prove, audit: proofAudit } = createProofRuntime({
   root: ROOT,
   protocolVersion: PROOF_PROTOCOL_VERSION,
@@ -1271,17 +1540,13 @@ const { finalize: prove, audit: proofAudit } = createProofRuntime({
     } : null;
   },
   agentPlanValue,
+  executionContract,
   savedAgentPlan: (id) => readJson(join(PLANS, `${id}.json`), {}),
   taskResult: (id, taskId) => {
     const path = join(LEASES, "results", id, `${taskId}.json`);
     return existsSync(path) ? { path, value: readJson(path, null) } : null;
   },
-  taskPacketWasPrecompleted: (id) => {
-    const state = loadRuntime(id);
-    const expected = state.workspace?.packetSnapshot?.["tasks.md"] || null;
-    const path = join(activeChangePath(id), "tasks.md");
-    return Boolean(expected && existsSync(path) && fileDigest(path) === expected);
-  },
+  taskPacketWasPrecompleted,
   legacyExecutionPolicy: () =>
     foundationPolicy().workflow?.reviewCircuit === "legacy",
   selectedRepositories,
@@ -1290,6 +1555,7 @@ const { finalize: prove, audit: proofAudit } = createProofRuntime({
   fail: die
 });
 const {
+  authorityNext,
   guardProofMutation,
   proofAdvance,
   proofCollect,
@@ -1306,6 +1572,7 @@ const {
   requiredProviders,
   receiptValidity,
   rebindReusableReceipt,
+  rebindDiffBoundReceipt,
   executionNodes,
   collectableExecutionNodes,
   startRequiredServices,
@@ -1328,6 +1595,7 @@ const {
   recordDeterministicReviewClosure,
   authorityStatusValue,
   requestAuthority,
+  stableHash,
   die
 });
 const guardPublicProofMutation = (command, operation) =>
@@ -1344,6 +1612,8 @@ const guardedAbortAuthority = guardPublicProofMutation(
   "authority abort", abortAuthority);
 const guardedResetInfrastructureAuthority = guardPublicProofMutation(
   "authority reset-infra", resetInfrastructureAuthority);
+const guardedResetBaseMoveAuthority = guardPublicProofMutation(
+  "authority reset-base-move", resetBaseMoveAuthority);
 const guardedRecordAuthority = guardPublicProofMutation(
   "authority record", recordAuthority);
 const guardedRecordReceipt = guardPublicProofMutation(
@@ -1385,11 +1655,14 @@ const {
   writeJson,
   clearSnapshotCache,
   relevantHash,
+  workspaceIsolationIssues,
+  reviewPolicy,
   requiredProviders,
   receiptValidity,
   fileDigest,
   receiptPath,
   handoffReadiness,
+  telemetryReadiness,
   verifyAppliedProjection,
   selectedRepositories,
   repositoryById,
@@ -1398,9 +1671,23 @@ const {
   ciEvidenceProtocolVersion: CI_EVIDENCE_PROTOCOL_VERSION,
   stableHash,
   agentPlanValue,
+  executionContract,
   now,
   blockWithDecision,
+  deliveryObservation: (_id, state) =>
+    targetProjectionObservationValue({ root: ROOT, state, git, fileDigest }),
   fail: die
+});
+const landGrantRuntime = createLandGrantRuntime({
+  transactions: TRANSACTIONS,
+  loadRuntime,
+  selectedRepositories,
+  proofPath,
+  readJson,
+  writeJson,
+  stableHash,
+  now,
+  landCheck
 });
 const applyRuntime = createApplyRuntime({
   root: ROOT,
@@ -1416,13 +1703,18 @@ const applyRuntime = createApplyRuntime({
   pathIdentity,
   pathMode,
   directoryHash,
+  fileDigest,
+  pathInside,
   applyTransactionRoot,
   copyPath,
   proofPath,
   readJson,
+  writeJson,
   stableHash,
   syncClaudeTelemetry,
   modelUsageRecorded,
+  telemetryReadiness,
+  foundationPolicy,
   saveApplyJournal,
   transactionJournalPath,
   verifyAppliedProjection,
@@ -1443,6 +1735,8 @@ const applyRuntime = createApplyRuntime({
   proofAudit,
   cleanupChangeLeases,
   now,
+  assertLandGrant: landGrantRuntime.assert,
+  consumeLandGrant: landGrantRuntime.consume,
   blockWithDecision,
   fail: die
 });
@@ -1454,6 +1748,109 @@ const {
   applySandbox,
   archive
 } = applyRuntime;
+const advanceLand = advanceLandOperation.bind(null, {
+  loadRuntime, landCheck, archive, resumeLand, landPlanValue,
+  selectedRepositories,
+  prepareExecution: (id, options) => prepareExecution(id, options)
+});
+
+function preparationPlanPath(id) {
+  return join(PLANS, `${id}-preparation.json`);
+}
+
+function preparationProviders(id) {
+  return requiredProviders(id).map((provider) => {
+    const config = providerConfig(id, provider) || {};
+    return {
+      id: provider,
+      repository: config.repository || null,
+      adapter: config.adapter || "external",
+      command: config.command || null
+    };
+  });
+}
+
+function prepareExecution(id, { stage = "build" } = {}) {
+  const state = loadRuntime(id);
+  const repositories = selectedRepositories(id, state);
+  const openSpec = ensureProjectOpenSpec({
+    root: ROOT,
+    status: openSpecCliStatus,
+    spawn: spawnSync
+  });
+  const prior = readJsonOrNull(preparationPlanPath(id));
+  const plan = executionPreparationValue({
+    id,
+    state,
+    repositories,
+    providers: preparationProviders(id),
+    openSpec,
+    stableHash,
+    prior,
+    now
+  });
+  plan.stage = stage;
+  writeJson(preparationPlanPath(id), plan);
+  return assertExecutionPreparationReady(plan);
+}
+async function runAdvanceQuietly(operation) {
+  const priorLog = console.log;
+  const priorExitCode = process.exitCode;
+  console.log = () => {};
+  try {
+    const result = await operation();
+    // Primitive proof commands retain their diagnostic non-zero exits. The
+    // unified lifecycle transports the same structured boundary successfully
+    // so the host consumes it instead of retrying a command it thinks crashed.
+    process.exitCode = priorExitCode;
+    return result;
+  } finally {
+    console.log = priorLog;
+  }
+}
+const { advanceValue, showAdvance } = createAdvanceRuntime({
+  inspectSnapshots,
+  capture: trapFailures,
+  captureAsync: trapFailuresAsync,
+  markBlocked,
+  loadRuntime,
+  agentDispatchValue,
+  agentPlanValue,
+  relevantHash,
+  deliveredAiAttempts,
+  authorityStatusValue,
+  authorityNext,
+  proofReadinessValue,
+  budgetDecisionValue: budgetDecision,
+  hasLandGrant: hasValidLandGrant.bind(null, landGrantRuntime),
+  prepareBuild: prepareAdvanceBuild.bind(null, {
+    measureAsync: commandPhaseRecorder.measureAsync,
+    runQuietly: runAdvanceQuietly, prepareBuildSandbox, prepareExecution
+  }),
+  runProof: runAdvanceProof.bind(null, {
+    measureAsync: commandPhaseRecorder.measureAsync,
+    runQuietly: runAdvanceQuietly, proofAdvance
+  }),
+  recoverReviewBindings,
+  runLand: (id) => runAdvanceQuietly(() => advanceLand(id)),
+  recordPhase: (id, phase) => {
+    commandPhaseRecorder.transition(phase);
+    recordPhaseContext(id, phase);
+  },
+  readJson,
+  proofAdvancePath: (id) => join(EVIDENCE_VAULT, id, "proof-advance.json"),
+  stableHash
+});
+const { showFeedback } = createFeedbackRuntime({
+  inspectSnapshots,
+  logs: LOGS,
+  evidenceVault: EVIDENCE_VAULT,
+  readJson,
+  readJsonLines,
+  metricsValue,
+  packetValue: packetRuntime.inspectionPacketValue,
+  nextAction: (id) => advanceValue(id, { inspect: true })
+});
 const abandonRuntime = createAbandonRuntime({
   root: ROOT,
   paths: {
@@ -1508,11 +1905,39 @@ operationName = command || null;
 // `sandbox create --all <change>` created `.foundation/logs/--all/`.
 const namedChange = (value) =>
   typeof value === "string" && !value.startsWith("-") ? value : null;
+const qualityChange = () => {
+  const index = values.findIndex((value) => value === "--change");
+  return namedChange(index >= 0 ? values[index + 1] : process.env.FOUNDATION_CHANGE_ID);
+};
 operationChangeId = command === "sandbox" ? namedChange(values[1]) :
-  ["resolve", "validate", "audit-change", "hash", "packet", "agent-plan", "agent-dispatch", "agent-task", "agent-acquire", "agent-release", "metrics", "budget-continue", "proof-plan", "proof-readiness", "proof-advance", "proof-run", "proof-collect", "proof-preflight", "proof-execute", "proof-audit", "evidence-upgrade", "evidence-verify-ci", "authority-request", "authority-dispatch", "authority-run", "authority-abort", "authority-status", "authority-record", "authority-reset-infra", "receipt", "run-provider", "prove",
-    "evidence-detect", "evidence-init", "evidence-doctor", "handoff-status", "handoff-packet", "handoff-record", "land-check", "land-plan", "land-record", "land-pointers", "land-resume", "archive", "event", "telemetry-sync", "telemetry-import"].includes(command) ? namedChange(values[0]) : null;
-operationStatusAtStart = operationChangeId
-  ? readJson(runtimePath(operationChangeId), {}).status ?? null : null;
+  ["resolve", "validate", "audit-change", "hash", "packet", "agent-plan", "agent-dispatch", "agent-task", "agent-acquire", "agent-release", "metrics", "feedback", "advance", "budget-checkpoint", "budget-continue", "proof-plan", "proof-readiness", "proof-advance", "proof-run", "proof-collect", "proof-preflight", "proof-execute", "proof-audit", "evidence-upgrade", "evidence-verify-ci", "authority-request", "authority-dispatch", "authority-run", "authority-abort", "authority-status", "authority-record", "authority-reset-infra", "authority-reset-base-move", "receipt", "run-provider", "prove",
+    "evidence-detect", "evidence-init", "evidence-doctor", "handoff-status", "handoff-packet", "handoff-record", "land-check", "land-advance", "land-plan", "land-record", "land-pointers", "land-resume", "archive", "event", "telemetry-sync", "telemetry-import"].includes(command) ? namedChange(values[0]) :
+    command?.startsWith("quality-")
+      ? qualityChange()
+      : null;
+const operationStateAtStart = operationChangeId
+  ? readJson(runtimePath(operationChangeId), {}) : {};
+operationStatusAtStart = operationStateAtStart.status ?? null;
+if (operationChangeId) {
+  try {
+    const changeRoot = activeChangePath(operationChangeId, operationStateAtStart);
+    operationFingerprint = operationInputFingerprint({
+      operation: command,
+      values,
+      state: operationStateAtStart,
+      changeDigest: existsSync(changeRoot) ? directoryHash(changeRoot) : null,
+      foundationConfigDigest: existsSync(join(ROOT, "foundation.json"))
+        ? fileDigest(join(ROOT, "foundation.json")) : null,
+      projectPolicyDigest: existsSync(join(ROOT, ".foundation", "policy.json"))
+        ? fileDigest(join(ROOT, ".foundation", "policy.json")) : null
+    });
+  } catch {
+    // Profiling is observational. A damaged change must still reach the
+    // command that diagnoses or retires it; the row reports unavailable input
+    // identity rather than turning instrumentation into a new blocker.
+    operationFingerprint = null;
+  }
+}
 
 // One table, in `runtime/core/lifecycle-phase.mjs`, shared with the operations
 // row written on exit. The phase is derived here rather than read only from
@@ -1528,6 +1953,8 @@ if (!telemetrySuppressed && telemetryPhase && telemetryWritable(operationChangeI
   prepareClaudeTelemetry(operationChangeId, telemetryPhase);
 if (command === "metrics" && telemetryWritable(operationChangeId))
   syncClaudeTelemetry(operationChangeId, { quiet: true });
+if (command === "budget-checkpoint" && telemetryWritable(operationChangeId))
+  syncClaudeTelemetry(operationChangeId, { quiet: true });
 if (command === "budget-continue" && telemetryWritable(operationChangeId))
   syncClaudeTelemetry(operationChangeId, { quiet: true });
 
@@ -1538,6 +1965,7 @@ await routeRuntimeCommand(command, values, {
   createChange,
   rapidStartTemplate,
   startAtomic,
+  amendChange,
   resolveChange,
   abandonChange,
   waiveGate,
@@ -1554,7 +1982,10 @@ await routeRuntimeCommand(command, values, {
   recordPhaseContext,
   showPacket,
   showMetrics,
+  showAdvance,
+  showFeedback,
   execObserved,
+  checkpointBudget,
   continueBudget,
   doctor,
   validate,
@@ -1579,6 +2010,7 @@ await routeRuntimeCommand(command, values, {
   runAuthorityReviewer: guardedRunAuthorityReviewer,
   abortAuthority: guardedAbortAuthority,
   resetInfrastructureAuthority: guardedResetInfrastructureAuthority,
+  resetBaseMoveAuthority: guardedResetBaseMoveAuthority,
   showAuthorityStatus,
   recordAuthority: guardedRecordAuthority,
   upgradeEvidence,
@@ -1586,6 +2018,8 @@ await routeRuntimeCommand(command, values, {
   runProvider: guardedRunProvider,
   prove,
   landCheck,
+  grantLand: landGrantRuntime.issue,
+  advanceLand,
   recoverLand,
   showLandPlan,
   recordRepositoryLand,
@@ -1608,5 +2042,12 @@ await routeRuntimeCommand(command, values, {
   usage,
   describeCommand,
   runtimeApiVersion: RUNTIME_API_VERSION,
-  version: VERSION
+  version: VERSION,
+  showQualityDiscovery,
+  initializeQuality,
+  qualityDoctor,
+  runQuality: (options) => trapFailures(() => runQuality(options)),
+  showQualityReport,
+  updateQualityBaseline,
+  showQualityDebt
 });

@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  gitBaseCheckoutStatus, groundingPortabilityFindings, isPacketLocalSource
+  gitBaseCheckoutPaths, gitBaseCheckoutStatus, groundingPortabilityFindings,
+  isPacketLocalSource, plannedGroundingPortabilityStatus
 } from
   "../runtime/workflow/sandbox-runtime.mjs";
 
@@ -47,6 +48,13 @@ try {
   writeFileSync(join(root, "untracked.md"), "outside packet\n");
   symlinkSync("../../../../untracked.md", join(root, "openspec", "changes",
     "portable", "notes", "escaped.md"));
+  symlinkSync("cycle-b.md", join(root, "cycle-a.md"));
+  symlinkSync("cycle-a.md", join(root, "cycle-b.md"));
+  symlinkSync("../outside.md", join(root, "outside-link.md"));
+  const deep = Array.from({ length: 65 }, (unused, index) =>
+    `deep-${String(index).padStart(2, "0")}.md`);
+  deep.forEach((name, index) => symlinkSync(
+    deep[index + 1] || "deep-terminal.md", join(root, name)));
 
   const repositories = [
     { id: "root", path: root, baseHead },
@@ -82,14 +90,31 @@ try {
       path: "openspec/changes/portable/notes/escaped.md",
       sha256: digest("outside packet\n")
     },
+    {
+      repository: "root", path: "src/new-app.js", role: "production-path",
+      sha256: "planned"
+    },
     { repository: "plain", path: "requirements.md", sha256: digest("plain") }
   ] };
   const gitBuffer = (args, cwd) => spawnSync("git", args, { cwd });
+
+  assert.deepEqual(gitBaseCheckoutPaths(repositories[0], "linked.md"), {
+    paths: ["linked.md", "target.md"], error: null
+  });
+  assert.equal(gitBaseCheckoutStatus(repositories[0], "cycle-a.md", gitBuffer),
+    "symlink-cycle");
+  assert.equal(gitBaseCheckoutStatus(repositories[0], "outside-link.md", gitBuffer),
+    "symlink-target-outside-repository");
+  assert.equal(gitBaseCheckoutStatus(repositories[0], "deep-00.md", gitBuffer),
+    "symlink-depth-exceeded");
+  assert.equal(gitBaseCheckoutStatus(repositories[1], "requirements.md", gitBuffer), null);
 
   const findings = groundingPortabilityFindings(
     grounding,
     repositories,
     (repository, source) => {
+      const planned = plannedGroundingPortabilityStatus(source, false);
+      if (planned !== undefined) return planned;
       if (digest(readFileSync(join(repository.path, source.path))) !== source.sha256)
         return "working-tree-digest-mismatch";
       if (repository.id === "root" && isPacketLocalSource(
@@ -115,6 +140,24 @@ try {
       reason: "missing-from-base"
     }
   ]);
+  assert.equal(plannedGroundingPortabilityStatus({
+    role: "production-path", sha256: "planned"
+  }, false), null, "an absent validated greenfield path is sandbox-portable");
+  assert.equal(plannedGroundingPortabilityStatus({
+    role: "production-path", sha256: "planned"
+  }, true), "planned-path-exists",
+  "a control-tree path must not masquerade as an absent planned path");
+  assert.equal(plannedGroundingPortabilityStatus({
+    role: "requirement", sha256: "planned"
+  }, false), "invalid-planned-role",
+  "immutable sources cannot use planned portability");
+  assert.equal(plannedGroundingPortabilityStatus({
+    role: "dependency-source", sha256: "planned"
+  }, false), "invalid-planned-role",
+  "dependency evidence cannot become writable through planned portability");
+  assert.equal(plannedGroundingPortabilityStatus({
+    role: "requirement", sha256: digest("base")
+  }, false), undefined, "ordinary digests retain the full portability check");
   assert.deepEqual(groundingPortabilityFindings({}, repositories, () => null), []);
   process.stdout.write("sandbox grounding portability tests: PASS\n");
 } finally {

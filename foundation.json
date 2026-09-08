@@ -85,11 +85,20 @@
         "ephemeral": true
       }
     },
-    "fallbackReviewer": "main-session"
+    "fallbackReviewers": [
+      "main-session"
+    ],
+    "infraFailureThreshold": 2
   },
   "workflow": {
     "grounding": "required",
     "reviewCircuit": "full-delta",
     "reviewPolicy": "risk-tiered"
+  },
+  "telemetry": {
+    "requireUsage": true
+  },
+  "land": {
+    "riskBasedCi": false
   }
 }

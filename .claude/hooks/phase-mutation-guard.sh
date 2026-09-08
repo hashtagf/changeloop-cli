@@ -19,32 +19,16 @@ set -u
 # That keeps it independent of PATH and of process creation entirely, so the
 # saving is real rather than one external command traded for another.
 #
-# Only exact known spellings take a fast path. The guard lowercases the mode,
-# so any other casing ("BLock", "oFF") could mean enforcement there; treating
-# an unrecognised spelling as block delegates every call, which is the safe
-# direction — the guard, not this prefilter, then decides.
-case "${FOUNDATION_GUARDRAIL_MODE:-audit}" in
+# Only off takes a fast path. Audit must delegate because the authoritative
+# transcript path lives in the PreToolUse event body, not reliably in the
+# SessionStart-exported environment of claude -p hook processes.
+case "${FOUNDATION_GUARDRAIL_MODE:-auto}" in
   off|OFF|Off) exit 0 ;;
-  audit|AUDIT|Audit) mode=audit ;;
+  auto|AUTO|Auto|audit|AUDIT|Audit) mode=delegate ;;
   *) mode=block ;;
 esac
 
 HERE="${0%/*}"
 [ "$HERE" = "$0" ] && HERE="."
-
-# Block mode fails closed inside the guard even when the phase is unknown, so
-# nothing may be decided here. Delegate before any other test.
-if [ "$mode" != "block" ] && [ -z "${FOUNDATION_ACTIVE_PHASE:-}" ]; then
-  logs="${CLAUDE_PROJECT_DIR:-$PWD}/.foundation/logs"
-  if [ ! -d "$logs" ]; then exit 0; fi
-  # Presence, not freshness. Whether a recorded phase is still within the
-  # guard's window is policy, and duplicating it here would let the two
-  # disagree. Presence can only cause more delegation, never less.
-  found=0
-  for candidate in "$logs"/*/phase-context.jsonl; do
-    if [ -e "$candidate" ]; then found=1; break; fi
-  done
-  [ "$found" -eq 1 ] || exit 0
-fi
 
 exec node "$HERE/phase-mutation-guard.mjs"

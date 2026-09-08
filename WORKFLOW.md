@@ -1,792 +1,592 @@
-# Foundation workflow
+# Change Loop workflow
 
-**Version 3.3.1**
+**Version 3.5.14**
 
-Foundation is an OpenSpec-native harness for safe, economical software changes
-in brownfield repositories.
+Change Loop is an OpenSpec-native control plane for safe, economical software
+changes in brownfield repositories:
 
 ```text
 Investigate? → Change → Build → Prove → Land
 ```
 
+This document owns the detailed lifecycle contract: what each phase means,
+which state transitions are allowed, what blocks progress, and what authority
+the harness never infers. Start with `README.md` or `README.th.md` for the user
+journey. Runtime structure and operator commands belong to
+`.claude/harness/README.md`; provider, receipt, and proof details belong to
+`.claude/harness/EVIDENCE.md`.
+
 ## Why this shape
 
-The previous workflow encoded quality as a long sequence of agent roles and
-phases. That preserved quality but made the control plane dominate cost and
-latency. The new workflow separates three concerns:
+OpenSpec stores the agreement, the native coding agent implements it, and
+deterministic project-owned providers prove it. The harness owns state,
+isolation, budgets, evidence identity, authority boundaries, and recoverable
+Land. Rigor scales with risk and evidence needs, not a task-size phase matrix.
 
-- OpenSpec stores the agreement.
-- The native coding agent implements the agreement.
-- Deterministic providers prove the agreement.
+## Ownership and user states
 
-Rigor scales with risk and evidence needs, not with a task-size phase matrix.
+The user owns intent, consequential product decisions, explicit Land authority,
+final diff review, and any later Git or external side effect. The coding agent
+owns implementation and product repair. The harness owns compilation, tool
+preparation, isolation, routing, evidence, permissions integration, recovery,
+Apply, and archive. An external owner owns credentials, remote systems, and
+human verdicts outside the execution boundary. Harness configuration or host
+permission is never turned into a question or command for the user.
 
-## Commands
+Normal output projects internal actions into five user states: `WORKING`,
+`NEEDS_DECISION`, `WAITING_EXTERNAL`, `TARGET_REACHED`, and `DELIVERED`.
+`DONE` at a requested Build or Prove target projects `TARGET_REACHED`, with
+`delivered: false` and the next route preserved. Only `reached: archived`
+projects `DELIVERED`. Internal worker and proof-lock waits remain harness-owned
+`WORKING`; `WAITING_EXTERNAL` requires a real external owner. Internal commands,
+request IDs, journals, repair graphs, and resume tokens remain machine-facing.
+
+## Lifecycle commands
 
 ### `/investigate <problem>`
 
-Use only when the problem or direction is unclear. Exploration is bounded,
-read-only with respect to product code, and may produce an investigation note.
-Its output is facts, hypotheses, options, tradeoffs, and a next decision.
+Use Investigate only when the problem or direction is unclear. It is bounded
+and read-only with respect to product code. Its output is facts, hypotheses,
+options, tradeoffs, and a next decision; it creates no lifecycle state.
+
+`/investigate <decision> --compare` may build disposable alternatives only
+under `.foundation/prototypes/`. It always records the selected conclusion in
+`selection.md`. Prototype artifacts are never evidence.
 
 ### `/change <intent>`
 
-Creates or completes `openspec/changes/<id>/`. The resolver records:
+Change authors one compact semantic draft v3. The transactional compiler creates
+`openspec/changes/<id>/`, assigns stable cross-ledger IDs, validates the complete
+agreement, installs it, and prepares isolation. The draft records:
 
-- ambiguity: clear or unclear;
-- impact: low, medium, or high;
-- coupling: isolated or coupled;
-- evidence capabilities;
-- size for budget and slicing only;
-- semantic security and review triggers.
+- ambiguity, impact, coupling, and size;
+- semantic requirements and task outcomes;
+- claim-to-task coverage and required evidence capabilities;
+- semantic security and review triggers;
+- typed extensions only when the change needs them.
 
-Standard changes contain proposal, delta specs, design, tasks, evidence, and
-execution wiring. Rapid changes contain proposal, tasks, evidence, and execution
-wiring and upgrade in place if risk emerges.
+Rapid changes contain `proposal.md`, `tasks.md`, and `evidence.yaml`. Standard
+changes add delta specs and add `design.md` only for a load-bearing decision,
+migration, compatibility boundary, architecture, diagram, integration, or
+prototype selection. `execution.yaml`, `repositories.yaml`, `handoffs.yaml`,
+and `grounding.yaml` appear only when execution differs from detected defaults,
+multiple repositories participate, external authority is required, or a
+non-derived material decision must be recorded. Absence has versioned
+virtual-default semantics.
 
-`/investigate <decision> --compare` is the optional disposable mode for
-genuinely unresolved experience, API, or architecture alternatives. It writes only under
-`.foundation/prototypes/`, never edits product code, and adds no lifecycle state;
-the selected conclusion is always written to `selection.md`. Continue with
-`/change <intent|existing-change> --prototype-selection <selection-path>`; Change
-summarizes the decision into proposal/design without treating the ignored
-selection or its artifacts as evidence. The runtime rejects local prototype
-artifacts and references before they can enter a receipt or proof bundle.
+After compilation, the OpenSpec packet is the source of truth. The semantic
+draft is temporary and `.foundation/` is derived coordination state. Draft v1
+remains compatible; draft v2 retains its unambiguous bookkeeping behavior.
 
-A change that cannot be proven is retired explicitly rather than deleted by
-hand. `change abandon <change> --reason <reason> --decision-ref <ref>` releases
-its leases, cleans up its sandbox, and moves its change directory, runtime
-state, receipts, evidence, and transactions into
-`.foundation/recovery/abandoned/<id>/` with an audit line in
-`.foundation/logs/abandoned.jsonl`. It requires an explicit recorded user
-decision, never touches Git, and refuses an archived change. When the proven
-files are already in the working tree it stops and asks whether to keep or
-revert them; `--applied keep|revert` records that answer.
+Referenced diagrams, prototype selections, and local integration documentation
+must resolve to regular files inside the project. Remote integration sources
+must use HTTPS and a fixed version rather than `latest`, a branch, or another
+floating alias. An amendment may extend a task's claim coverage, but changing
+its outcome or verification command requires a new task so completed work
+cannot silently change meaning.
+
+When Build discovers new behavior, amend the same agreement before continuing:
+
+```bash
+claude-foundation change amend <change> <amendment.json>
+```
+
+A change that cannot be proven is retired explicitly, never deleted by hand:
+
+```bash
+claude-foundation change abandon <change> --reason <reason> --decision-ref <ref>
+```
+
+Abandon releases leases, cleans up isolation, and moves the packet, runtime
+state, receipts, evidence, and transactions to
+`.foundation/recovery/abandoned/<id>/` with an audit record. It requires a real
+user decision, never touches Git, refuses archived changes, and asks whether to
+keep or revert already-applied files before acting.
 
 ### `/build <change>`
 
-The native harness reads the compact change packet and implements it. `tasks.md`
-is the only implementation ledger; `handoffs.yaml` separately owns operations
-that require AWS, cluster, secret, Terraform, deploy, restart, or other external
-authority. Focused checks run during convergence. Native task primitives
-or subagents are used only for independently verifiable parallel/resumable work
-packages, not lifecycle personas.
-
-For a Git project, create an isolated worktree with:
+The normal entrypoint is:
 
 ```bash
-claude-foundation sandbox create <change>
+claude-foundation advance <change> --through build
 ```
 
-This is workspace isolation, not an OS security boundary. Inspect the distinction
-with `sandbox inspect <change>`. A host that deliberately runs unattended must
-use `doctor --stage build --change <change> --unattended` and
-`sandbox create <change> --unattended`. Detection is diagnostic, not authorization:
-the current runtime accepts no workspace-controlled override and fails unattended
-execution closed pending a trusted host-owned attestation mechanism.
-`--unattended` is a presence-only security flag: valued or duplicate forms are
-rejected before telemetry, workspace inspection, or sandbox mutation. The guard
-is cooperative because the runtime cannot infer an external Allow All setting;
-the host that enables unattended execution must invoke the guarded form.
+The coordinator validates the agreement, prepares or synchronizes isolation,
+compiles the task graph, and returns one bounded protocol-v5 action:
+`EDIT`, `REPAIR`, `RUN_EXTERNAL`, `WAIT`, `ASK_USER`, or `DONE`.
+`tasks.md` is the only implementation ledger. `handoffs.yaml` separately owns
+AWS, cluster, secret, Terraform, deploy, restart, or other operations that need
+external authority.
 
-For a selected multi-repository topology:
+Build writes only inside the declared isolated workspace. Git projects normally
+use detached worktrees; a dirty target or non-Git project uses an isolated copy.
+This is workspace integrity, not OS process, network, or secret containment.
+Mutating shell commands must start with `cd` to the workspace root or a literal
+directory inside it, joined by `&&`; on Claude Code the phase guard pins the
+shell's reported directory as that anchor when it is already inside the
+workspace, and audits the pin. The phase guard and
+`claude-foundation exec` reject direct path escapes and symlink traversal, but
+the host still owns process isolation for indirect or dynamically computed
+effects. Copying or linking files from outside the workspace is refused as
+well: a workspace never borrows the checkout's dependencies. Sandbox creation
+prints a NOTE with the exact `sandbox.setupCommand` snippet when the project
+has a lockfile but declares no setup command.
+
+Before Build, the harness compiles and persists an execution-preparation plan
+from selected repositories, setup commands, provider wiring, and tool identity.
+It reuses ready records, prepares only missing project-local dependencies, and
+retries only failed repository setup records. The pinned OpenSpec CLI may be
+installed under `.foundation/tools`; it is never installed globally. A setup or
+host-integration failure remains Harness-owned repair and is not emitted as a
+command for the user.
+
+Unattended Build requires a trusted host-owned attestation:
 
 ```bash
-claude-foundation repos <change>
-claude-foundation sandbox create <change> --all
-claude-foundation agents plan <change> [--group <n>] [--pretty]
-claude-foundation agents dispatch <change> [--pretty]
-claude-foundation packet <change> --task <task-id> [--pretty]
+claude-foundation sandbox challenge <change>
+claude-foundation sandbox create <change> --unattended --attestation <file>
 ```
 
-The plan permits parallel workers only across independent repositories and
-resources. It compiles the task, provider, repository, and Land declarations
-into one derived graph; OpenSpec and `tasks.md` remain authoritative. Versioned
-edge schemas are checked before dispatch. Scoped path, contract, and resource
-leases are acquired all-or-none and carry a fencing generation, so a late
-worker result cannot advance after takeover. Actual worktree writes, rather
-than worker-reported paths alone, must remain inside the granted scope.
+`--unattended` is presence-only; valued or duplicate forms are rejected before
+telemetry or mutation. An attestation is short-lived, project-, agreement-, and
+permission-bound, single-use, and does not turn a worktree or container into a
+security boundary. The complete operator contract is in the harness guide.
 
-The host drives Build by repeatedly calling `agents dispatch`. A
-`run-in-session` action preserves the main-session path. For `spawn-group`, the
-host acquires the returned leases, regenerates each leased packet, spawns the
-native workers without replaying the parent transcript, waits for the complete
-group, releases observed results, and calls dispatch again. An unexpired lease
-returns `wait`; the harness does not infer that another host's worker died and
-does not invoke a model itself.
+One-task changes without shared external authority stay in the current agent.
+Independent tasks with disjoint declared paths may use native workers even in
+one repository; overlapping, dependent, unknown-scope, or shared-resource work
+stays serialized. The harness plans dependency and resource scopes,
+leases them all-or-none with fencing generations, and accepts only observed
+writes inside the granted authority. Load one primary construction skill per
+task and only the cross-cutting security or observability skills whose triggers
+apply.
 
-The full plan is persisted while stdout stays below 4 KiB; workers
-receive only an 8 KiB task packet. A one-repository change with at most two
-ordinary tasks stays with one agent. It routes mechanical inventory to the configured Haiku/fast tier,
-normal implementation to Sonnet/standard, and architecture, security,
-migration, or independent review to Opus/deep. Exact model versions remain host
-configuration.
+For multi-repository work, the committed topology selects repositories and
+access modes before task, provider, or worker planning. Providers may execute
+in one repository while consuming a declared set of other isolated
+repositories. Read-selected Git dependencies participate in proof but never
+produce a Land mutation node.
 
-Resume planning considers completed tasks as satisfied dependencies and returns
-`proof-ready` when no implementation remains. Dispatch is denied when a task
-claims behavior outside its repository authority or has no evidence provider.
-Failure blocks only the dependent graph closure; independent completed nodes
-and valid receipts remain reusable. Aggregate proof still covers every locked
-required node and edge, and multi-remote Land revalidates its preparation
-snapshot immediately before each mutation wave.
-Providers may distinguish their execution cwd (`repository`) from the complete
-repository set they consume (`repositories`). Git-backed `mode: read`
-dependencies are pinned in detached worktrees, included in provider and
-aggregate proof identity, exposed through `FOUNDATION_REPOSITORIES_FILE`, and
-must remain unchanged. They never produce Land nodes; target drift requires
-sandbox sync and fresh proof.
-Load one primary construction skill per task; add only the security and
-observability cross-cutting skills whose triggers apply.
+The declared selection—not the number of surviving runtime records—decides
+whether a lifecycle is composite. Selecting one non-root repository is
+multi-repository even when `root` has no product writes. After isolation, every
+selected non-root repository must retain a worktree record whose path, target,
+access mode, and base head match the catalog. Changed-surface hashing, review
+packets, provider manifests, Apply, and Land all use that binding and never
+fall back to the live target.
 
-An in-contract defect is repaired without asking again. Only new evidence that
-would change locked behavior, compatibility, security, data, or rollout opens
-one audited batched amendment. Then revise the same OpenSpec change and
-synchronize it without losing unchanged completed tasks:
+`sandbox inspect <change>` reports missing, unexpected, missing-path, and
+invalid-worktree records without executing a PATH-resolved Git command.
+`sandbox create <change> --all` repairs missing bindings idempotently while
+preserving valid worktrees. Repair or retire an incomplete repository selection
+before resume; never prove a subset.
+
+An in-contract defect is repaired without asking again. Only evidence that
+changes locked behavior, compatibility, security, data, or rollout opens one
+audited batched amendment. Synchronize any amended agreement or moved target:
 
 ```bash
 claude-foundation sandbox sync <change>
 ```
 
-Sync increments the revision and invalidates previous proof. It is also how a
-target that moved during Build — a teammate's pull, another change landing — is
-reconciled, and the answer is the same command in either sandbox mode:
+Sync increments the agreement revision and invalidates proof that no longer
+describes it. A worktree replay is prepared against the current target before
+replacement; a multi-repository replay prepares every writable repository
+before replacing any; a copy fast-forwards files only the target changed.
+Double-edited files stop as named `CONFLICT` entries and leave the existing
+sandbox intact. Merge the target version in the sandbox and sync again, using
+`--resolve` for a copy.
 
-- A **git worktree** is pinned to the commit it branched from. Sync replays the
-  sandbox's diff onto the current commit and reports
-  `rebased: <base> -> <head>`; commits made inside the sandbox flatten into that
-  diff. If a hunk no longer applies, the sandbox is left untouched and each
-  rejected file is named as a `CONFLICT` — merge the target's version in the
-  sandbox worktree and sync again.
-  For a multi-repository change, sync prepares every moved writable repository
-  before replacing any live sandbox. A conflict is reported as
-  `CONFLICT <repository>:<path>` and leaves every repository sandbox and
-  recorded base unchanged; a clean replay reports one `rebased <repository>:`
-  line per moved repository.
-- An **isolated copy** fast-forwards files the target moved while the sandbox
-  left them alone, names any double-edited file as a `CONFLICT` immediately, and
-  accepts `--resolve <path,path>` once the target's version has been merged into
-  the sandbox copy.
+Several changes may be active at once. Overlapping path or repository scopes
+never block Build, Prove, or Land across changes; whichever lands later
+synchronizes onto the moved target as above, resolves any double edit, and
+re-proves. Only an explicit `[resources:]` token names a resource two changes
+cannot use at once, and those still serialize.
 
-A target that moved and could not be reconciled is always reported, never
-silent. `sandbox inspect <change>` shows the recorded base against the target's
-head, and `land check` refuses a worktree sandbox whose base the target has left.
-
-Packet artifacts flow the other way: edit them in `openspec/changes/<change>/`
-in the target — a packet file edited only in the sandbox blocks the sync; only
-`tasks.md` ticks merge back.
+Packet artifacts flow from `openspec/changes/<change>/` in the target into the
+sandbox. An artifact edited only in the sandbox blocks sync; only `tasks.md`
+completion ticks merge back automatically.
 
 ### `/prove <change>`
 
-Proof validates artifacts, hashes relevant inputs, resolves claims to providers,
-reuses valid receipts, executes missing/stale evidence, and writes a proof bound
-to the workspace hash.
-
-Composite hashes bind repository content and agreement revision, not Git commit
-identity. Recorded base heads remain explicit recovery and Land state: an
-unsynchronized target still stops at `control-head-moved`, while rebasing onto a
-history-only commit with identical content does not charge another review.
+The normal resumable entrypoint is:
 
 ```bash
-claude-foundation proof readiness <change>
-claude-foundation proof run <change>
+claude-foundation advance <change> --through proven
 ```
 
+Proof validates the agreement, hashes relevant inputs, resolves claims to
+providers, reuses valid receipts, runs missing or stale project-owned evidence,
+routes review before acceptance, and writes a proof bound to the workspace.
 Required evidence that is failed, missing, stale, erroneous, or inconclusive
-blocks landing.
+blocks Land.
 
-A gate whose provider executed and failed has three exits, all printed beside
-the blocker: fix the cause and re-run, rewire the provider in `execution.yaml`,
-or withdraw the gate on record with `claude-foundation change waive <change>
---capability <c> --reason <why> --decision-ref <ref>`. A waiver removes the
-capability from the required set while the claim keeps declaring it; it is
-carried as a `user-waived` advisory in the proof record and named on the
-`LAND READY` line, receipts already earned stay valid, and `--revoke` restores
-the requirement. There is no route that lands a failing proof, and `review`
-and `acceptance` keep their own waiver and withdrawal routes.
+Composite identity binds repository content and agreement revision rather than
+Git commit identity. Recorded base heads remain explicit recovery and Land
+state: an unsynchronized target still stops, while moving to a history-only
+commit with byte-identical content does not charge another review.
 
-Execution adapters run project-owned commands. `test-discovery` produces
-two receipts from one process; `playwright` consumes a structured JSON report
-and requires claim annotations. The scheduler reuses valid receipts,
-deduplicates identical commands, and runs providers concurrently only when
-their declared resources do not conflict. Evidence v1 remains manual-compatible
-and upgrades explicitly with `claude-foundation evidence upgrade <change>`.
+A provider that executed and failed has three honest exits:
 
-When executable wiring is absent, `evidence detect` inspects repository-owned
-manifests without executing scripts, `evidence init` previews high-confidence
-additions and writes them only with `--write`, and `evidence doctor` reports
-remaining ambiguity or external authority. Detection never installs tools,
-creates receipts, overwrites configured providers, or weakens claim coverage.
+- fix the cause and rerun;
+- rewire the provider in `execution.yaml`;
+- withdraw the capability under a recorded decision with `change waive`.
+
+A waiver removes the capability from the required set while the claim continues
+to declare it. It remains visible as `user-waived`, preserves receipts already
+earned, and can be revoked. There is no route that turns failed evidence into a
+pass or lands it silently. Review and acceptance use their own explicit policy
+and withdrawal routes.
+
+When executable wiring is absent, `evidence detect` reads project manifests
+without executing scripts, `evidence init` previews additions and writes only
+with `--write`, and `evidence doctor` reports ambiguity or external authority.
+Detection never installs tools, creates receipts, overwrites configured
+providers, or weakens claims.
 
 `change audit` checks scenario → claim → task → provider traceability, including
-negative security paths and migration rollback/integrity. Tasks link explicitly
-with `[claims:<claim-id>]`.
+negative security paths and migration rollback/integrity. Tasks link claims
+explicitly with `[claims:<claim-id>]`.
 
-Remote CI can return a signed envelope through `evidence verify-ci`; issuer,
-workspace, optional commit, run URL, and artifact digests are verified before a
-receipt is created. `proof advance` is the normal resumable Prove path. It runs
-configured evidence once, routes review before acceptance, and stops cleanly
-while external authority is pending. Configured AI review uses `authority run`;
-named-human review uses `authority dispatch` before `authority record`;
-acceptance uses `authority request` and `authority record` without a review
-dispatch. All paths expire or become stale with the workspace and pass the same
-receipt validator.
+Every phase gate follows the same convergence rule: collect independent
+findings, repair one dependency-ordered in-contract batch, and selectively
+rerun invalidated checks. Product repair has no fixed cycle ceiling while its
+semantic progress identity changes. Two unchanged automated transitions produce
+the typed no-progress boundary.
+
+Thrown Build, Prove, or Land dependencies are captured in the same action
+envelope with their original reason and exact recovery route. Decisions,
+authority, resources, conflicts, and repeated no-progress preserve state.
+`proof readiness`, `proof advance`, `proof run`, and direct authority commands
+remain diagnostic or integration primitives behind `advance`.
 
 ### `/land <change>`
 
-Landing checks proof freshness, applies a proven sandbox diff when applicable,
-verifies state identity, then delegates semantic spec sync and archive to the
-pinned OpenSpec CLI.
+The complete delivery command is:
 
 ```bash
-claude-foundation land check <change>
-claude-foundation land recover <change> --decision-ref <ref> [--resolution keep-current|restore-backup]
-claude-foundation land archive <change>
+claude-foundation advance <change> --through archived
 ```
 
-`land check` mutates nothing. An apply is a transaction over the target, and an
-interrupted one stays pending until somebody settles it deliberately: the check
-reports the transaction, its status, and how many paths it would update, create
-and delete, and `land recover` settles it under a recorded decision. A manual
-recovery also requires `--resolution`: `restore-backup` restores and verifies
-the recorded pre-apply state, while `keep-current` preserves the target, marks
-the projection unapplied, and requires `sandbox sync` before Land can continue.
+This explicit invocation supplies Land authority. Land checks proof freshness,
+binds a resumable grant to the exact change, proof, repository graph, and target
+roots, applies the proven isolated diff when necessary, verifies state identity,
+delegates semantic spec synchronization and archival to the pinned OpenSpec
+CLI, and finishes only at `archived`. `proven` is not completion.
 
-The projection itself is confined to the change's surface — what git tracks plus
-what `tasks.md` declares in `[paths:]`. An untracked path no task names is not
-change surface: it neither expires collected evidence nor becomes a deletion at
-Land. A path is only deleted from the target when the sandbox is observed to
-have removed it.
+`land check` is read-only. Apply is a transaction over the target. An
+interrupted transaction remains pending until `land recover` settles it under a
+recorded decision. `restore-backup` restores and verifies the pre-apply state;
+`keep-current` preserves the target, marks the projection unapplied, and
+requires sandbox sync before Land resumes.
 
-Commit, push, and pull-request effects require explicit authorization.
+The projection is confined to Git-tracked files plus paths declared in
+`tasks.md`. An untracked path no task names is neither evidence surface nor a
+Land deletion. A target path is deleted only when the proven sandbox removed
+it. Conflicts never overwrite unrelated target edits.
 
-### `/changes`
+Every writable selected repository is prepared before the first target write
+and then applied in dependency order with durable per-repository checkpoints.
+Each target finishes `applied-uncommitted`: its intended diff is visible for
+the user to inspect, while Git HEAD and index remain unchanged. Read-only
+repositories remain unchanged. Re-entering `/land` resumes the same grant and
+skips already verified nodes; it never requires the user to assemble a journal,
+grant, commit, or recovery command.
 
-Lists active changes and distinguishes in-progress, proven, stale-proof, and
-ready-to-land states. Every listed state names the command that moves it.
+Land never implies permission to commit, push, publish, deploy, or open a pull
+request. Those effects require separate explicit authority.
 
-A session does not have to ask. The `SessionStart` hook reports each active
-change, its status, and that same next command, plus runtime state left behind
-by a change that no longer exists. The digest is deliberately hash-free, so it
-never claims a proof is fresh: readiness is what `/changes` adds, and the
-digest names it rather than implying an answer it did not compute. With no
-active change it names the entry points instead, which is also the only place
-`/investigate` appears — exploration precedes the state machine and holds no
-status of its own.
+### `/changes` and `/dev`
 
-### `/dev`
+`/changes` distinguishes in-progress, proven, stale-proof, and ready-to-land
+changes and names the next command for each. Session start may report the same
+digest, but a hash-free digest never implies proof freshness. Orphaned runtime
+state is reported rather than hidden.
 
-Compatibility composition:
+`/dev` is compatibility composition:
 
 ```text
 /change → /build → /prove
 ```
 
-It never lands by implication. `--plan-only` stops after `/change`;
+It never lands by implication. `--plan-only` stops after Change and
 `--resume <id>` resumes an active OpenSpec change.
 
-## Schemas
+## Agreement lanes
 
 ### `foundation-rapid`
 
-Allowed only when all are true:
+Rapid is allowed only when all are true:
 
-- low impact;
-- isolated;
-- no public contract change;
-- no persistent migration;
-- no semantic security trigger;
-- no irreversible effect;
-- unit/static evidence is sufficient.
+- impact is low and coupling is isolated;
+- no public contract or persistent migration changes;
+- no semantic security or irreversible-effect trigger applies;
+- unit or static evidence is sufficient.
 
 ### `foundation-standard`
 
-Used for all other changes. Design remains concise and records only decisions
-that constrain implementation, compatibility, rollout, rollback, or proof.
+Standard covers every other change. Design records only decisions that
+constrain implementation, compatibility, rollout, rollback, or proof. Size
+affects budgets and slicing only; it never weakens assurance.
 
-## Evidence
+## Evidence contract
 
-`evidence.yaml` is the stable JSON-compatible behavioral contract.
+`evidence.yaml` is the stable behavioral contract; `execution.yaml` holds
+replaceable commands, reports, services, resources, and environment-variable
+names. Provider names describe what is proven, not which tool runs. Run
+`claude-foundation providers` for the installed catalog and use
+`.claude/harness/EVIDENCE.md` for adapters, receipts, resource locks, signed
+envelopes, Playwright annotations, and reuse rules.
 
-```json
-{
-  "version": 2,
-  "claims": [
-    {
-      "id": "owner-updates-profile",
-      "scenario": "An authenticated owner updates their profile",
-      "impact": "medium",
-      "capabilities": ["test"]
-    }
-  ]
-}
-```
+Execution graph v3 includes setup, service, task, provider, and Land nodes.
+The scheduler prioritizes the longest ready dependency path, then fills the
+configured capacity with non-conflicting nodes. Valid receipts are reused;
+required services and repository setup commands start in bounded independent
+batches, and a partial service-start failure stops every session already born.
 
-`execution.yaml` separately holds commands, structured reports, named services,
-readiness identity, resources, and environment variable names. Legacy embedded
-providers remain readable and migrate with `evidence upgrade`.
+Test claims automatically require suite-level discovery. Risk-triggered changes
+require review. Changed-surface policy may add supply-chain, migration,
+accessibility, compatibility, security, review, or deployment obligations after
+Build.
 
-Supported capabilities:
+Because the real surface exists only after Build, `change resolve --surface`
+forecasts those obligations during Change. Forecasts name the triggering glob
+but never gate or reduce the requirements derived from actual changed files.
+An inferred capability is binding only when a claim declares it or the project
+has wired a provider; otherwise it remains a visible advisory. Review stays a
+gate and has its own policy.
 
-| Provider ID | Select it when the claim requires |
-|---|---|
-| `test` | Executable behavioral checks |
-| `discovery` | Proof that the expected tests were actually found |
-| `browser` | Rendered behavior or real input in a browser |
-| `mutation` | Proof that tests detect a deliberate behavioral fault |
-| `state-identity` | Actor, revision, or before/after state identity |
-| `integration` | Multiple components or external boundaries working together |
-| `compatibility` | Public or persisted contract compatibility |
-| `performance` | A measured latency, throughput, resource, or size budget |
-| `security-static` | Static security analysis of a changed trust boundary or sink |
-| `cross-repo-contract` | Agreement between producer and consumer repositories |
-| `review` | Independent risk review |
-| `acceptance` | Named human acceptance of an explicitly subjective decision |
-| `static-analysis` | Compile, type, lint, or static quality gates |
-| `data-migration` | Forward migration, mixed-version safety, and rollback |
-| `accessibility` | Semantics, keyboard, focus, contrast, or assistive access |
-| `resilience` | Timeout, retry, partial failure, recovery, or degraded dependency |
-| `observability` | Required logs, metrics, traces, or alerts |
-| `deployment` | Package, configuration, rollout health, or rollback behavior |
-| `dependency-supply-chain` | Vulnerability, license, lockfile, or provenance policy |
+Consumer quality is opt-in through
+`quality/foundation-quality.json`. It is report-only until explicitly enforced,
+never expands the Change surface, and never converts unsupported, unavailable,
+or unmapped measurements into zero or pass. The installed operational contract
+is `.claude/harness/CONSUMER-QUALITY.md`.
 
-Run `claude-foundation providers` to inspect the canonical
-catalog installed in a project. Providers are evidence contracts, not bundled
-vendor tools: `/prove` may execute the repository's existing command with
-`claude-foundation evidence run`, or record a receipt from an external system. Select only
-providers justified by observable claims.
+Receipts bind provider and protocol versions, claim scope, relevant inputs,
+execution configuration, environment identity, artifacts, observations, and
+timestamps. Executable receipts record the actual command and log; external
+receipts require real provenance and durable references. A provider protocol or
+fingerprint change invalidates its prior receipt.
 
-Test evidence automatically requires suite-level discovery evidence.
-Risk-triggered changes automatically require review evidence. After Build, a
-changed-surface policy adds supply-chain, migration, accessibility,
-compatibility, security/review, or deployment obligations when relevant files
-changed.
+Remote CI and semantic acceptance may return signed, workspace-bound envelopes.
+Signatures, issuer, cases, observations, transitions, and artifact digests are
+verified before a receipt is written. Hidden oracle content stays external, and
+review prose cannot replace a missing or failed required case.
 
-Because that policy reads files already changed, it can only speak after Build —
-by which point the contract is signed and its evidence collected, so a late
-obligation expires both the receipts and the review signature bound to them.
-`change resolve --surface <glob,glob>` declares the paths a change expects to
-touch, and `doctor --stage change` and `change validate` then run the same rules
-against them and name the glob behind each forecast capability. The forecast
-warns and never gates: enforcement stays with the real changed surface, so a
-mis-declared surface can never reduce required evidence.
+An unavailable configured provider returns `INFRASTRUCTURE_ERROR` with honest
+recovery choices: diagnose, retry, record verifiable external evidence, or
+configure an available project-owned command proving the same claims. It never
+becomes a zero or pass.
 
-An obligation the policy infers this way is enforced only where the project has
-actually wired a provider for that capability, or where a claim already declares
-it. An inferred capability nobody wired is carried as an **advisory**: reported
-by `proof plan`, `proof readiness`, and the proof record, and not counted as
-evidence. The alternative was worse than it sounds — an unwired capability
-defaults to adapter `external`, so a late inference became a gate that appeared
-after Build, could not be executed, and stopped Prove and Land with no way
-forward. Wire the capability with `evidence init --write` to make it binding.
-Review is deliberately outside this rule: it stays a gate, and it has its own
-declared waivers below.
+Pending implementation returns `NEEDS_CODE_CHANGE`. Agreement or topology
+problems return `CONFIGURATION_ERROR`. Subjective acceptance or a contract
+contradiction returns `NEEDS_USER_DECISION`. Every non-ready result names an
+exact recovery or resume route.
 
-Each receipt records provider/version, change, claims, workspace hash, result,
-observations, capability metadata, command/log, and timestamps. Status is one of
-`pass`, `fail`, `inconclusive`, or `error`.
+The decision envelope is machine-facing. The agent explains it in the user's
+language and owns routine commands and metadata. It
+never asks the user to run a safe authorized operation it can perform.
+Genuine decisions present honest
+choices, including reject, inconclusive, or pause; they never contain a
+preselected passing receipt.
 
-The provider protocol is deny-by-default: a provider may cover only claims that
-declare it, executable providers require an explicit `--claims` scope, and a
-provider protocol/version/fingerprint change invalidates old receipts. Browser
-receipts record `foreground-required` and `foreground-available` independently.
-Playwright uses the distinct `browser-automation` input mode. Foundation does
-not install Playwright or browser binaries; `doctor --stage prove --change
-<id>` checks the project-owned command, dependency, configuration, readiness
-identity, execution DAG, and report topology.
+## Review, acceptance, and external authority
 
-If a configured provider is unavailable, readiness returns
-`INFRASTRUCTURE_ERROR` with structured recovery choices: diagnose, retry,
-record verifiable external evidence, or reconfigure an available project-owned
-command for the same declared claims. Recovery never weakens claim coverage or
-manufactures a passing receipt.
+Under `workflow.reviewPolicy: "risk-tiered"` every change receives review, with
+the correction circuit bounded by risk:
 
-Every non-ready state provides an explicit recovery path. Pending tasks return
-`NEEDS_CODE_CHANGE` with `/build` and task-plan pointers; topology or agreement
-issues return `CONFIGURATION_ERROR` with doctor, `/change`, affected files, and
-validation pointers. `changes` also exposes non-archived runtime files whose
-active OpenSpec directories disappeared as `orphan-runtime`, and doctor reports
-how to restore or quarantine them.
+- **low** — one full AI review; a material correction promotes the route to
+  medium;
+- **medium** — one full AI review, one correction batch, and at most one fresh
+  delta review closing the first-round finding IDs;
+- **high** — material risks are settled in the initial Decision Sheet, followed
+  by one full AI review and at most one post-correction delta.
 
-Subjective acceptance or a genuine contract contradiction returns
-`NEEDS_USER_DECISION`. Its `decision` envelope is a
-machine handoff for the agent, not text to paste to the user. The agent explains
-the outcome in the user's language and owns routine commands and metadata. It
-never asks the user to run a safe authorized operation it can perform. Genuine
-decisions present honest choices (including reject, inconclusive, or pause) and
-wait for the answer. Decision recovery never embeds a preselected passing receipt.
+High risk includes authorization or secrets, public or cross-repository
+contracts, migration or destructive state, money, concurrency,
+replay/idempotency, brokers or real wire behavior, and activating legacy
+behavior. Medium includes other non-low impact/coupling and declared review
+risk.
 
-Run `claude-foundation proof advance <change>` once as the normal path. It
-collects executable evidence, creates or reuses the authority request, and
-returns a stable waiting handoff instead of polling or rerunning providers. The
-agent uses `authority run` when handing a full or delta packet to the configured
-Codex or Claude Code reviewer. An explicitly chosen human review reserves the exact packet with
-`authority dispatch`, then records only the real response with `authority record`. Low-level
-`proof collect` and `proof run` remain diagnostic/integration commands.
+Review begins from a bounded review packet, never Build history. Its changed
+surface includes committed and dirty paths from recorded repository bases plus
+review contract artifacts. A missing base blocks review instead of appearing
+clean. Every receipt records the actual reviewer, session, implementation
+subjects, findings, closures, and scope.
 
-The user never constructs receipt commands or provenance metadata. A crashed,
-aborted, or tool-failed dispatch is recorded as infrastructure, does not unlock
-a delta, and permits only one full infrastructure retry. It does not overwrite
-a previously delivered review receipt.
+Critical work requires a different model/provider family or a human unless the
+committed project policy explicitly waives diversity. Reviewer independence is
+separate and may be waived only through committed policy. Each waiver relaxes
+only its own axis and is named in both packet and receipt.
 
-## Review
+Configured `fallbackReviewers` are tried in order only after an infrastructure
+error. `fail` and `inconclusive` are delivered verdicts and never fall through.
+Packet inspection and finding/closure binding errors stop the current automatic
+retry chain rather than dispatching the unchanged validation failure to another
+model. The backend owns this routing through the existing commands.
+The existing `advance --through` route reopens a binding failure only after the
+retained packet/result validates again and the reviewer is ready, preserving
+scope, attempt history, and infrastructure retry accounting.
+A `main-session` fallback requires the explicit self-independence policy and
+records observed provenance rather than guessing it.
 
-Under `workflow.reviewPolicy: "risk-tiered"`, every change receives independent
-review, but the correction route is bounded by risk:
+The risk route is a circuit breaker, not a loop-until-pass rule. After the
+allowed delivered AI waves, another open review is refused. A final in-contract
+blocker must name affected claims and declared critical cases; current passing
+provider evidence may then close those IDs deterministically without a third
+AI. A hash chain binds attempts, scope, findings, closure, and receipts.
+Deleting or renaming state cannot reset the limit; corrupt history fails closed.
 
-- **low** — one full AI review; a material correction promotes the change to
-  medium rather than silently spending another low-risk round;
-- **medium** — one full AI review, at most one correction batch, then one fresh
-  AI delta review that closes the first-round finding IDs;
-- **high** — material risks are answered in the initial Decision Sheet; one
-  full AI review and at most one post-correction delta, with no human approval
-  gate and no third AI.
+Human acceptance is separate from review. Every new standard change explicitly
+records whether subjective acceptance is required; `undecided` blocks
+validation. Required acceptance binds named claims, nonblank criteria, human
+identity, observation, provenance, durable evidence, and the final workspace.
+The runtime never invokes a human, impersonates one, or manufactures approval.
 
-High risk includes authorization/secrets, public or cross-repository contracts,
-migration/destructive state, money, concurrency, replay/idempotency, brokers and
-real wire behavior, or activating legacy behavior. Medium includes non-low
-impact/coupling and declared review risk; everything else is low.
-
-Security triggers are inferred from the intent as whole words and phrases, so
-the words have to name a trust boundary rather than merely appear near one.
-`auth token`, `session cookie`, `sensitive data`, and `identity provider` are
-triggers; a bare `token`, `session`, `identity`, or `escalation` is not, because
-"reduce the token budget" and "escalate to a human" are ordinary sentences.
-`--security <trigger>` remains the explicit declaration for a boundary no phrase
-caught.
-
-Required review starts from the ≤8 KiB `packet --phase review`, never Build
-history. Its changed surface unions committed base-to-HEAD paths with staged,
-unstaged, untracked, renamed, and deleted paths for each repository; a missing
-recorded base blocks review instead of appearing clean. Every review receipt
-identifies the reviewer, the actual reviewer session, and structured
-implementation subjects. A medium delta contains only changed review artifacts
-and must explicitly close the blocker/major finding IDs from the full review;
-out-of-scope delta findings are rejected. Critical work requires a different
-model/provider family or a human; other reviews require a fresh context and
-prefer diversity. A project with one model available can set
-`"review": { "diversity": "single-model" }` in `foundation.json` to accept a
-same-family reviewer on critical work; the waiver is named in the review packet
-and recorded in the receipt as `diversityWaived`. A project driven from one
-session can likewise set `"review": { "independence": "self" }` to let a
-reviewer share an implementer's identity and session at any impact; that waiver
-is named the same way, recorded as `independenceWaived` beside the observed
-`independent: false`, and relaxes only its own axis — a same-family self-review
-of critical work still needs the diversity waiver declared alongside it. Both
-live only in the committed policy file; neither is a command flag. The shipped
-`foundation.json` requires both independence and diversity, configures
-`codex-sol` as the default, and also ships `claude-opus`. Codex-only teams select
-`codex-sol`; Claude-Code-only teams select `claude-opus`; either team commits
-only the `single-model` diversity waiver while keeping independence required.
-Set `review.fallbackReviewer` to `main-session` to hand the exact bounded packet
-back to the calling agent after the primary records an infrastructure `error`.
-The failed attempt remains in the review hash chain. Foundation binds the
-ambient host session to matching implementation provenance, current-session
-telemetry, or explicit `--main-session-*` values, reserves the fallback attempt, and pre-fills the
-response provenance; it refuses the handback rather than guessing missing
-identity/model metadata.
-This explicit self-review fallback requires `review.independence: "self"`.
-`fail` and `inconclusive` are delivered verdicts and never trigger fallback.
-Both adapters create a separate read-only, non-persistent session; the Claude
-adapter also removes the parent Claude Code nesting marker before launch.
-Whichever way the file reads, the receipt records what was observed, not what
-was permitted.
-
-The risk route is a hard circuit breaker, not a loop-until-pass rule. After the
-allowed delivered AI waves, another open review is refused. A blocker found in
-the final delta must name its affected claims and predeclared verification
-cases; after an in-contract fix, current passing provider receipts close those
-exact IDs deterministically without a third AI. Only a real contract
-contradiction opens one batched amendment, and missing operational authority is
-`WAITING_EXTERNAL`. A change-level hash chain binds dispatch, completion, finding closure,
-scope, and receipt payload, so aborting, deleting a receipt, or renaming a
-provider cannot reset the limit. Missing or modified history fails closed.
-Workspace edits stale prior review.
-
-`handoffs.yaml` does not block Build or evidence collection. Land blocks an
-unresolved `pre-land` or `activation-coupled` operation, but permits an accepted
-tracked `post-land` operation only when a declared claim proves the merged
-artifact remains safe before activation. Operator records carry names, tickets,
-and evidence references—never credentials. An operation without `owner` inherits
-`foundation.json > workflow.handoffDefaultOwner` (`devops-team` by default), so
-the workflow asks for a specific owner only when that team route cannot proceed.
-
-Human acceptance is separate from review. New standard changes keep this choice
-`undecided` until `/change` explicitly records whether subjective product or
-experience acceptance is required, and a change stays unvalidatable while it is
-undecided. `change resolve` records it:
-
-- `--acceptance-not-required` — no subjective human judgement is involved.
-- `--acceptance-required --acceptance-reason <why>` — a named human must accept
-  the outcome; the reason states what they are being asked to judge.
-- `--acceptance-claims <id,id>` — optional, scopes acceptance to named claims.
-
-Its receipt is
-bound to explicit claim IDs, the final workspace, named nonblank criteria, human
-identity, observation, provenance, and a durable artifact or reference. Review and
-acceptance remain external-only; the deterministic runtime never invokes a model
-or impersonates a human.
-
-Findings are `verified`, `hypothesis`, `disproved`, or `accepted-risk`.
-Hypotheses require deterministic reproduction before becoming confirmed major
-findings.
+`handoffs.yaml` owns external operations. Pending handoffs do not block Build or
+evidence collection. Land blocks unresolved pre-Land or activation-coupled
+operations. An accepted post-Land operation may remain only when a declared
+claim proves the merged artifact is safe before activation. Records contain
+owners, tickets, and evidence references—never credentials.
 
 ## Terminal stops
 
-Some guards end a run rather than returning a blocker: exhausted AI review
-rounds, a corrupt review chain, a spent budget continuation, a continuation that
-more model budget would not unblock, a control repository that moved under a
-multi-repository Land, submodule pointers reset after staging, and an apply that
-could not finish rolling back.
+Some guards end a run rather than returning another repair action: exhausted AI
+review waves, corrupt review history, a spent budget continuation, model budget
+that cannot unblock the next step, a moved control repository during
+multi-repository Land, reset staged submodule pointers, or an apply rollback
+that could not complete.
 
-Each emits the same decision envelope readiness recovery uses — a stop code, at
-least two honest options, a recommendation, and a preserved `pause`. A marked
-`automaticRecovery` is performed and explained by the agent without opening a
-user interview. Agents translate every other option into the user's language;
-they never present a stop as a dead end or infer the answer. Retiring with
-`change abandon` is one of the offered options wherever it applies.
+Each stop preserves the change and returns a decision envelope with a typed
+code, at least two honest options, a recommendation, and an exact resume route.
+When `automaticRecovery` is marked, `automaticRecovery` is performed and
+explained by the agent without opening a user interview. Other options are
+translated into the user's language; the agent never treats a stop as a dead
+end or infers authority. Retiring with `change abandon` is offered where valid.
 
-Foundation also stops on an unresolved apply transaction instead of opening a
-new one over it. `doctor --change <id>` reports unresolved transactions before
-Land reaches them.
-
-## Security resolver
-
-Triggers are semantic: identity/access, secrets, permissions, cross-user data,
-network trust, irreversible mutation, sensitive storage, unsafe sinks, public
-security contracts, and security-relevant migrations. Syntax alone is not risk.
+An unresolved apply transaction blocks a new one. `doctor --change <id>` reports
+it before Land and names the recovery operation.
 
 ## Invalidation
 
-Foundation creates one relevant workspace snapshot per proof and shares its
-identity across receipts.
-It excludes runtime receipts, sandboxes, dependencies, legacy workflow records,
-other active changes, and archived changes. Any relevant edit makes prior
-receipts and proof stale.
+One relevant workspace snapshot supplies the identity shared by a proof and its
+receipts. Runtime state, receipts, sandboxes, dependencies, other active changes,
+and archives are excluded. Any relevant product or agreement edit makes the
+affected proof material stale.
 
-What is relevant depends on the provider. A provider that runs a command is
-bound to the workspace minus the change packet, so editing the proposal,
-design, tasks, or a spec delta after proving re-finalizes proof without
-re-executing evidence; `review` and `acceptance` are bound to the packet as
-well and expire with it. A provider may narrow its binding further by declaring
-`inputs` in its execution config, and `proof plan` prints what each one binds.
+Executable providers normally bind product inputs rather than the change
+packet, so a packet-only edit may re-finalize proof without rerunning them.
+Review, acceptance, and semantic acceptance bind the packet because those
+authorities read it. A provider may narrow executable inputs explicitly; the
+proof plan shows the binding. Complete rules live in the evidence reference.
 
 ## Preflight and telemetry
 
-Run `doctor --stage change|build|prove`. Change and Build allow commands that
-are explicitly planned but not created yet. Prove requires executable providers
-and rejects dependency cycles, report collisions, secret-like literal
-environment values, and status-only readiness probes. Add `--require-archive`
-when the intended flow includes landing.
+Run `doctor --stage change|build|prove`. Change and Build permit commands that
+are planned but not created yet. Prove requires executable providers and rejects
+dependency cycles, report collisions, literal secret-like values, and
+status-only readiness probes. Use `--require-archive` when the intended flow
+includes Land.
 
-Native CLI operations append duration and exit state on a best-effort basis to
-`.foundation/logs/<change>/operations.jsonl`. Request, token, cache, and cost
-come from uniquely identified host request records; unknown usage is never
-reported as zero. Claude Code binds its session transcript at `SessionStart`
-and incrementally reads only `assistant.message.usage` at phase checkpoints.
-There is no per-tool telemetry hook, and prompt/tool payloads are never copied.
-Other hosts use `telemetry import --format generic|codex|cursor|otel|claude`;
-OpenTelemetry GenAI/LLM attributes normalize into the same append-only event
-contract.
+Telemetry records only observed operation and usage metadata. Unknown requests,
+tokens, cache, or cost remain unknown rather than zero. A complete token
+measurement without price data is truthfully partial and may satisfy a policy
+that requires a measured usage dimension; no measured dimension cannot.
+Prompts and tool payloads are never copied.
+When `advance` executes multiple lifecycle phases, its single operation row
+carries disjoint phase intervals. Metrics attribute those intervals without
+counting additional command invocations or overlapping parent time. Quality
+lane timing includes adapter normalization and ratchet evaluation; structured
+quality output is drained even when enforcement returns a failing exit code.
 
-Use `claude-foundation metrics <change>` to aggregate phase timing, unique
-provider execution time, request/token/cache/cost totals, orchestrator token
-share, and emitted context bytes without double-counting receipts emitted by
-one combined execution.
+`metrics` and `feedback` expose cost, context, execution, reuse, repair, and wait
+signals without counting several receipts from one process as independent
+executions. Packet sizes, host imports, transcript cursors, and telemetry schema
+belong to the harness operator guide.
 
-`claude-foundation packet <change> --phase change|build|prove|review|land` emits the bounded
-handoff for a fresh execution context. Global, repository, task, and review
-packets are capped at 16, 12, 8, and 8 KiB respectively and reference larger artifacts by
-path and digest. Compact JSON is the default and is the exact measured budget;
-`--pretty` is available for people. Collection previews include counts and
-digests, with task packets providing authoritative expansion. Atomic context
-events are best-effort, concurrency-safe, tolerant of legacy rows, and rolled
-up when their retained set grows. The phase marker first closes usage
-from the prior phase using the incremental transcript cursor. Large changed-file
-sets collapse into prefix counts plus a digest. Build and Prove consume this
-packet instead of replaying the full orchestrator transcript.
+## Sandbox and repository safety
 
-## Sandbox safety
+Change Loop sandboxes protect workspace and apply integrity. They do not contain
+processes, networks, host secrets, or system commands by themselves. Never
+infer that a worktree or copy makes unrestricted execution safe.
 
-Foundation sandboxes protect workspace/apply integrity. They do not by themselves
-contain processes, network access, host secrets, or system commands. Never infer
-that a Git worktree or copied directory is safe for Allow All/unattended execution.
-
-- Git projects use detached temporary worktrees. A target with uncommitted work
-  falls back to an isolated copy, except for output the harness produced
-  itself: `.foundation/` and an uncommitted `openspec/changes/archive/` move
-  left by landing an earlier change never cost the next change its worktree.
-- The target HEAD must remain at the recorded base before apply.
-- `git apply --check` runs before target mutation.
-- Apply identity covers only paths changed by the proven sandbox. Unrelated
-  target edits are preserved and excluded from the projection comparison.
-- Touched paths and change artifacts are backed up and journaled before writes;
-  failures roll back and interrupted transactions recover on retry. A rollback
-  that could not complete stops the next apply with its recorded options rather
-  than opening a fresh transaction over the divergence.
+- The target head and selected repository bindings are checked before Apply.
+- `git apply --check` or the copy-mode equivalent runs before mutation.
+- Apply identity covers only the proven touched-path projection.
+- Touched paths and change artifacts are backed up and journaled.
+- Failures roll back; an incomplete rollback stops future Apply attempts.
 - The sandbox remains the proof subject until archive and proof audit finish.
 - Conflicts stop without overwriting unrelated user edits.
-- Mutation testing happens only in isolation.
+- Mutation testing runs only in isolation.
 
-Non-Git projects use an isolated temporary copy with a before/after content
-manifest. The copy preserves symbolic links verbatim, so a relative link never
-becomes an absolute path back into the target. Apply rejects any touched target
-path changed since the baseline, then verifies the expected touched-path
-projection.
+Copy mode preserves symbolic links verbatim and rejects target paths changed
+since its baseline. Generated, tool-owned directories are excluded only when
+untracked; a committed fixture remains content regardless of its directory
+name.
 
-Change surface excludes tool-owned output directories, and the copy excludes
-the same set. `.foundation/` and `.workflow/` are matched at the project root
-only; every other name is matched at any depth but never applies to a path git
-tracks. A committed fixture is content whatever its directory is called, and a
-generated directory is untracked wherever it sits. Multi-repository changes use one
-OpenSpec change plus a repository manifest and require cross-repository contract
-evidence before each repository is landed in its declared order. That evidence
-is checked, not asserted: the `contract-digest` adapter hashes one declared
-artifact in every participating repository and passes only when the bytes agree.
+Multi-repository changes use one OpenSpec agreement and one declared topology.
+Cross-repository contract evidence must be checked before repositories Land in
+dependency order. Writable sibling repositories and submodules receive their
+proven bytes in their existing target working trees without staging, committing,
+or manufacturing a gitlink SHA. Read-only repositories have no mutation node.
+All writable targets are prepared before mutation and use an ordered, resumable
+local saga; an unavailable external delivery remains an external-owner wait
+rather than a claim of atomic remote mutation. Legacy in-flight commit-oriented
+transactions remain readable through their recorded compatibility route.
 
-`openspec/repositories.yaml` is the project's topology catalog and is
-hand-maintained. Each entry declares `id`, `type` (`root|submodule|git|
-external`), `path`, `mode` (`read|write`), and `dependsOn`; `allowOutsideRoot`
-permits a path outside the project root. Submodules are discovered from
-`.gitmodules`, and an unregistered one is reported by `doctor`. Each change then
-selects the subset it may touch in its own `repositories.yaml`, with the
-dependency closure enforced.
+Git or deployment activity outside Change Loop is observation, not authority.
+A moved control target remains `control-head-moved` unless observed bytes match
+the change projection or an explicit external delivery reference exists. Even
+then, out-of-band delivery does not create proof, grant authority, or complete
+the lifecycle. Sync, re-prove when invalidated, and continue to `archived`.
 
-Only a submodule child gets a durable binding: its landed commit is recorded as
-a root gitlink. For a `type: "git"` sibling the commit lives only in gitignored
-runtime state, and `land record` says so. `--ci pass` is the operator's word
-unless `--ci-attestation <signed.json>` supplies an Ed25519-signed CI envelope
-bound to that commit; `--ci-required` refuses the unsigned assertion.
-Their workspace identity is composite, while providers configured with
-`repository` bind receipts to one repository snapshot. Unrelated repository
-edits therefore preserve scoped evidence; contract and producer/consumer edits
-still invalidate integration evidence. Multiple remotes Land through an
-ordered, resumable saga with explicit commit/CI records and root pointer
-verification, never by claiming atomic remote mutation. Staging root pointers
-that already hold the landed commit is a no-op and leaves the proof valid, so
-Land and Prove cannot trade a change back and forth.
+## Budgets and progress
 
-## Watchdog
+The watchdog evaluates observed requests and token usage against the widest
+applicable execution-surface factor. Factors are selected by maximum, never
+multiplied. External authority does not inflate model allowance, and unknown
+usage is never fabricated.
 
-The external event ledger requires unique request identity and records operation,
-agent/model, parent request, tokens, cache, cost, tool, hash, and change. The
-watchdog evaluates the larger of request usage and configured token usage, so a
-small number of unusually large requests cannot bypass the thresholds.
-
-Budget actions:
+Budget actions are:
 
 - 70%: batch remaining work and reuse evidence;
-- 85%: stop speculative exploration;
-- 100%: stop and split or re-scope.
+- 85%: stop speculative exploration and optional expansion;
+- 100%: stop model work and request split, re-scope, continuation, or pause.
 
-A run gets one operator continuation. Spending it, or asking for one when more
-model budget would not move the change, stops with the options that would: the
-external evidence, provider, or deterministic operation the proof is actually
-waiting on, re-scoping, retiring the change, or pausing.
+Budget stops apply to model exploration, not deterministic recovery. Packet,
+readiness, evidence execution, receipt reuse, metrics, Land recovery, and
+archive remain available. A continuation is audited and allowed only when more
+model work can move a required code or configuration blocker; it never deletes
+usage or lowers assurance.
 
-The stop applies to further model exploration. Deterministic packet, readiness,
-evidence, proof-resume, metrics, and archive commands remain available, and
-fresh receipts are reused. Required evidence is never removed to meet budget.
+`budget checkpoint` reports the measured remaining window, unfinished work, and
+exact resume route. It never guesses future model demand. A continuation that
+cannot unblock the change returns the external evidence, provider, deterministic
+operation, re-scope, retire, or pause choice that actually can.
 
-## Legacy migration
+## Compatibility and operator references
 
-`.workflow/` is no longer runtime state. Existing records remain read-only.
+`.workflow/` is legacy read-only state. Migration creates candidates rather
+than authoritative specs:
 
 ```bash
 claude-foundation migrate
 claude-foundation migrate <legacy-id> --apply
 ```
 
-Apply creates migration candidates, not authoritative specs. Only statements
-corroborated by code, tests, or accepted contracts may be promoted.
+Only statements corroborated by code, tests, or accepted contracts may be
+promoted.
 
-## Native CLI
+`claude-foundation` is the stable public control surface. It finds the project
+from the current directory or `--project <path>` and routes to the installed
+runtime so schemas and behavior stay aligned. Use `change start|amend` and
+`advance --through build|proven|archived` for normal work. Operator,
+integration, host-instruction, and recovery protocols are documented in
+`.claude/harness/README.md`. Do not call `foundation.mjs` directly.
 
-Host integrations can resolve the canonical workflow instruction owned by the
-installed release without locating or reading a Foundation project:
-
-```bash
-claude-foundation host instruction <command> --protocol 1 --format json --arguments <text>
-```
-
-Protocol 1 supports `investigate`, `change`, `build`, `prove`, `land`,
-`changes`, `feature`, and `dev`. It returns the command, description, rendered
-instruction, argument mode, protocol, and Foundation version as JSON. Argument
-text is opaque; `changes` accepts none. Unsupported protocols, unknown commands,
-unexpected arguments, and unavailable package instructions fail closed with a
-stable JSON error code. The endpoint is additive and ships before a host adopts
-it; a host that cannot obtain protocol 1 must request a compatible Foundation
-release instead of reading project command files or using a bundled copy.
-
-Hosts can resolve the portable agent contract from the same installed release:
-
-```bash
-claude-foundation host agent-contract --protocol 1 --format json
-```
-
-Agent-contract protocol 1 returns the exact package-owned
-`.claude/harness/AGENT.md` text, protocol, and Foundation version as JSON. It
-does not perform project discovery or return a filesystem path. Unsupported
-protocols or formats, invalid flags, and unavailable or incomplete package
-content fail closed with a stable JSON error code. This resource is separate
-from `host instruction`; adding it does not change command instruction
-responses or argument handling.
-
-`claude-foundation` is the stable public control surface. It searches upward
-from the working directory, or from `--project <path>`, and forwards to the
-runtime installed in that project so schemas and runtime behavior stay aligned.
-Use canonical `change`, `packet`, `evidence detect|init|doctor`,
-`proof readiness|collect|run`, `sandbox create|sync`, and
-`land check|record|resume|archive` commands rather than calling runtime
-internals directly.
-
-When the packaged CLI is not on `PATH`, use the source checkout's public router:
-
-```bash
-bash /path/to/claude-foundation/cli.sh --project "$PWD" proof readiness <change>
-```
-
-Do not bypass it with `foundation.mjs`; that file intentionally exposes the
-hyphenated low-level runtime API rather than the public nested command grammar.
-
-## Runtime layout
-
-```text
-foundation.json
-openspec/
-  config.yaml
-  repositories.yaml
-  schemas/
-  specs/
-  changes/
-  investigations/
-
-.foundation/
-  runtime/
-  receipts/
-  evidence/
-  snapshots/
-  logs/
-  sandboxes/
-  repository-sandboxes/
-  plans/
-  leases/
-  transactions/
-  authority/
-  attestations/
-  instruction-manifests/
-  recovery/
-```
-
-The contents under `.foundation/` are machine-owned and ignored by Git.
-`.claude/harness/README.md` carries the canonical table of what each directory
-holds; the listing above names them without restating it.
-
-## Requirements
-
-- Node.js 20.19 or later
-- OpenSpec pinned to `@fission-ai/openspec@1.7.0`
-- Git for worktree isolation
-- `jq` for automatic settings merge during installation
+The harness guide also owns requirements and the canonical table of
+`.foundation/` runtime state. Those files are machine-owned and ignored by Git;
+this workflow names them only where their lifecycle meaning matters.
 
 ## Quality invariants
 
@@ -794,7 +594,8 @@ holds; the listing above names them without restating it.
 - Missing expected evidence cannot silently pass.
 - Browser capability mismatch is inconclusive.
 - Mutation crash is not a behavioral kill.
-- Stale proof cannot land or archive.
+- Stale proof cannot Land or archive.
 - A sandbox diff cannot overwrite a conflicting target.
 - OpenSpec performs semantic spec sync before archive.
 - Required assurance is never dropped because of size or budget.
+- A delivery flow is complete only at `archived`.

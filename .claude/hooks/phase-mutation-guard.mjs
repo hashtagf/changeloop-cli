@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 
-// Phase-aware PreToolUse guard. Rollout is deliberately audit-only by default.
-// Hosts enable enforcement with FOUNDATION_GUARDRAIL_MODE=block after exporting
-// FOUNDATION_ACTIVE_PHASE and, for Build, FOUNDATION_WORKSPACE_ROOT.
+// Phase-aware PreToolUse guard. The default auto mode blocks whenever an
+// active Foundation phase is known and stays out of adoption-only sessions.
+// Hosts may still select explicit audit/block/off behavior.
 
 import {
-  appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync,
-  realpathSync, renameSync, statSync
+  appendFileSync, closeSync, existsSync, mkdirSync, openSync, readSync,
+  readdirSync, readFileSync, realpathSync, renameSync, statSync
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  looksMutatingShellCommand, pinShellAnchor, shellMutationViolation
+} from "./phase-guard-policy.mjs";
+import { recordedPhaseContext } from "./phase-state.mjs";
+import { devPrompt } from "./dev-terminal-guard.mjs";
+import {
+  workspaceCapabilityValue, workspaceMutationDecision
+} from "../harness/runtime/core/execution-contract.mjs";
 
 // Large enough that a real audit trail survives a working session, small enough
 // that an unattended project never carries an unbounded file.
@@ -19,8 +27,10 @@ const AUDIT_MAX_BYTES = 1024 * 1024;
 // and the guard has nothing to enforce.
 const PHASE_FRESHNESS_MS = 12 * 60 * 60 * 1000;
 
-const mode = (process.env.FOUNDATION_GUARDRAIL_MODE || "audit").toLowerCase();
-if (mode === "off") process.exit(0);
+const requestedMode = (process.env.FOUNDATION_GUARDRAIL_MODE || "auto").toLowerCase();
+const configuredMode = new Set(["auto", "audit", "block", "off"]).has(requestedMode)
+  ? requestedMode : "block";
+if (configuredMode === "off") process.exit(0);
 
 let event;
 try {
@@ -30,7 +40,8 @@ try {
   // for enforcement asked for it on the event axis too: an unreadable event
   // could be any mutation, so allowing it would fail open exactly where the
   // guard was told not to.
-  if (mode === "block")
+  if (configuredMode === "block" ||
+      (configuredMode === "auto" && process.env.FOUNDATION_ACTIVE_PHASE))
     process.stdout.write(JSON.stringify({
       decision: "block",
       reason: "phase guard: hook event is unreadable; retry the tool call"
@@ -38,36 +49,94 @@ try {
   process.exit(0);
 }
 
+// Claude hook events already carry the authoritative transcript path. The
+// SessionStart-exported environment is only a fallback: claude -p does not
+// reliably propagate CLAUDE_ENV_FILE additions into later hook processes.
+// Decide after parsing the event so a /dev session enters block mode before
+// its first product mutation even when the exported environment is absent.
+const transcriptPath = String(event.transcript_path ||
+  process.env.FOUNDATION_CLAUDE_TRANSCRIPT_PATH || "");
+const devSession = ["auto", "audit"].includes(configuredMode) &&
+  currentTranscriptIsDev(transcriptPath);
+
 const tool = String(event.tool_name || "");
 const input = event.tool_input || {};
 const mutatingTools = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+const landAuthorityCommand = tool === "Bash" &&
+  /^\s*(?:claude-foundation|node\s+(?:"[^"]*foundation\.mjs"|'[^']*foundation\.mjs'|\S*foundation\.mjs))\s+(?:(?:land(?:-|\s+)advance)|archive|sandbox\s+apply)\s+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\s*$/
+    .test(String(input.command || ""));
 if (!mutatingTools.has(tool) && tool !== "Bash") process.exit(0);
-if (tool === "Bash" && !looksMutating(String(input.command || ""))) process.exit(0);
+if (tool === "Bash" && !landAuthorityCommand &&
+    !looksMutatingShellCommand(String(input.command || ""))) process.exit(0);
 
 const projectRoot = canonical(process.env.CLAUDE_PROJECT_DIR || process.cwd());
-const phase = String(process.env.FOUNDATION_ACTIVE_PHASE || recordedPhase()).toLowerCase();
+const recorded = recordedPhaseContext({
+  projectRoot,
+  sessionId: event.session_id || process.env.FOUNDATION_CLAUDE_SESSION_ID || null,
+  freshnessMs: PHASE_FRESHNESS_MS,
+  pathExists: existsSync,
+  readDirectory: (path) => readdirSync(path, { withFileTypes: true }),
+  readText: readFileSync,
+  nowMs: Date.now
+});
+const landSession = landAuthorityCommand && currentTranscriptIsLand(transcriptPath);
+const phase = String(process.env.FOUNDATION_ACTIVE_PHASE || recorded?.phase ||
+  (landSession ? "land" : "")).toLowerCase();
+const mode = devSession || landAuthorityCommand || configuredMode === "block" ||
+  (configuredMode === "auto" && Boolean(phase)) ? "block" : "audit";
+const recordedRuntime = recorded?.changeId ? runtimeState(recorded.changeId) : null;
+const recordedWorkspace = recordedRuntime?.workspace?.path
+  ? canonicalTarget(recordedRuntime.workspace.path, projectRoot) || "" : "";
 const violations = [];
+// A Build shell command rewritten with the reported working directory as its
+// literal anchor. Set only when the policy accepts the pinned form.
+let pinnedCommand = null;
 
-// Block mode still fails closed: a host that asked for enforcement gets it
-// even when the phase cannot be established. Audit mode does not — recording
-// "phase unavailable" there appended a row on every mutating call of every
-// stock install, which is noise, not an audit trail.
+if (landAuthorityCommand && !landSession)
+  violations.push("Land authority command requires the current /land invocation");
+
+// Explicit block mode fails closed without context. Auto mode deliberately
+// stays out of adoption-only sessions, but becomes block as soon as a current
+// phase context or /dev transcript establishes lifecycle authority.
 if (!phase && mode !== "block") process.exit(0);
 
-if (!phase) {
+if (!phase && prePhaseDraftMutationAllowed()) {
+  // Atomic Change starts need one narrowly-scoped bootstrap write before a
+  // lifecycle phase exists. Both the legacy change-start name and the v3
+  // drafts directory are temporary data consumed by `change start`; neither
+  // is product code or authority. Shell writes remain blocked so redirects
+  // cannot smuggle additional mutations into the bootstrap boundary.
+  process.exit(0);
+} else if (!phase) {
   violations.push("active phase is unavailable");
 } else if (!new Set(["change", "build", "prove", "land"]).has(phase)) {
   violations.push(`unsupported active phase: ${phase}`);
-} else if (tool === "Bash") {
+} else if (tool === "Bash" && !landSession) {
   inspectBash(String(input.command || ""));
 } else {
   for (const rawPath of eventPaths(input)) inspectPath(rawPath);
 }
 
-if (violations.length === 0) process.exit(0);
+if (violations.length === 0) {
+  if (pinnedCommand !== null) {
+    recordAudit({ phase, tool, mode, reason:
+      "phase guard: pinned the reported shell directory as the Build workspace anchor" });
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        updatedInput: { ...input, command: pinnedCommand }
+      }
+    }));
+  }
+  process.exit(0);
+}
 
+const changeShellRecovery = phase === "change" && tool === "Bash"
+  ? " Use Edit or Write for openspec/changes artifacts; Bash remains read-only during Change."
+  : "";
 const reason = `BLOCKED: phase guard (${phase || "unknown"}/${tool}): ${violations.join("; ")}. ` +
-  "No mutation ran. Continue inside the active phase workspace, or ask the user only if scope or authority must change.";
+  `No mutation ran.${changeShellRecovery} Continue inside the active phase workspace, ` +
+  "or ask the user only if scope or authority must change.";
 recordAudit({ phase: phase || "unknown", tool, mode, reason });
 
 if (mode === "block") {
@@ -81,108 +150,153 @@ function inspectPath(rawPath) {
     return;
   }
 
-  if (isWithin(target, join(projectRoot, ".foundation"))) return;
-
-  // Investigation notes are exploratory documentation, not product or
-  // instruction files; /investigate writes them and records no phase, so a
-  // phase left behind by an earlier packet must not block them.
   const investigations = join(projectRoot, "openspec", "investigations");
-
-  if (phase === "change") {
-    if (!isWithin(target, join(projectRoot, "openspec", "changes")) &&
-        !isWithin(target, investigations))
-      violations.push("Change may write only OpenSpec change drafts, investigation notes, or .foundation state");
-    return;
-  }
-
-  if (phase === "prove") {
-    if (!isWithin(target, investigations))
-      violations.push("Prove keeps product and instruction files read-only");
-    return;
-  }
-
-  if (phase === "land") {
-    if (process.env.FOUNDATION_LAND_TRANSACTION !== "1")
-      violations.push("Land mutations require the runtime transaction marker");
-    return;
-  }
-
-  if (phase === "build") {
-    const workspace = process.env.FOUNDATION_WORKSPACE_ROOT;
-    if (!workspace) {
-      violations.push("Build workspace is unavailable");
-      return;
+  const workspace = process.env.FOUNDATION_WORKSPACE_ROOT || recordedWorkspace;
+  const status = phase === "build" ? "building" : phase === "prove" ? "proven"
+    : phase === "land" ? "applied" : "change";
+  const capability = workspaceCapabilityValue(recorded?.changeId || "active", {
+    ...(recordedRuntime || {}),
+    status,
+    workspace: {
+      ...(recordedRuntime?.workspace || {}),
+      path: workspace ? canonicalTarget(workspace, projectRoot) : null
     }
-    const roots = [canonicalTarget(workspace, projectRoot), ...allowedPaths()];
-    if (!roots.some((root) => root && isWithin(target, root)))
-      violations.push("Build mutation is outside its isolated workspace and declared paths");
-  }
+  });
+  // Direct runtime fixtures and legacy consumers may establish Land through
+  // the transaction marker before a repository projection is readable. Limit
+  // that compatibility case to the current project; recorded modern state
+  // always supplies the exact target roots above.
+  if (phase === "land" && capability.roots.length === 0 && !recordedRuntime &&
+      process.env.FOUNDATION_LAND_TRANSACTION === "1")
+    capability.roots = [projectRoot];
+  // Change can target any active change draft because the hook event does not
+  // carry a trustworthy change ID on every host. The runtime still validates
+  // the selected change before state transitions.
+  if (phase === "change") capability.roots = [join(projectRoot, "openspec", "changes")];
+  const decision = workspaceMutationDecision({
+    capability,
+    target,
+    foundationRoot: join(projectRoot, ".foundation"),
+    investigationRoot: investigations,
+    additionalRoots: allowedPaths(),
+    landTransaction: process.env.FOUNDATION_LAND_TRANSACTION === "1",
+    contains: isWithin
+  });
+  if (!decision.allowed) violations.push(decision.reason);
 }
 
 function inspectBash(command) {
-  if (!looksMutating(command)) return;
-  if (phase === "prove" || phase === "change") {
-    violations.push(`${phase === "prove" ? "Prove" : "Change"} cannot run mutating shell commands`);
-  } else if (phase === "land" && process.env.FOUNDATION_LAND_TRANSACTION !== "1") {
-    violations.push("Land shell mutations require the runtime transaction marker");
-  } else if (phase === "build" && !process.env.FOUNDATION_WORKSPACE_ROOT) {
-    violations.push("Build shell mutations require an isolated workspace");
+  const workspace = process.env.FOUNDATION_WORKSPACE_ROOT || recordedWorkspace;
+  const environment = {
+    ...process.env,
+    ...(recordedWorkspace && !process.env.FOUNDATION_WORKSPACE_ROOT
+      ? { FOUNDATION_WORKSPACE_ROOT: recordedWorkspace } : {})
+  };
+  const inspection = workspace ? {
+    canonicalTarget: (target) => canonicalTarget(target, workspace),
+    contains: (target, root) => isWithin(target, canonical(root))
+  } : null;
+  const violation = shellMutationViolation(phase, environment, command, inspection);
+  if (!violation) return;
+  const pinned = phase === "build" && mode === "block" && workspace
+    ? pinnedWorkspaceCommand(command, workspace, environment, inspection) : null;
+  if (pinned === null) violations.push(violation);
+  else if (pinned.violation) violations.push(pinned.violation);
+  else pinnedCommand = pinned.command;
+}
+
+// The host reports where the shell is. That report is never authority — it
+// cannot let a mutation run where the policy would refuse it — but a report
+// inside the workspace can be pinned into the command as a literal anchor, so
+// the same policy proves the mutation and an unanchored write an agent meant
+// for its sandbox runs there instead of costing a refused turn. No report
+// (OpenCode synthesizes events without one), a report outside the workspace,
+// or a pinned form the policy still refuses keeps the refusal; a refusal of
+// the pinned form is the more exact reason (an outside operand, a dynamic
+// path) and replaces the anchor complaint.
+function pinnedWorkspaceCommand(command, workspace, environment, inspection) {
+  const reported = typeof event.cwd === "string" ? event.cwd : "";
+  if (!reported || !isAbsolute(reported)) return null;
+  const canonicalCwd = canonicalTarget(reported, projectRoot);
+  if (!canonicalCwd || !isWithin(canonicalCwd, canonical(workspace))) return null;
+  // The workspace may be spelled through a symlink (macOS /var → /private/var,
+  // a linked sandbox path) while the report is canonical, or the reverse; the
+  // policy compares text, so also try the report re-spelled under the
+  // workspace the policy was given.
+  const respelled = resolve(workspace, relative(canonical(workspace), canonicalCwd));
+  for (const directory of [...new Set([resolve(reported), canonicalCwd, respelled])]) {
+    const pinned = pinShellAnchor(command, directory);
+    if (pinned === null) continue;
+    const violation = shellMutationViolation(phase, environment, pinned, inspection);
+    if (violation && violation.startsWith("Build shell mutations must start inside")) continue;
+    return { command: pinned, violation };
   }
+  return null;
 }
 
-function looksMutating(command) {
-  // Conservative command-word screening. This intentionally does not claim to
-  // be a shell sandbox; enforcement of arbitrary shell effects belongs to the host.
-  const stripped = command.replace(/(['"])(?:\\.|(?!\1).)*\1/g, " ");
-  // `git rm` is spelled with the git verb list, not the bare `rm` alternative:
-  // that one only matches after a shell separator, so `rm` inside `git rm`
-  // never did. cherry-pick/revert/stash/am/pull all write the working tree,
-  // and `sed -i` edits files in place — all five read as non-mutating before.
-  return /(^|[;&|`()]|\b(?:then|do)\b)\s*(?:sudo\s+|env\s+)*(?:rm|mv|cp|ln|install|mkdir|rmdir|touch|truncate|tee|chmod|chown|patch|git\s+(?:commit|push|merge|rebase|checkout|switch|restore|reset|clean|apply|rm|mv|cherry-pick|revert|stash|am|pull|worktree|submodule)|npm\s+(?:install|publish)|pnpm\s+(?:install|publish)|yarn\s+(?:add|install|publish))\b/m.test(stripped)
-    // In-place editors: the file is the effect, not an argument to a reader.
-    || /(^|[;&|`()]|\b(?:then|do)\b)\s*(?:sudo\s+|env\s+)*(?:sed|perl|ruby)\s+(?:-\S+\s+)*-\S*i/m.test(stripped)
-    // A redirect only mutates when it targets a real file; >/dev/null and
-    // 2>/dev/null are how read-only commands silence noise, and >&2 / 2>&1
-    // are fd duplication, not writes.
-    || /(?:^|[^<])(?:>>?|2>>?)\s*(?!&)(?!\/dev\/null(?:[\s;&|)]|$))\S/m.test(stripped);
-}
-
-// The host is not the only thing that knows the phase. Every `/build`,
-// `/prove` and `/land` runs `packet <change> --phase <phase>`, which appends a
-// row here — so on a stock install, where nothing exports
-// FOUNDATION_ACTIVE_PHASE, this is what the guard reads.
-function recordedPhase() {
+function runtimeState(changeId) {
   try {
-    const logs = join(projectRoot, ".foundation", "logs");
-    if (!existsSync(logs)) return "";
-    let newest = null;
-    for (const entry of readdirSync(logs, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const path = join(logs, entry.name, "phase-context.jsonl");
-      if (!existsSync(path)) continue;
-      const last = readFileSync(path, "utf8").split("\n").filter(Boolean).at(-1);
-      if (!last) continue;
-      let row;
-      try { row = JSON.parse(last); } catch { continue; }
-      const at = Date.parse(row?.timestamp || "");
-      if (!Number.isFinite(at)) continue;
-      if (!newest || at > newest.at) newest = { at, phase: String(row.phase || "") };
+    return JSON.parse(readFileSync(join(projectRoot, ".foundation", "runtime",
+      `${changeId}.json`), "utf8"));
+  } catch { return null; }
+}
+
+function currentTranscriptIsDev(path) {
+  if (!path || !existsSync(path)) return false;
+  let descriptor = null;
+  try {
+    // The initiating prompt is near the transcript header. Bound this hot-path
+    // read: the guard runs for every candidate mutation and long sessions can
+    // otherwise add megabytes of I/O to each tool call.
+    const bytes = Math.min(statSync(path).size, 512 * 1024);
+    const buffer = Buffer.alloc(bytes);
+    descriptor = openSync(path, "r");
+    const read = readSync(descriptor, buffer, 0, bytes, 0);
+    return Boolean(devPrompt(buffer.subarray(0, read).toString("utf8")));
+  } catch { return false; }
+  finally { if (descriptor !== null) closeSync(descriptor); }
+}
+
+function currentTranscriptIsLand(path) {
+  if (!path || !existsSync(path)) return false;
+  try {
+    const source = readFileSync(path, "utf8");
+    let latest = "";
+    for (const line of source.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const row = JSON.parse(line);
+        if (row.type === "last-prompt" && typeof row.lastPrompt === "string")
+          latest = row.lastPrompt.trim();
+      } catch { /* tolerate a partially flushed final line */ }
     }
-    if (!newest || Date.now() - newest.at > PHASE_FRESHNESS_MS) return "";
-    return newest.phase;
-  } catch {
-    return "";
-  }
+    return /^\/land(?:\s|$)/.test(latest);
+  } catch { return false; }
+}
+
+function appendStringPath(paths, value) {
+  if (typeof value === "string") paths.push(value);
 }
 
 function eventPaths(value) {
   const paths = [];
-  if (typeof value.file_path === "string") paths.push(value.file_path);
-  if (typeof value.notebook_path === "string") paths.push(value.notebook_path);
-  if (Array.isArray(value.edits)) {
-    for (const edit of value.edits) if (typeof edit?.file_path === "string") paths.push(edit.file_path);
-  }
+  appendStringPath(paths, value.file_path);
+  appendStringPath(paths, value.notebook_path);
+  if (!Array.isArray(value.edits)) return paths;
+  for (const edit of value.edits) appendStringPath(paths, edit?.file_path);
   return paths;
+}
+
+function prePhaseDraftMutationAllowed() {
+  if (!new Set(["Write", "Edit", "MultiEdit"]).has(tool)) return false;
+  const paths = eventPaths(input);
+  if (paths.length === 0) return false;
+  return paths.every((rawPath) => {
+    const target = canonicalTarget(rawPath, projectRoot);
+    if (!target) return false;
+    const rel = relative(projectRoot, target).split(sep).join("/");
+    return /^(?:\.foundation\/change-start-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.json|\.foundation\/drafts\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.json)$/.test(rel);
+  });
 }
 
 function allowedPaths() {
@@ -194,21 +308,27 @@ function allowedPaths() {
   }
 }
 
-function canonicalTarget(value, base) {
-  if (typeof value !== "string" || value.length === 0 || value.includes("\0")) return null;
-  const absolute = isAbsolute(value) ? resolve(value) : resolve(base, value);
+function validTargetInput(value) {
+  return typeof value === "string" && value.length > 0 && !value.includes("\0");
+}
+
+function existingTargetAncestor(absolute) {
   let cursor = absolute;
   const suffix = [];
   while (!existsSync(cursor)) {
     const parent = dirname(cursor);
-    if (parent === cursor) return null;
-    suffix.unshift(cursor.slice(parent.length + (parent.endsWith(sep) ? 0 : 1)));
+    suffix.unshift(relative(parent, cursor));
     cursor = parent;
   }
+  return { cursor, suffix };
+}
+
+function canonicalTarget(value, base) {
+  if (!validTargetInput(value)) return null;
+  const absolute = isAbsolute(value) ? resolve(value) : resolve(base, value);
+  const ancestor = existingTargetAncestor(absolute);
   try {
-    if (lstatSync(cursor).isSymbolicLink()) cursor = realpathSync(cursor);
-    else cursor = realpathSync(cursor);
-    return resolve(cursor, ...suffix);
+    return resolve(realpathSync(ancestor.cursor), ...ancestor.suffix);
   } catch {
     return null;
   }

@@ -144,8 +144,19 @@ export function createStateRuntime({
   function filesystemEntryIdentity(path) {
     const stat = lstatSync(path);
     if (stat.isSymbolicLink()) return `symlink:${readlinkSync(path)}`;
-    if (stat.isFile()) return fileDigest(path);
+    // Content alone is not a complete executable identity. In particular a
+    // chmod-only edit changes what a provider can execute and what Land must
+    // project. Keep only the portable executable bit rather than the complete
+    // host mode, whose group/owner bits vary across filesystems.
+    if (stat.isFile())
+      return `file:${stat.mode & 0o111 ? "executable" : "regular"}:${fileDigest(path)}`;
     return `unsupported:${stat.mode}`;
+  }
+
+  function codepointOrder(left, right) {
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
   }
 
   function directoryHash(dir) {
@@ -155,11 +166,7 @@ export function createStateRuntime({
     // Codepoint order, not localeCompare: ICU collation varies by locale, so
     // the same tree hashed differently on two machines — a hash that must be
     // reproducible cannot depend on the environment's collation tables.
-    files.sort((a, b) => {
-      const left = relative(dir, a);
-      const right = relative(dir, b);
-      return left < right ? -1 : left > right ? 1 : 0;
-    });
+    files.sort((a, b) => codepointOrder(relative(dir, a), relative(dir, b)));
     for (const path of files) {
       hash.update(relative(dir, path).replaceAll("\\", "/"));
       hash.update("\0");
@@ -213,6 +220,16 @@ export function createStateRuntime({
   }
 
   const snapshotCache = new Map();
+  let snapshotInspectionDepth = 0;
+  function inspectSnapshots(operation) {
+    snapshotInspectionDepth += 1;
+    try { return operation(); }
+    finally { snapshotInspectionDepth -= 1; }
+  }
+
+  function writeSnapshot(path, value) {
+    if (!snapshotInspectionDepth) writeJson(path, value);
+  }
   // The policy cache lives in change-policy; it registers its clearer here so
   // one invalidation covers both. A local Map that nothing populated used to
   // stand in for it, so the real cache was never invalidated.
@@ -281,75 +298,73 @@ export function createStateRuntime({
     return result.status === 0 ? result.stdout.trim() : null;
   }
 
-  function singleRelevantSnapshot(id, workspaceOverride = null, force = false) {
+  function snapshotContext(id, workspaceOverride, ignoredPaths) {
     const state = existsSync(runtimePath(id)) ? readJson(runtimePath(id)) : {};
     const workspace = canonicalPath(workspaceOverride || state.workspace?.path || root);
-    // A recorded workspace that no longer exists used to surface as a raw
-    // ENOENT from the directory walk — a stack trace where the operator needs
-    // the exit instruction. Typed so callers that degrade per row (`changes`)
-    // can recognize exactly this case and rethrow everything else.
     if (!existsSync(workspace)) {
       const error = new Error(`workspace '${workspace}' for change '${id}' no longer exists; ` +
-        `recreate it with 'claude-foundation sandbox create ${id}' or run ` +
+        `recreate or repair it with 'claude-foundation sandbox create ${id} --all' or run ` +
         `'claude-foundation change abandon ${id} --reason <reason> --decision-ref <ref>'`);
       error.code = "FOUNDATION_WORKSPACE_MISSING";
       throw error;
     }
-    const cacheKey = `${id}\0${workspace}\0${Number(state.contractRevision || state.revision || 0)}`;
-    if (!force && snapshotCache.has(cacheKey)) return snapshotCache.get(cacheKey);
-    const hash = createHash("sha256");
-    // The same walk, folded twice. `hash` is every path the change surface
-    // admits; `codeHash` is that minus the change packet, which no test or lint
-    // command reads. An executable provider binds the second, so a note added
-    // to `design.md` after proving no longer expires evidence that ran against
-    // code nobody touched. Review and acceptance still bind the first — a
-    // reviewer read the proposal, and editing it must expire their verdict.
-    const codeHash = createHash("sha256");
-    // Review identity includes code and semantic contract, but excludes
-    // controller progress and delivery tracking. Checking a task box or
-    // accepting a post-Land handoff must not summon a fresh reviewer for code
-    // and requirements they already inspected.
-    const reviewHash = createHash("sha256");
-    const files = [];
-    const declared = declaredSurfaceMatcher(id, state);
+    const contractRevision = Number(state.contractRevision ?? 0);
+    const ignored = new Set(ignoredPaths.map((value) =>
+      String(value).replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/$/, "")));
+    const cacheKey = `${id}\0${workspace}\0${contractRevision}\0${
+      [...ignored].sort().join("\0")}`;
+    return { state, workspace, contractRevision, ignored, cacheKey };
+  }
+
+  function snapshotDigests() {
+    return {
+      hash: createHash("sha256"),
+      codeHash: createHash("sha256"),
+      reviewHash: createHash("sha256"),
+      packetReviewHash: createHash("sha256")
+    };
+  }
+
+  function foldSnapshotEntry(digests, id, workspace, rel, contentIdentity) {
     const reviewVolatile = new Set(["execution.yaml", "handoffs.yaml"]);
-    function fold(rel, contentIdentity) {
-      for (const digest of [hash, codeHash, reviewHash]) {
-        if (digest === codeHash && isChangePacketPath(rel, id)) continue;
-        if (digest === reviewHash && isChangePacketPath(rel, id) &&
-            reviewVolatile.has(rel.slice(currentChangeRelativePath(id).length + 1)))
-          continue;
-        let identity = contentIdentity;
-        if (digest === reviewHash &&
-            rel === `${currentChangeRelativePath(id)}/tasks.md`) {
-          const path = join(workspace, rel);
-          if (existsSync(path)) {
-            const normalized = readFileSync(path, "utf8")
-              .replace(/^(\s*-\s*)\[[ xX]\]/gm, "$1[ ]");
-            identity = createHash("sha256").update(normalized).digest("hex");
-          }
+    for (const [name, digest] of Object.entries(digests)) {
+      if (name === "codeHash" && isChangePacketPath(rel, id)) continue;
+      if (name === "packetReviewHash" && !isChangePacketPath(rel, id)) continue;
+      if (["reviewHash", "packetReviewHash"].includes(name) &&
+          isChangePacketPath(rel, id) &&
+          reviewVolatile.has(rel.slice(currentChangeRelativePath(id).length + 1)))
+        continue;
+      let identity = contentIdentity;
+      if (["reviewHash", "packetReviewHash"].includes(name) &&
+          rel === `${currentChangeRelativePath(id)}/tasks.md`) {
+        const path = join(workspace, rel);
+        if (existsSync(path)) {
+          const normalized = readFileSync(path, "utf8")
+            .replace(/^(\s*-\s*)\[[ xX]\]/gm, "$1[ ]");
+          identity = createHash("sha256").update(normalized).digest("hex");
         }
-        digest.update(rel);
-        digest.update("\0");
-        digest.update(identity);
-        digest.update("\0");
       }
+      digest.update(rel);
+      digest.update("\0");
+      digest.update(identity);
+      digest.update("\0");
     }
-    // Without git there is no tracked/untracked axis to confine by, and a walk
-    // that guessed would drop content instead of noise.
-    let gitAware = false;
-    function allowed(rel, tracked = false) {
-      if (isExcludedPath(rel, { excluded: excludedWorkspaceDirs, tracked }))
+  }
+
+  function snapshotPathPolicy(id, ignored, declared) {
+    return (rel, { gitAware = false, tracked = false } = {}) => {
+      if ([...ignored].some((prefix) => rel === prefix || rel.startsWith(`${prefix}/`)))
         return false;
-      // Untracked and undeclared is somebody else's file sitting in the tree.
-      if (gitAware && !tracked && !isCurrentChangePath(rel, id) && !declared(rel))
-        return false;
+      if (isExcludedPath(rel, { excluded: excludedWorkspaceDirs, tracked })) return false;
+      if (gitAware && !tracked && !isCurrentChangePath(rel, id) && !declared(rel)) return false;
       if (rel.startsWith("openspec/changes/archive/")) return false;
-      if (rel.startsWith("openspec/changes/") && !isCurrentChangePath(rel, id))
-        return false;
-      if (rel === `${currentChangeRelativePath(id)}/execution.yaml`) return false;
-      return true;
-    }
+      if (rel.startsWith("openspec/changes/") && !isCurrentChangePath(rel, id)) return false;
+      return rel !== `${currentChangeRelativePath(id)}/execution.yaml`;
+    };
+  }
+
+  function collectFilesystemSnapshot(workspace, allowed) {
+    const files = [];
     function collect(dir) {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const path = join(dir, entry.name);
@@ -359,64 +374,99 @@ export function createStateRuntime({
         else if (entry.isFile() || entry.isSymbolicLink()) files.push([rel, path]);
       }
     }
+    collect(workspace);
+    return files.sort(([a], [b]) => codepointOrder(a, b));
+  }
+
+  function collectGitSnapshot(workspace, allowed) {
     const gitIndex = git(["ls-files", "-s", "-z"], workspace);
     const gitStatus = git([
       "status", "--porcelain=v1", "-z", "--untracked-files=all"
     ], workspace);
-    if (gitIndex.status === 0 && gitStatus.status === 0) {
-      gitAware = true;
-      const indexed = new Map();
-      for (const line of gitIndex.stdout.split("\0").filter(Boolean)) {
-        const match = line.match(/^(\d+)\s+([0-9a-f]+)\s+\d+\t(.+)$/);
-        if (match) indexed.set(match[3], { mode: match[1], oid: match[2] });
-      }
-      const dirty = new Set();
-      for (const row of porcelainStatusRecords(gitStatus.stdout)) {
-        dirty.add(row.path);
-        if (row.origPath) dirty.add(row.origPath);
-      }
-      // Tracking is per path, so it has to be asked per path: a fixture
-      // directory whose name collides with a build-output name is only
-      // distinguishable from real build output by whether git carries it.
-      const paths = [...new Set([...indexed.keys(), ...dirty])]
-        .filter((rel) => allowed(rel, indexed.has(rel))).sort();
-      for (const rel of paths) {
-        const path = join(workspace, rel);
-        const contentIdentity = dirty.has(rel)
-          ? (indexed.get(rel)?.mode === "160000"
-            ? `gitlink:${indexed.get(rel).oid}`
-            : (existsSync(path) ? filesystemEntryIdentity(path) : "deleted"))
-          : indexed.get(rel)?.oid;
-        files.push([rel, path]);
-        fold(rel, contentIdentity || "missing");
-      }
-    } else {
-      collect(workspace);
-      // Codepoint order for the same reason as directoryHash: the git-aware
-      // branch above sorts by codepoint, and the two must agree.
-      files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-      for (const [rel, path] of files) fold(rel, filesystemEntryIdentity(path));
+    if (gitIndex.status !== 0 || gitStatus.status !== 0) return null;
+    const indexed = new Map();
+    for (const line of gitIndex.stdout.split("\0").filter(Boolean)) {
+      const match = line.match(/^(\d+)\s+([0-9a-f]+)\s+\d+\t(.+)$/);
+      if (match) indexed.set(match[3], { mode: match[1], oid: match[2] });
     }
-    const revisionMarker = `foundation-contract-revision:${
-      Number(state.contractRevision || state.revision || 0)}`;
-    hash.update(revisionMarker);
-    codeHash.update(revisionMarker);
-    reviewHash.update(revisionMarker);
-    const workspaceHash = hash.digest("hex");
-    const value = {
-      version: 1,
+    const dirty = new Set();
+    for (const row of porcelainStatusRecords(gitStatus.stdout)) {
+      dirty.add(row.path);
+      if (row.origPath) dirty.add(row.origPath);
+    }
+    return [...new Set([...indexed.keys(), ...dirty])]
+      .filter((rel) => allowed(rel, { gitAware: true, tracked: indexed.has(rel) }))
+      .sort()
+      .map((rel) => {
+        const path = join(workspace, rel);
+        const indexedEntry = indexed.get(rel);
+        const entryExists = Boolean(lstatSync(path, { throwIfNoEntry: false }));
+        const identity = indexedEntry?.mode === "160000"
+          ? `gitlink:${indexedEntry.oid}`
+          : (entryExists ? filesystemEntryIdentity(path) : "deleted");
+        return [rel, path, identity || "missing"];
+      });
+  }
+
+  function snapshotValue(id, workspace, contractRevision, files, digests) {
+    const revisionMarker = `foundation-contract-revision:${contractRevision}`;
+    for (const digest of Object.values(digests)) digest.update(revisionMarker);
+    const workspaceHash = digests.hash.digest("hex");
+    return {
+      version: 2,
       id: `snapshot-${workspaceHash.slice(0, 20)}`,
       changeId: id,
       workspace,
       workspaceHash,
-      codeHash: codeHash.digest("hex"),
-      reviewHash: reviewHash.digest("hex"),
-      revision: Number(state.contractRevision || state.revision || 0),
+      codeHash: digests.codeHash.digest("hex"),
+      reviewHash: digests.reviewHash.digest("hex"),
+      packetReviewHash: digests.packetReviewHash.digest("hex"),
+      revision: contractRevision,
       fileCount: files.length,
       createdAt: now()
     };
+  }
+
+  function singleRelevantSnapshot(id, workspaceOverride = null, force = false,
+      ignoredPaths = []) {
+    const { state, workspace, contractRevision, ignored, cacheKey } =
+      snapshotContext(id, workspaceOverride, ignoredPaths);
+    // A recorded workspace that no longer exists used to surface as a raw
+    // ENOENT from the directory walk — a stack trace where the operator needs
+    // the exit instruction. Typed so callers that degrade per row (`changes`)
+    // can recognize exactly this case and rethrow everything else.
+    // `state.revision` counts sandbox syncs and must not feed the marker: a
+    // sync that changed no contract text would shift every snapshot hash and
+    // expire the review receipt — which, unlike code-bound receipts, has no
+    // declared-inputs rebind and whose re-dispatch the wave cap refuses.
+    // `contractRevision` is bumped by sync exactly when the contract changed.
+    if (!force && snapshotCache.has(cacheKey)) return snapshotCache.get(cacheKey);
+    const digests = snapshotDigests();
+    // The same walk, folded twice. `hash` is every path the change surface
+    // admits; `codeHash` is that minus the change packet, which no test or lint
+    // command reads. An executable provider binds the second, so a note added
+    // to `design.md` after proving no longer expires evidence that ran against
+    // code nobody touched. Review and acceptance still bind the first — a
+    // reviewer read the proposal, and editing it must expire their verdict.
+    // Review identity includes code and semantic contract, but excludes
+    // controller progress and delivery tracking. Checking a task box or
+    // accepting a post-Land handoff must not summon a fresh reviewer for code
+    // and requirements they already inspected.
+    // The packet half of review identity on its own. A review verdict covers
+    // the diff plus the packet the reviewer read; binding it to reviewHash
+    // (every tracked byte) expires it on upstream commits the change never
+    // touched. Paired with the sandbox diff identity, this is the narrow
+    // binding that lets an unchanged verdict survive a moved base.
+    const declared = declaredSurfaceMatcher(id, state);
+    const allowed = snapshotPathPolicy(id, ignored, declared);
+    let files = collectGitSnapshot(workspace, allowed);
+    if (files === null) files = collectFilesystemSnapshot(workspace, allowed)
+      .map(([rel, path]) => [rel, path, filesystemEntryIdentity(path)]);
+    for (const [rel, , identity] of files)
+      foldSnapshotEntry(digests, id, workspace, rel, identity);
+    const value = snapshotValue(id, workspace, contractRevision, files, digests);
     snapshotCache.set(cacheKey, value);
-    if (workspace === resolve(state.workspace?.path || root)) writeJson(snapshotPath(id), value);
+    if (workspace === resolve(state.workspace?.path || root)) writeSnapshot(snapshotPath(id), value);
     return value;
   }
 
@@ -528,6 +578,7 @@ export function createStateRuntime({
     orphanRuntimeChanges,
     walk,
     filesystemEntryIdentity,
+    codepointOrder,
     directoryHash,
     stableHash,
     serializedJson,
@@ -537,6 +588,8 @@ export function createStateRuntime({
     listCount,
     fileDigest,
     singleRelevantSnapshot,
+    inspectSnapshots,
+    writeSnapshot,
     declaredSurfaceMatcher,
     clearSnapshotCache,
     registerPolicyCacheClearer,

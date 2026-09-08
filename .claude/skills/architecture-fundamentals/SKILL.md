@@ -7,7 +7,7 @@ description: Design or review relationships between runtime components, services
 
 Use this as the primary skill when the hard decision crosses a runtime,
 deployment, ownership, or failure boundary. Decide architecture; let the
-Foundation harness own lifecycle, scope, evidence, and Land.
+Change Loop owns lifecycle, scope, evidence, and Land.
 
 ## Rules
 

@@ -1,3 +1,6 @@
+> Normally generated from semantic requirement keys. For `MODIFIED`, the
+> compiler reads the canonical specification and retains every prior scenario.
+
 ## ADDED Requirements
 
 ### Requirement: <name>

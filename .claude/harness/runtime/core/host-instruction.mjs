@@ -1,6 +1,9 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  resolveUpdateAdvisory, updateBoundary, updateNotificationDirective
+} from "./update-advisory.mjs";
 
 export const HOST_INSTRUCTION_PROTOCOL = 1;
 export const HOST_COMMANDS = Object.freeze([
@@ -76,6 +79,27 @@ export function resolveHostInstruction(command, options = {}) {
   };
 }
 
+export async function resolveHostInstructionWithUpdate(command, options = {}) {
+  const instruction = resolveHostInstruction(command, options);
+  const trigger = updateBoundary(command);
+  if (!trigger) return instruction;
+  const update = await resolveUpdateAdvisory({
+    installedVersion: instruction.foundationVersion,
+    cachePath: options.cachePath,
+    env: options.env,
+    fetchImpl: options.fetchImpl,
+    now: options.now,
+    timeoutMs: options.timeoutMs,
+    ttlMs: options.ttlMs,
+    refresh: options.refreshUpdate === true
+  });
+  return {
+    ...instruction,
+    update: { ...update, trigger },
+    notification: updateNotificationDirective(update, trigger, options)
+  };
+}
+
 export function parseHostInstructionArguments(argv) {
   const args = [...argv];
   const command = args.shift() || "";
@@ -115,11 +139,31 @@ export function hostInstructionResponse(argv, options = {}) {
   }
 }
 
-function main() {
-  const result = hostInstructionResponse(process.argv.slice(2));
+export async function hostInstructionResponseWithUpdate(argv, options = {}) {
+  try {
+    const parsed = parseHostInstructionArguments(argv);
+    return { status: 0, body: await resolveHostInstructionWithUpdate(parsed.command,
+      { ...parsed.options, ...options }) };
+  } catch (error) {
+    const known = error instanceof HostInstructionError;
+    return {
+      status: 1,
+      body: {
+        protocol: HOST_INSTRUCTION_PROTOCOL,
+        error: {
+          code: known ? error.code : "instruction_unavailable",
+          message: known ? error.message : "The installed Foundation instruction is unavailable."
+        }
+      }
+    };
+  }
+}
+
+async function main() {
+  const result = await hostInstructionResponseWithUpdate(process.argv.slice(2));
   process.stdout.write(`${JSON.stringify(result.body)}\n`);
   process.exitCode = result.status;
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)))
-  main();
+  await main();

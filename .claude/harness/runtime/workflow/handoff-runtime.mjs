@@ -16,6 +16,26 @@ function cleanString(value) {
   return String(value || "").trim();
 }
 
+export function handoffRecordIdentityValidity(record, changeId, operationId, operationDigest) {
+  if (record.version !== 1 || record.changeId !== changeId || record.operationId !== operationId)
+    return "invalid";
+  if (record.operationDigest !== operationDigest) return "stale";
+  return null;
+}
+
+export function handoffRecordContentValid(record) {
+  if (!RECORD_STATUSES.has(record.status) || !cleanString(record.actor) ||
+      !cleanString(record.reference)) return false;
+  if (record.status === "completed")
+    return Array.isArray(record.evidenceReferences) && record.evidenceReferences.length > 0;
+  if (record.status === "rejected") return Boolean(cleanString(record.reason));
+  return true;
+}
+
+function handoffRecordStatus(record, fallback) {
+  return record.status || fallback;
+}
+
 function safeId(value, pattern, label, fail) {
   const id = cleanString(value).toUpperCase();
   if (!pattern.test(id)) fail(`${label} must match ${pattern}`);
@@ -40,6 +60,145 @@ function assertNoSecretMaterial(value, label, fail, path = []) {
     fail(`${label} appears to contain credential material at '${path.join(".") || "value"}'`);
 }
 
+export function requiredOperationString(raw, name, label, fail) {
+  const value = cleanString(raw[name]);
+  if (!value) fail(`${label}.${name} is required`);
+  if (value.length > 1000) fail(`${label}.${name} is too long`);
+  return value;
+}
+
+export function normalizedOperationReferences(raw, label, context, fail) {
+  const claimIds = [...new Set(raw.claimIds || [])].sort();
+  const taskIds = [...new Set((raw.taskIds || []).map((value) =>
+    cleanString(value).toUpperCase()))].sort();
+  if (!claimIds.length) fail(`${label}.claimIds must be non-empty`);
+  if (claimIds.some((value) => !cleanString(value)))
+    fail(`${label}.claimIds must contain non-empty strings`);
+  if (taskIds.some((value) => !/^T\d{3,}$/.test(value)))
+    fail(`${label}.taskIds must contain stable task IDs`);
+  if (context.claimIds) {
+    const unknown = claimIds.filter((value) => !context.claimIds.has(value));
+    if (unknown.length) fail(`${label} references unknown claim(s): ${unknown.join(", ")}`);
+  }
+  if (context.taskIds) {
+    const unknown = taskIds.filter((value) => !context.taskIds.has(value));
+    if (unknown.length) fail(`${label} references unknown task(s): ${unknown.join(", ")}`);
+  }
+  return { claimIds, taskIds };
+}
+
+export function normalizedActivationProof(raw, activation, claimIds, label, fail) {
+  const proof = raw.activationProof || null;
+  if (activation !== "safe-before-activation") {
+    if (proof !== null)
+      fail(`${label}.activationProof is only valid for safe-before-activation`);
+    return null;
+  }
+  if (!proof || typeof proof !== "object" ||
+      !cleanString(proof.claimId) || !cleanString(proof.condition))
+    fail(`${label}.activationProof requires claimId and condition for safe-before-activation`);
+  const claimId = cleanString(proof.claimId);
+  if (!claimIds.includes(claimId))
+    fail(`${label}.activationProof.claimId must be listed in claimIds`);
+  return { claimId, condition: cleanString(proof.condition) };
+}
+
+export function normalizeHandoffOperation(context, raw, index, scope = {}) {
+  const label = `${scope.id || "change"}/handoffs.yaml operations[${index}]`;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    context.fail(`${label} must be an object`);
+  context.assertNoSecretMaterial(raw, label, context.fail);
+  const id = context.safeId(raw.id, /^H\d{3,}$/, `${label}.id`, context.fail);
+  const string = (name) => requiredOperationString(raw, name, label, context.fail);
+  const timing = string("timing");
+  if (!TIMINGS.has(timing)) context.fail(`${label}.timing must be pre-land|post-land`);
+  const activation = string("activation");
+  if (!ACTIVATIONS.has(activation))
+    context.fail(`${label}.activation must be safe-before-activation|activation-coupled`);
+  if (!Array.isArray(raw.evidence) || raw.evidence.length === 0 ||
+      raw.evidence.some((entry) => !EVIDENCE_TYPES.has(entry)))
+    context.fail(`${label}.evidence must contain supported evidence types`);
+  const { claimIds, taskIds } = normalizedOperationReferences(raw, label, scope, context.fail);
+  const activationProof = normalizedActivationProof(raw, activation, claimIds, label, context.fail);
+  const owner = cleanString(raw.owner) || cleanString(context.defaultOwner());
+  if (!owner) context.fail(`${label}.owner is required`);
+  if (owner.length > 1000) context.fail(`${label}.owner is too long`);
+  return {
+    id,
+    owner,
+    environment: string("environment"),
+    authority: string("authority"),
+    operation: string("operation"),
+    timing,
+    activation,
+    evidence: [...new Set(raw.evidence)].sort(),
+    runbook: string("runbook"),
+    rollback: string("rollback"),
+    claimIds,
+    taskIds,
+    ...(activationProof ? { activationProof } : {})
+  };
+}
+
+export function normalizeHandoffRecordInput(context, id, flags = {}) {
+  const operationId = cleanString(flags.id).toUpperCase();
+  const status = cleanString(flags.status);
+  if (!RECORD_STATUSES.has(status))
+    context.fail("handoff record --status must be accepted|completed|rejected");
+  const actor = cleanString(flags.actor);
+  const reference = cleanString(flags.reference);
+  const reason = cleanString(flags.reason);
+  const evidenceReferences = cleanString(flags.evidence).split(",")
+    .map((value) => value.trim()).filter(Boolean);
+  if (!actor || !reference)
+    context.fail("handoff record requires --actor <named-operator> and --reference <tracking-reference>");
+  if (status === "completed" && !evidenceReferences.length)
+    context.fail("completed handoff requires --evidence <reference[,reference]>");
+  if (status === "rejected" && !reason)
+    context.fail("rejected handoff requires --reason <why>");
+  context.assertNoSecretMaterial({ actor, reference, reason, evidenceReferences },
+    `${id}/${operationId} handoff record`, context.fail);
+  return { operationId, status, actor, reference, reason, evidenceReferences };
+}
+
+export function handoffRecordValue(context, id, operation, input, previous, state) {
+  if (previous.operationDigest === context.operationDigest(operation) &&
+      previous.status === "completed" && input.status !== "completed")
+    context.fail(`completed handoff '${operation.id}' cannot be downgraded`);
+  const event = {
+    status: input.status,
+    actor: input.actor,
+    reference: input.reference,
+    evidenceReferences: input.status === "completed" ? input.evidenceReferences : [],
+    reason: input.status === "rejected" ? input.reason : null,
+    recordedAt: context.now()
+  };
+  return {
+    version: 1,
+    changeId: id,
+    operationId: operation.id,
+    operationDigest: context.operationDigest(operation),
+    contractRevision: Number(state.contractRevision || 0),
+    ...event,
+    history: [...(previous.history || []), event].slice(-50)
+  };
+}
+
+export function recordHandoffOperation(context, id, flags = {}) {
+  const contract = context.handoffContract(id);
+  const input = normalizeHandoffRecordInput(context, id, flags);
+  const operation = contract.operations.find((row) => row.id === input.operationId);
+  if (!operation)
+    context.fail(`unknown handoff operation '${input.operationId || "(missing)"}'`);
+  const path = context.recordPath(id, operation.id);
+  const previous = context.pathExists(path) ? context.readJson(path, {}) : {};
+  const record = handoffRecordValue(context, id, operation, input, previous,
+    context.loadRuntime(id));
+  context.writeJson(path, record);
+  context.output.log(`HANDOFF ${operation.id} ${input.status.toUpperCase()}\n  owner: ${operation.owner}\n  actor: ${input.actor}\n  reference: ${input.reference}\n  next: claude-foundation handoff status ${id}`);
+  return record;
+}
+
 export function createHandoffRuntime({
   root,
   handoffsRoot,
@@ -60,76 +219,12 @@ export function createHandoffRuntime({
     return join(handoffsRoot, id, `${operationId}.json`);
   }
 
-  function normalizeOperation(raw, index, context = {}) {
-    const label = `${context.id || "change"}/handoffs.yaml operations[${index}]`;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw))
-      fail(`${label} must be an object`);
-    assertNoSecretMaterial(raw, label, fail);
-    const id = safeId(raw.id, /^H\d{3,}$/, `${label}.id`, fail);
-    const string = (name) => {
-      const value = cleanString(raw[name]);
-      if (!value) fail(`${label}.${name} is required`);
-      if (value.length > 1000) fail(`${label}.${name} is too long`);
-      return value;
-    };
-    const timing = string("timing");
-    if (!TIMINGS.has(timing)) fail(`${label}.timing must be pre-land|post-land`);
-    const activation = string("activation");
-    if (!ACTIVATIONS.has(activation))
-      fail(`${label}.activation must be safe-before-activation|activation-coupled`);
-    if (!Array.isArray(raw.evidence) || raw.evidence.length === 0 ||
-        raw.evidence.some((entry) => !EVIDENCE_TYPES.has(entry)))
-      fail(`${label}.evidence must contain supported evidence types`);
-    const claimIds = [...new Set(raw.claimIds || [])].sort();
-    const taskIds = [...new Set((raw.taskIds || []).map((value) =>
-      cleanString(value).toUpperCase()))].sort();
-    if (!claimIds.length) fail(`${label}.claimIds must be non-empty`);
-    if (claimIds.some((value) => !cleanString(value)))
-      fail(`${label}.claimIds must contain non-empty strings`);
-    if (taskIds.some((value) => !/^T\d{3,}$/.test(value)))
-      fail(`${label}.taskIds must contain stable task IDs`);
-    const activationProof = raw.activationProof || null;
-    if (activation === "safe-before-activation") {
-      if (!activationProof || typeof activationProof !== "object" ||
-          !cleanString(activationProof.claimId) || !cleanString(activationProof.condition))
-        fail(`${label}.activationProof requires claimId and condition for safe-before-activation`);
-      if (!claimIds.includes(cleanString(activationProof.claimId)))
-        fail(`${label}.activationProof.claimId must be listed in claimIds`);
-    } else if (activationProof !== null)
-      fail(`${label}.activationProof is only valid for safe-before-activation`);
-    if (context.claimIds) {
-      const unknown = claimIds.filter((value) => !context.claimIds.has(value));
-      if (unknown.length) fail(`${label} references unknown claim(s): ${unknown.join(", ")}`);
-    }
-    if (context.taskIds) {
-      const unknown = taskIds.filter((value) => !context.taskIds.has(value));
-      if (unknown.length) fail(`${label} references unknown task(s): ${unknown.join(", ")}`);
-    }
-    const owner = cleanString(raw.owner) || cleanString(defaultOwner());
-    if (!owner) fail(`${label}.owner is required`);
-    if (owner.length > 1000) fail(`${label}.owner is too long`);
-    const operation = {
-      id,
-      owner,
-      environment: string("environment"),
-      authority: string("authority"),
-      operation: string("operation"),
-      timing,
-      activation,
-      evidence: [...new Set(raw.evidence)].sort(),
-      runbook: string("runbook"),
-      rollback: string("rollback"),
-      claimIds,
-      taskIds,
-      ...(activationProof ? {
-        activationProof: {
-          claimId: cleanString(activationProof.claimId),
-          condition: cleanString(activationProof.condition)
-        }
-      } : {})
-    };
-    return operation;
-  }
+  const normalizeOperation = normalizeHandoffOperation.bind(null, {
+    assertNoSecretMaterial,
+    safeId,
+    defaultOwner,
+    fail
+  });
 
   function handoffContract(id, options = {}) {
     const state = options.state || loadRuntime(id);
@@ -156,19 +251,16 @@ export function createHandoffRuntime({
     const path = recordPath(id, operation.id);
     const record = existsSync(path) ? readJson(path, {}) : null;
     if (!record) return { validity: "missing", status: "pending", record: null };
-    if (record.version !== 1 || record.changeId !== id ||
-        record.operationId !== operation.id)
-      return { validity: "invalid", status: record.status || "invalid", record };
-    if (record.operationDigest !== operationDigest(operation))
-      return { validity: "stale", status: record.status || "stale", record };
-    if (!RECORD_STATUSES.has(record.status) || !cleanString(record.actor) ||
-        !cleanString(record.reference))
-      return { validity: "invalid", status: record.status || "invalid", record };
-    if (record.status === "completed" &&
-        (!Array.isArray(record.evidenceReferences) || !record.evidenceReferences.length))
-      return { validity: "invalid", status: record.status, record };
-    if (record.status === "rejected" && !cleanString(record.reason))
-      return { validity: "invalid", status: record.status, record };
+    const identityValidity = handoffRecordIdentityValidity(
+      record, id, operation.id, operationDigest(operation));
+    if (identityValidity)
+      return {
+        validity: identityValidity,
+        status: handoffRecordStatus(record, identityValidity),
+        record
+      };
+    if (!handoffRecordContentValid(record))
+      return { validity: "invalid", status: handoffRecordStatus(record, "invalid"), record };
     return { validity: "valid", status: record.status, record };
   }
 
@@ -222,51 +314,19 @@ export function createHandoffRuntime({
   }
 
   function recordHandoff(id, flags = {}) {
-    return withLock(id, () => {
-      const contract = handoffContract(id);
-      const operationId = cleanString(flags.id).toUpperCase();
-      const operation = contract.operations.find((row) => row.id === operationId);
-      if (!operation) fail(`unknown handoff operation '${operationId || "(missing)"}'`);
-      const status = cleanString(flags.status);
-      if (!RECORD_STATUSES.has(status))
-        fail("handoff record --status must be accepted|completed|rejected");
-      const actor = cleanString(flags.actor);
-      const reference = cleanString(flags.reference);
-      const reason = cleanString(flags.reason);
-      const evidenceReferences = cleanString(flags.evidence).split(",")
-        .map((value) => value.trim()).filter(Boolean);
-      if (!actor || !reference)
-        fail("handoff record requires --actor <named-operator> and --reference <tracking-reference>");
-      if (status === "completed" && !evidenceReferences.length)
-        fail("completed handoff requires --evidence <reference[,reference]>");
-      if (status === "rejected" && !reason)
-        fail("rejected handoff requires --reason <why>");
-      const material = { actor, reference, reason, evidenceReferences };
-      assertNoSecretMaterial(material, `${id}/${operationId} handoff record`, fail);
-      const previousPath = recordPath(id, operation.id);
-      const previous = existsSync(previousPath) ? readJson(previousPath, {}) : {};
-      if (previous.operationDigest === operationDigest(operation) &&
-          previous.status === "completed" && status !== "completed")
-        fail(`completed handoff '${operation.id}' cannot be downgraded`);
-      const event = {
-        status, actor, reference,
-        evidenceReferences: status === "completed" ? evidenceReferences : [],
-        reason: status === "rejected" ? reason : null,
-        recordedAt: now()
-      };
-      const record = {
-        version: 1,
-        changeId: id,
-        operationId: operation.id,
-        operationDigest: operationDigest(operation),
-        contractRevision: Number(loadRuntime(id).contractRevision || 0),
-        ...event,
-        history: [...(previous.history || []), event].slice(-50)
-      };
-      writeJson(previousPath, record);
-      console.log(`HANDOFF ${operation.id} ${status.toUpperCase()}\n  owner: ${operation.owner}\n  actor: ${actor}\n  reference: ${reference}\n  next: claude-foundation handoff status ${id}`);
-      return record;
-    });
+    return withLock(id, () => recordHandoffOperation({
+      handoffContract,
+      recordPath,
+      operationDigest,
+      pathExists: existsSync,
+      readJson,
+      writeJson,
+      loadRuntime,
+      now,
+      assertNoSecretMaterial,
+      fail,
+      output: console
+    }, id, flags));
   }
 
   function handoffPacketValue(id, operationId = null) {

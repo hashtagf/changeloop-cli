@@ -1,5 +1,52 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { repositoryBaseHead } from "../core/repository-binding.mjs";
+
+export { repositoryBaseHead } from "../core/repository-binding.mjs";
+
+export function addChangedSurfaceSource({
+  sources, path, source, repositoryId, changeId, excludedWorkspaceDirs,
+  isCurrentChangePath
+}) {
+  if (!path) return;
+  const normalized = path.replaceAll("\\", "/");
+  if (excludedWorkspaceDirs.has(normalized.split("/")[0])) return;
+  if (repositoryId === "root" &&
+      (isCurrentChangePath(normalized, changeId) || normalized.startsWith("openspec/changes/")))
+    return;
+  if (!sources.has(normalized)) sources.set(normalized, new Set());
+  sources.get(normalized).add(source);
+}
+
+export function changedSurfaceRows(repositoryId, sources) {
+  return [...sources].map(([path, rowSources]) => ({
+    repositoryId, path, sources: [...rowSources].sort()
+  }));
+}
+
+export function sortChangedSurface(rows) {
+  return rows.sort((left, right) =>
+    left.repositoryId.localeCompare(right.repositoryId) || left.path.localeCompare(right.path));
+}
+
+export function unchangedManifestEntry(fileDigest, workspace, manifest, rel) {
+  if (!manifest || !Object.prototype.hasOwnProperty.call(manifest, rel))
+    return false;
+  const path = join(workspace, rel);
+  try {
+    return existsSync(path) && manifest[rel] === fileDigest(path);
+  } catch {
+    return false;
+  }
+}
+
+export function carriedInUnchanged(
+  fileDigest, workspace, preexisting, rel, state = null
+) {
+  const copied = state?.workspace?.sandboxPreexisting;
+  if (unchangedManifestEntry(fileDigest, workspace, copied, rel)) return true;
+  return unchangedManifestEntry(fileDigest, workspace, preexisting, rel);
+}
 
 export function createChangePolicy({
   root, excludedWorkspaceDirs, providers, gitHead, git, porcelainStatusRecords,
@@ -7,6 +54,7 @@ export function createChangePolicy({
   readJson, fileDigest, fail
 }) {
   const policyCache = new Map();
+  const carriedInUnchangedFor = carriedInUnchanged.bind(null, fileDigest);
 
   // Registered with state-runtime's clearSnapshotCache so a surface mutation
   // invalidates this cache too — it used to clear a dead Map of its own.
@@ -39,24 +87,6 @@ export function createChangePolicy({
     return [];
   }
 
-  function carriedInUnchanged(workspace, preexisting, rel, state = null) {
-    const copied = state?.workspace?.sandboxPreexisting;
-    if (copied && Object.prototype.hasOwnProperty.call(copied, rel)) {
-      const path = join(workspace, rel);
-      try {
-        if (existsSync(path) && copied[rel] === fileDigest(path)) return true;
-      } catch {}
-    }
-    if (!preexisting || !Object.prototype.hasOwnProperty.call(preexisting, rel))
-      return false;
-    const path = join(workspace, rel);
-    try {
-      return existsSync(path) && preexisting[rel] === fileDigest(path);
-    } catch {
-      return false;
-    }
-  }
-
   // `canonicalChangedSurface` calls `fail`, which exits the process rather than
   // throwing, so a caller that only wants a hint cannot protect itself with
   // try/catch. It has to ask first. This mirrors the one precondition that
@@ -69,9 +99,7 @@ export function createChangePolicy({
     catch { return false; }
     return repositories.every((repository) => {
       if (!gitHead(repository.workspacePath)) return true;
-      return Boolean(repository.id === "root"
-        ? state.repositories?.root?.baseHead || state.workspace?.baseHead
-        : state.repositories?.[repository.id]?.baseHead);
+      return Boolean(repositoryBaseHead(repository, state));
     });
   }
 
@@ -83,20 +111,13 @@ export function createChangePolicy({
       const preexisting = repository.id === "root"
         ? state.workspace?.preexisting || null : null;
       const sources = new Map();
-      const add = (path, source) => {
-        if (!path) return;
-        const normalized = path.replaceAll("\\", "/");
-        if (excludedWorkspaceDirs.has(normalized.split("/")[0])) return;
-        if (repository.id === "root" &&
-            (isCurrentChangePath(normalized, id) || normalized.startsWith("openspec/changes/"))) return;
-        if (!sources.has(normalized)) sources.set(normalized, new Set());
-        sources.get(normalized).add(source);
-      };
+      const add = (path, source) => addChangedSurfaceSource({
+        sources, path, source, repositoryId: repository.id, changeId: id,
+        excludedWorkspaceDirs, isCurrentChangePath
+      });
       const head = gitHead(workspace);
       if (head) {
-        const baseHead = repository.id === "root"
-          ? state.repositories?.root?.baseHead || state.workspace?.baseHead || null
-          : state.repositories?.[repository.id]?.baseHead || null;
+        const baseHead = repositoryBaseHead(repository, state);
         if (!baseHead)
           fail(`cannot resolve changed surface for repository '${repository.id}': missing baseHead; sync or recreate the change sandbox`);
         if (baseHead !== head) {
@@ -106,18 +127,16 @@ export function createChangePolicy({
           committed.stdout.split("\0").filter(Boolean).forEach((path) => add(path, "committed"));
         }
         changedFilesInWorkspace(id, workspace, head)
-          .filter((path) => !carriedInUnchanged(workspace, preexisting, path, state))
+          .filter((path) => !carriedInUnchangedFor(workspace, preexisting, path, state))
           .forEach((path) => add(path, "dirty"));
       } else if (repository.id === "root") {
         changedFiles(id, state)
-          .filter((path) => !carriedInUnchanged(workspace, preexisting, path, state))
+          .filter((path) => !carriedInUnchangedFor(workspace, preexisting, path, state))
           .forEach((path) => add(path, "dirty"));
       }
-      for (const [path, rowSources] of sources)
-        rows.push({ repositoryId: repository.id, path, sources: [...rowSources].sort() });
+      rows.push(...changedSurfaceRows(repository.id, sources));
     }
-    return rows.sort((left, right) =>
-      left.repositoryId.localeCompare(right.repositoryId) || left.path.localeCompare(right.path));
+    return sortChangedSurface(rows);
   }
 
   function capabilitiesForPaths(paths) {
@@ -163,6 +182,11 @@ export function createChangePolicy({
         policy.patterns.some((pattern) => pattern.test(path)));
       if (trigger !== undefined)
         policy.capabilities.forEach((capability) => require(capability, trigger));
+    }
+    if (existsSync(join(root, "quality", "foundation-quality.json"))) {
+      const executable = relevantFiles.find((path) =>
+        /\.(?:[cm]?js|jsx|tsx?|go|py|php|sh|bash)$/i.test(path));
+      if (executable !== undefined) require("static-analysis", executable);
     }
     const configured = readJson(join(root, ".foundation", "policy.json"), { rules: [] });
     for (const rule of configured.rules || []) {

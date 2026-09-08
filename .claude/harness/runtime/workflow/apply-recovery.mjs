@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { transitionLifecycleState } from "../core/lifecycle-reducer.mjs";
 
 // What a transaction would do to the target, in the three shapes an operator
 // has to weigh differently. Shared so the pre-apply report and the pending
@@ -72,6 +73,119 @@ const UNRESOLVED_APPLY_STATUS = [
   "settling-current"
 ];
 
+export const MANUAL_APPLY_STATUS = Object.freeze([
+  "rolling-back", "manual-recovery", "recovering-backup", "settling-current"
+]);
+
+export function defaultManualRecoveryDecision(transactionRoot) {
+  return {
+    kind: "manual-recovery",
+    summary: "An earlier apply stopped partway through rolling back and left the working tree in a state Foundation did not finish resolving.",
+    options: [
+      {
+        id: "inspect",
+        outcome: "Inspect the working tree against the recorded transaction backup before choosing a recovery."
+      },
+      {
+        id: "keep-current",
+        outcome: "Preserve the current files and abandon automatic rollback."
+      },
+      {
+        id: "restore-backup",
+        outcome: "Restore the recorded backup after explicitly resolving the divergence."
+      },
+      { id: "pause", outcome: "Leave the journal pending and make no further changes." }
+    ],
+    recommended: "inspect",
+    transactionRoot
+  };
+}
+
+export function settleCurrentApplyRecovery({
+  id,
+  state,
+  journal,
+  decisionRef,
+  now,
+  clearSnapshotCache,
+  saveRuntime,
+  saveApplyJournal
+}) {
+  state.workspace = {
+    ...state.workspace,
+    applied: false,
+    recovery: {
+      status: "settled-current",
+      transactionId: journal.transactionId,
+      decisionRef,
+      requiresSync: true,
+      resolvedAt: now()
+    }
+  };
+  delete state.workspace.apply;
+  transitionLifecycleState(state, "building", "apply-recovery-settled-current");
+  clearSnapshotCache(id);
+  saveRuntime(state);
+  journal.status = "settled-current";
+  journal.recovery.settledAt = now();
+  saveApplyJournal(journal);
+}
+
+export function recoverApplyJournal(context, {
+  id,
+  state,
+  journal,
+  transactionRoot,
+  options
+}) {
+  if (MANUAL_APPLY_STATUS.includes(journal.status)) {
+    if (!options.resolution) {
+      context.blockWithDecision(id, "apply-manual-recovery", journal.decision ||
+        defaultManualRecoveryDecision(transactionRoot));
+      return;
+    }
+    context.settleApplyTransaction(journal, options.resolution, options.decisionRef);
+    if (options.resolution === "keep-current")
+      settleCurrentApplyRecovery({
+        ...context, id, state, journal, decisionRef: options.decisionRef
+      });
+    return;
+  }
+  if (!["prepared", "applying"].includes(journal.status)) return;
+  if (state.workspace?.applied &&
+      state.workspace.apply?.transactionId === journal.transactionId) {
+    const verification = context.verifyAppliedProjection(state);
+    if (!verification.valid)
+      context.fail(`interrupted apply cannot resume: ${verification.reason}`);
+    journal.status = "verified";
+    journal.verifiedAt = context.now();
+    context.saveApplyJournal(journal);
+    return;
+  }
+  try {
+    context.rollbackApplyTransaction(journal, "interrupted apply recovered before retry");
+  } catch (error) {
+    context.fail(error.message);
+  }
+}
+
+export function recoverPendingApplyOperation(context, id, state, options = {}) {
+  const transactionRoot = join(context.transactions, id);
+  if (!context.pathExists(transactionRoot)) return;
+  for (const entry of context.readDirectory(transactionRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const path = context.transactionJournalPath(id, entry.name);
+    if (!context.pathExists(path)) continue;
+    recoverApplyJournal(context, {
+      id,
+      state,
+      journal: context.readJson(path),
+      transactionRoot: join(transactionRoot, entry.name),
+      options
+    });
+  }
+}
+
 export function createApplyRecovery({
   transactions, transactionJournalPath, readJson, verifyAppliedProjection,
   saveApplyJournal, rollbackApplyTransaction, settleApplyTransaction,
@@ -101,80 +215,22 @@ export function createApplyRecovery({
     return pending;
   }
 
-  function recoverPendingApply(id, state, options = {}) {
-    const transactionRoot = join(transactions, id);
-    if (!existsSync(transactionRoot)) return;
-    for (const entry of readdirSync(transactionRoot, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const path = transactionJournalPath(id, entry.name);
-      if (!existsSync(path)) continue;
-      const journal = readJson(path);
-      if (["rolling-back", "manual-recovery", "recovering-backup", "settling-current"]
-        .includes(journal.status)) {
-        if (options.resolution) {
-          settleApplyTransaction(journal, options.resolution, options.decisionRef);
-          if (options.resolution === "keep-current") {
-            state.workspace = {
-              ...state.workspace,
-              applied: false,
-              recovery: {
-                status: "settled-current",
-                transactionId: journal.transactionId,
-                decisionRef: options.decisionRef,
-                requiresSync: true,
-                resolvedAt: now()
-              }
-            };
-            delete state.workspace.apply;
-            state.status = "building";
-            clearSnapshotCache(id);
-            saveRuntime(state);
-            journal.status = "settled-current";
-            journal.recovery.settledAt = now();
-            saveApplyJournal(journal);
-          }
-          continue;
-        }
-        blockWithDecision(id, "apply-manual-recovery", journal.decision || {
-          kind: "manual-recovery",
-          summary: "An earlier apply stopped partway through rolling back and left the working tree in a state Foundation did not finish resolving.",
-          options: [
-            {
-              id: "inspect",
-              outcome: "Inspect the working tree against the recorded transaction backup before choosing a recovery."
-            },
-            {
-              id: "keep-current",
-              outcome: "Preserve the current files and abandon automatic rollback."
-            },
-            {
-              id: "restore-backup",
-              outcome: "Restore the recorded backup after explicitly resolving the divergence."
-            },
-            { id: "pause", outcome: "Leave the journal pending and make no further changes." }
-          ],
-          recommended: "inspect",
-          transactionRoot: join(transactionRoot, entry.name)
-        });
-      }
-      if (!["prepared", "applying"].includes(journal.status)) continue;
-      if (state.workspace?.applied &&
-          state.workspace.apply?.transactionId === journal.transactionId) {
-        const verification = verifyAppliedProjection(state);
-        if (!verification.valid)
-          fail(`interrupted apply cannot resume: ${verification.reason}`);
-        journal.status = "verified";
-        journal.verifiedAt = now();
-        saveApplyJournal(journal);
-      } else {
-        try {
-          rollbackApplyTransaction(journal, "interrupted apply recovered before retry");
-        } catch (error) {
-          fail(error.message);
-        }
-      }
-    }
-  }
+  const recoverPendingApply = recoverPendingApplyOperation.bind(null, {
+    transactions,
+    transactionJournalPath,
+    readJson,
+    pathExists: existsSync,
+    readDirectory: readdirSync,
+    verifyAppliedProjection,
+    saveApplyJournal,
+    rollbackApplyTransaction,
+    settleApplyTransaction,
+    saveRuntime,
+    clearSnapshotCache,
+    now,
+    blockWithDecision,
+    fail
+  });
 
   return { recoverPendingApply, pendingApplyTransactions };
 }
