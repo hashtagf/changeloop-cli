@@ -1,7 +1,508 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { acquireProcessLock } from "../core/process-lock.mjs";
+import { acquireProcessLock, isProcessAlive } from "../core/process-lock.mjs";
+import { effectiveReviewAttemptLimit } from "../core/authority-policy.mjs";
+import { reviewFindingIssues, reviewPacketIssues, validReview } from "../evidence/configured-reviewer.mjs";
+
+export function authorityRequestDisplayValue(request, limit = 8192) {
+  const packetBytes = Buffer.byteLength(JSON.stringify(request.packet || null));
+  if (request.type !== "review" || packetBytes <= limit) return request;
+  return {
+    version: request.version,
+    requestId: request.requestId,
+    changeId: request.changeId,
+    type: request.type,
+    provider: request.provider,
+    status: request.status,
+    workspaceHash: request.workspaceHash,
+    claimIds: request.claimIds,
+    packetDigest: request.packetDigest,
+    packet: {
+      status: "persisted",
+      display: "truncated",
+      bytes: packetBytes,
+      limit
+    },
+    requestedAt: request.requestedAt,
+    expiresAt: request.expiresAt,
+    next: `claude-foundation authority status ${request.changeId} --request ${
+      request.requestId}`
+  };
+}
+
+export function requireExternalCiConfig({ fail }, provider, config) {
+  if (!config || config.adapter !== "external" || !config.ci?.publicKey || !config.ci?.issuer)
+    fail(`provider '${provider}' requires external ci.issuer and ci.publicKey configuration`);
+  return config;
+}
+
+export function signedCiReceiptFlags(context, id, provider, config, workspaceHash, result) {
+  const { payload, artifacts } = result;
+  return {
+    claims: context.providerClaims(id, provider, config).join(","),
+    workspaceHash,
+    observed: String(payload.observed || `CI ${payload.status}; commit ${payload.commit || "unknown"}`),
+    source: `signed-ci:${payload.issuer}`,
+    reference: [payload.runUrl, ...artifacts.map((artifact) =>
+      `artifact:${artifact.name}:sha256:${artifact.sha256}`)],
+    "recorded-by": `evidence-verify-ci:${payload.issuer}`
+  };
+}
+
+export function recordVerifiedCiOperation(context, id, provider, source) {
+  const config = requireExternalCiConfig(context, provider,
+    context.providerConfig(id, provider));
+  const path = context.resolvePath(source || "");
+  if (!source || !context.pathExists(path))
+    context.fail("evidence verify-ci requires a signed JSON envelope");
+  const envelope = context.readJson(path);
+  const workspaceHash = context.providerWorkspaceHash(id, provider);
+  const repository = context.providerRepository(id, provider, config);
+  const workspacePath = repository?.workspacePath || context.providerWorkspace(id, provider);
+  const result = context.validateSignedCiEnvelope({
+    envelope,
+    protocolVersion: context.ciEvidenceProtocolVersion,
+    issuer: config.ci.issuer,
+    publicKey: config.ci.publicKey,
+    changeId: id,
+    provider,
+    workspaceHash,
+    head: context.gitHead(workspacePath)
+  });
+  if (!result.valid) context.fail(result.reason);
+  context.recordReceipt(id, provider, result.status,
+    signedCiReceiptFlags(context, id, provider, config, workspaceHash, result));
+  context.output.log(`CI EVIDENCE ${id}/${provider}: ${result.status}\n  run: ${result.payload.runUrl}`);
+}
+
+export function authorityRequestSelection(context, id, flags) {
+  const type = String(flags.type || "");
+  if (!["review", "acceptance"].includes(type))
+    context.fail("authority request --type must be review|acceptance");
+  context.validate(id, "active", { quiet: true });
+  const pending = context.pendingTasks(id);
+  if (pending.length)
+    context.fail(`authority request requires completed implementation tasks: ${
+      pending.map((task) => task.id).join(", ")}`);
+  const repository = String(flags.repo || "").trim() || null;
+  const provider = context.authorityProvider(id, type, repository);
+  if (!provider || !context.requiredProviders(id).includes(provider))
+    context.fail(repository
+      ? `change '${id}' has no ${type} provider scoped to repository '${repository}'`
+      : `change '${id}' does not require ${type} authority`);
+  return {
+    type, repository, provider,
+    workspaceHash: context.authorityWorkspaceHash(id, provider)
+  };
+}
+
+export function pendingAuthorityRequest(entries, selection) {
+  for (const entry of entries) {
+    const value = entry.value;
+    if (value.type === selection.type && value.provider === selection.provider &&
+        value.workspaceHash === selection.workspaceHash &&
+        ["requested", "dispatched", "pending", "infrastructure-exhausted"]
+          .includes(value.status))
+      return value;
+  }
+  return null;
+}
+
+export function authorityClaimIds(claims) {
+  return claims.map((claim) => claim.id);
+}
+
+export function randomAuthorityRequestHex() {
+  return randomBytes(8).toString("hex");
+}
+
+export function authorityRequestPolicy(context, id, type) {
+  return type === "review" ? {
+    reviewCircuit: context.policy().workflow.reviewCircuit,
+    requirements: context.reviewPolicy(id)
+  } : {
+    reviewCircuit: null,
+    requirements: { actor: "human", acceptance: context.resolvedAcceptance(id) }
+  };
+}
+
+export function newAuthorityRequestValue(context, id, selection) {
+  const { type, provider, workspaceHash } = selection;
+  const packet = context.authorityPacket(id, type);
+  const requestId = `${type}-${context.timestamp()}-${context.randomHex()}`;
+  const claimIds = authorityClaimIds(context.claimsForProvider(id, provider));
+  const packetDigest = context.canonicalPacketDigest(packet);
+  const requestedAt = context.now();
+  const expiresAt = new Date(
+    context.timestamp() + 24 * 60 * 60 * 1000).toISOString();
+  const policy = authorityRequestPolicy(context, id, type);
+  return {
+    version: Number(context.protocolVersion),
+    requestId,
+    changeId: id, type, provider, status: "requested", workspaceHash,
+    claimIds,
+    packet,
+    packetDigest,
+    requestedAt,
+    expiresAt,
+    ...policy
+  };
+}
+
+export function displayAuthorityRequest(context, request, quiet) {
+  if (quiet) return;
+  const limit = Number(context.policy().execution?.packetBytes?.review || 8192);
+  context.output.log(JSON.stringify(context.displayValue(request, limit), null, 2));
+}
+
+export function requestAuthorityOperation(context, id, flags = {}, options = {}) {
+  const selection = authorityRequestSelection(context, id, flags);
+  const existing = pendingAuthorityRequest(context.authorityStore.list(id), selection);
+  if (existing) {
+    displayAuthorityRequest(context, existing, options.quiet);
+    return existing;
+  }
+  const request = newAuthorityRequestValue(context, id, selection);
+  context.authorityStore.writeRequest(id, request);
+  displayAuthorityRequest(context, request, options.quiet);
+  return request;
+}
+
+export function abortAuthorityOperation(context, id, flags = {}) {
+  const requestId = String(flags.request || "");
+  const reason = String(flags.reason || "").trim();
+  if (!requestId || !reason)
+    context.fail("authority abort requires --request <id> --reason <text>");
+  const entry = context.authorityStore.list(id)
+    .find((row) => row.value.requestId === requestId);
+  if (!entry) context.fail(`unknown authority request '${requestId}'`);
+  const request = entry.value;
+  const dispatchedAttempt = request.dispatch?.attemptDigest
+    ? context.reviewAttemptByDigest(id, request.dispatch.attemptDigest) : null;
+  const attemptIsCurrent = dispatchedAttempt?.status === "dispatched" &&
+    context.reviewHistoryState(id, context.loadRuntime(id)).chainHead ===
+      dispatchedAttempt.digest;
+  if (attemptIsCurrent) {
+    context.completeReviewAttempt(id, dispatchedAttempt.digest, {
+      reviewerSessionId: dispatchedAttempt.reviewerSessionId || "",
+      resultStatus: "error",
+      findings: [],
+      verifiedFindingIds: []
+    });
+  }
+  if (request.status === "aborted" && attemptIsCurrent) {
+    context.output.log(JSON.stringify(request, null, 2));
+    return request;
+  }
+  if (!["requested", "dispatched"].includes(request.status))
+    context.fail(`authority request '${requestId}' is ${request.status}`);
+  const updated = {
+    ...request,
+    status: request.status === "dispatched" ? "aborted" : "cancelled",
+    abortedAt: context.now(),
+    abortReason: reason
+  };
+  context.authorityStore.replace(entry, updated);
+  context.output.log(JSON.stringify(updated, null, 2));
+  return updated;
+}
+
+export function resetInfrastructureAuthorityOperation(context, id, flags = {}) {
+  context.validate(id, "active", { quiet: true });
+  const decisionRef = String(flags["decision-ref"] || "").trim();
+  if (!decisionRef)
+    context.fail("authority reset-infra requires --decision-ref <ref>");
+  const reviewerName = String(flags.reviewer || "").trim() || null;
+  const status = context.reviewerStatus(reviewerName);
+  if (!status.ok)
+    context.fail(`configured reviewer '${status.reviewer}' still fails its ${status.check} diagnosis: ${status.detail}`);
+  const result = context.acknowledgeInfrastructureAttempts(id, decisionRef);
+  for (const entry of context.authorityStore?.list(id) || []) {
+    if (entry.value.status !== "infrastructure-exhausted") continue;
+    context.authorityStore.replace(entry, {
+      ...entry.value,
+      status: "requested",
+      infrastructureResetAt: context.now?.() || null,
+      infrastructureResetDecisionRef: decisionRef
+    });
+  }
+  context.output.log(`AUTHORITY ${id}: infrastructure retries reset\n  reviewer: ${
+    status.reviewer} (${status.check})\n  acknowledged: ${
+    result.digests.length} attempt(s)\n  decision: ${decisionRef
+    }\n  next: request and dispatch the AI review again`);
+  return result;
+}
+
+export function lockedAuthorityOperation(withAuthorityLock, operation) {
+  return (id, flags = {}) => withAuthorityLock(
+    id, operation.bind(null, id, flags));
+}
+
+export function acceptanceResponseEvidence(context, request) {
+  const claimRows = context.expandList(request.packet?.claims);
+  const criteria = claimRows.map((claim) => claim.criterion).filter(Boolean);
+  const count = context.listCount(request.packet?.claims);
+  if (criteria.length && criteria.length < count)
+    criteria.push(`<${count - criteria.length} further criteria omitted from this preview; read the packet's claims>`);
+  return {
+    observed: "<what the responder actually saw, in their own words>",
+    artifact: [],
+    reference: ["<url or path the responder inspected>"],
+    acceptor: "<name of the person who decided>",
+    decision: "accept",
+    criterion: criteria.length ? criteria : ["<criterion the responder confirmed>"]
+  };
+}
+
+export function responseEvidenceBase() {
+  return {
+    observed: "<what the responder actually saw, in their own words>",
+    artifact: [],
+    reference: ["<url or path the responder inspected>"]
+  };
+}
+
+export function reviewerResponseEvidence(dispatched) {
+  const evidence = {
+    reviewer: dispatched?.identity || "<independent reviewer identity>",
+    "reviewer-type": dispatched?.type || "human|ai"
+  };
+  if (!dispatched || dispatched.type === "ai") {
+    evidence["reviewer-provider-family"] = dispatched?.providerFamily ||
+      "<AI provider family>";
+    evidence["reviewer-model-family"] = dispatched?.modelFamily ||
+      "<AI model family>";
+    evidence["reviewer-model"] = dispatched?.modelId || "<AI model id>";
+    evidence["reviewer-session"] = dispatched?.sessionId ||
+      "<AI review session>";
+  }
+  return evidence;
+}
+
+export function reviewSubjectResponseEvidence() {
+  return {
+    "subject-actor": "<who or what implemented the change>",
+    "subject-session": "<implementation session id, omit for a human implementer>",
+    "subject-provider-family":
+      "<implementation provider family, omit for a human implementer>",
+    "subject-model-family":
+      "<implementation model family, omit for a human implementer>",
+    "subject-model": "<implementation model id, omit for a human implementer>"
+  };
+}
+
+export function reviewFindingResponseEvidence(request) {
+  const evidence = {
+    "unresolved-blockers": 0,
+    "verified-findings": 0,
+    findings: [],
+    verifiedFindingIds: request.packet?.closureFindings?.ids || []
+  };
+  if (request.dispatch?.scope?.mode === "delta")
+    evidence["scope-path"] = request.dispatch.scope.paths;
+  return evidence;
+}
+
+export function reviewResponseEvidence(request) {
+  return {
+    ...responseEvidenceBase(),
+    ...reviewerResponseEvidence(request.dispatch?.reviewer || null),
+    ...reviewSubjectResponseEvidence(),
+    ...reviewFindingResponseEvidence(request)
+  };
+}
+
+export function authorityResponseTemplate(context, request) {
+  // Preserve the established eager claim expansion. The production compactor
+  // supports both arrays and previews, and callers may rely on malformed packet
+  // shapes failing before a review template is projected.
+  const acceptanceEvidence = acceptanceResponseEvidence(context, request);
+  return {
+    version: Number(context.protocolVersion),
+    requestId: request.requestId,
+    changeId: request.changeId,
+    type: request.type,
+    workspaceHash: request.workspaceHash,
+    status: "pass|fail|inconclusive|error",
+    evidence: request.type === "acceptance"
+      ? acceptanceEvidence : reviewResponseEvidence(request)
+  };
+}
+
+export function authorityPacketOperation(context, id, type) {
+  if (type === "review") return context.reviewPacketValue(id);
+  const state = context.loadRuntime(id);
+  const contract = context.evidence(id);
+  const acceptance = context.resolvedAcceptance(id, state, contract);
+  const reviewContext = context.reviewPacketValue(id);
+  const claims = contract.claims
+    .filter((claim) => acceptance.claimIds.includes(claim.id))
+    .map((claim) => ({
+      id: claim.id,
+      scenario: claim.scenario,
+      impact: claim.impact,
+      criterion: `Confirm the final result satisfies: ${claim.scenario}`
+    }));
+  return {
+    version: Number(context.protocolVersion),
+    packetType: "acceptance",
+    changeId: id,
+    workspaceHash: context.relevantHash(id),
+    reason: acceptance.reason,
+    intent: state.intent,
+    claims,
+    inspection: {
+      workspaces: reviewContext.changedSurface?.inspection || [],
+      changedSurface: reviewContext.changedSurface || null,
+      decisions: reviewContext.decisions || null,
+      automatedEvidence: reviewContext.evidence || []
+    },
+    response: {
+      statuses: ["pass", "fail", "inconclusive", "error"],
+      instructions: "Inspect the final workspace against every criterion. Pass only when all criteria are satisfied; otherwise reject, report uncertainty, or pause without a response.",
+      requiredForPass: [
+        "named human", "criterion observations", "durable artifact or reference"
+      ]
+    },
+    requiredActor: "human"
+  };
+}
+
+export function parseTelemetryEventLine(line) {
+  try { return JSON.parse(line); }
+  catch { return null; }
+}
+
+export function telemetryRowsForSession(text, sessionId) {
+  const normalizedSession = sessionId.toLowerCase();
+  return text.split(/\r?\n/).filter(Boolean)
+    .map(parseTelemetryEventLine)
+    .filter((row) => row && [row.sessionId, row.runId]
+      .some((value) => String(value || "").toLowerCase() === normalizedSession));
+}
+
+export function telemetryRowHasModel(candidate) {
+  return Boolean(candidate.modelId);
+}
+
+export function preferredSessionTelemetryRow(rows) {
+  return rows.filter(telemetryRowHasModel).at(-1) ||
+    rows.at(-1) || null;
+}
+
+export function telemetryProviderFamily(source) {
+  const normalized = String(source || "").toLowerCase();
+  if (normalized.includes("claude")) return "anthropic";
+  if (normalized.includes("codex") || normalized.includes("openai"))
+    return "openai";
+  return "";
+}
+
+export function telemetryProvenanceValue(row) {
+  if (!row) return {};
+  const modelId = String(row.modelId || "").trim();
+  return {
+    identity: String(row.agentId || "").trim(),
+    providerFamily: telemetryProviderFamily(row.source),
+    modelFamily: String(row.modelFamily || modelId).trim().toLowerCase(),
+    modelId
+  };
+}
+
+export function sessionTelemetryProvenanceOperation(context, id, sessionId) {
+  if (!sessionId) return {};
+  try {
+    const text = context.readFile(join(
+      context.root, ".foundation", "logs", id, "events.jsonl"), "utf8");
+    return telemetryProvenanceValue(preferredSessionTelemetryRow(
+      telemetryRowsForSession(text, sessionId)));
+  } catch { return {}; }
+}
+
+export function mainSessionEnvironment(environment) {
+  const claudeSession = String(
+    environment.FOUNDATION_CLAUDE_SESSION_ID || "").trim();
+  const codexSession = String(environment.CODEX_THREAD_ID || "").trim();
+  const genericSession = String(environment.FOUNDATION_SESSION_ID || "").trim();
+  const declaredMainSession = String(
+    environment.FOUNDATION_MAIN_SESSION_ID || "").trim();
+  return {
+    claudeSession,
+    codexSession,
+    ambientSession: claudeSession || genericSession || codexSession ||
+      declaredMainSession
+  };
+}
+
+export function bindMainSession(context, flags, environment) {
+  const requestedSession = String(
+    flags["main-session-id"] || environment.ambientSession).trim();
+  if (environment.ambientSession && requestedSession &&
+      environment.ambientSession !== requestedSession)
+    context.fail("main-session fallback session must match the calling host session");
+  return environment.ambientSession ? requestedSession : "";
+}
+
+export function inferredMainSession(environment) {
+  if (environment.claudeSession &&
+      environment.ambientSession === environment.claudeSession)
+    return { providerFamily: "anthropic", identity: "claude-main-session" };
+  if (environment.codexSession &&
+      environment.ambientSession === environment.codexSession)
+    return { providerFamily: "openai", identity: "codex-main-session" };
+  return { providerFamily: "", identity: "" };
+}
+
+export function firstMainSessionValue(values, lowercase = false) {
+  const value = String(values.find(Boolean) || "").trim();
+  return lowercase ? value.toLowerCase() : value;
+}
+
+export function mainSessionFallbackValue(
+  inheritsSubject, subjectValue, telemetryValue, inferredValue = ""
+) {
+  return inheritsSubject
+    ? subjectValue : firstMainSessionValue([telemetryValue, inferredValue]);
+}
+
+export function mainSessionProvenanceValue(
+  flags, subject, environmentVariables, session, telemetry
+) {
+  const inheritsSubject = subject.sessionId && session.boundSession &&
+    String(subject.sessionId).toLowerCase() === session.boundSession.toLowerCase();
+  const inferred = inferredMainSession(session.environment);
+  const value = {
+    identity: firstMainSessionValue([
+      flags["main-session-identity"],
+      environmentVariables.FOUNDATION_MAIN_IDENTITY,
+      mainSessionFallbackValue(
+        inheritsSubject, subject.identity, telemetry.identity, inferred.identity)
+    ]),
+    sessionId: session.boundSession || null,
+    providerFamily: firstMainSessionValue([
+      flags["main-session-provider-family"],
+      environmentVariables.FOUNDATION_MAIN_PROVIDER_FAMILY,
+      mainSessionFallbackValue(inheritsSubject, subject.providerFamily,
+        telemetry.providerFamily, inferred.providerFamily)
+    ], true),
+    modelFamily: firstMainSessionValue([
+      flags["main-session-model-family"],
+      environmentVariables.FOUNDATION_MAIN_MODEL_FAMILY,
+      mainSessionFallbackValue(
+        inheritsSubject, subject.modelFamily, telemetry.modelFamily)
+    ], true),
+    modelId: firstMainSessionValue([
+      flags["main-session-model"],
+      environmentVariables.FOUNDATION_MODEL_ID,
+      mainSessionFallbackValue(
+        inheritsSubject, subject.modelId, telemetry.modelId)
+    ])
+  };
+  const missing = Object.entries(value)
+    .filter(([, fieldValue]) => !fieldValue).map(([name]) => name);
+  return { ...value, missing };
+}
 
 export function createAuthorityRuntime({
   root,
@@ -47,6 +548,7 @@ export function createAuthorityRuntime({
   reviewerStatus,
   runConfiguredReview,
   acknowledgeInfrastructureAttempts,
+  acknowledgeBaseMoveAttempts,
   writeJson,
   fail
 }) {
@@ -76,38 +578,10 @@ export function createAuthorityRuntime({
     return providerWorkspaceHash(id, provider);
   }
 
-  function authorityPacket(id, type) {
-    if (type === "review") return reviewPacketValue(id);
-    const state = loadRuntime(id);
-    const contract = evidence(id);
-    const acceptance = resolvedAcceptance(id, state, contract);
-    const context = reviewPacketValue(id);
-    const claims = contract.claims.filter((claim) => acceptance.claimIds.includes(claim.id))
-      .map((claim) => ({
-        id: claim.id,
-        scenario: claim.scenario,
-        impact: claim.impact,
-        criterion: `Confirm the final result satisfies: ${claim.scenario}`
-      }));
-    return {
-      version: Number(protocolVersion), packetType: "acceptance", changeId: id,
-      workspaceHash: relevantHash(id), reason: acceptance.reason,
-      intent: state.intent,
-      claims,
-      inspection: {
-        workspaces: context.changedSurface?.inspection || [],
-        changedSurface: context.changedSurface || null,
-        decisions: context.decisions || null,
-        automatedEvidence: context.evidence || []
-      },
-      response: {
-        statuses: ["pass", "fail", "inconclusive", "error"],
-        instructions: "Inspect the final workspace against every criterion. Pass only when all criteria are satisfied; otherwise reject, report uncertainty, or pause without a response.",
-        requiredForPass: ["named human", "criterion observations", "durable artifact or reference"]
-      },
-      requiredActor: "human"
-    };
-  }
+  const authorityPacket = authorityPacketOperation.bind(null, {
+    protocolVersion, reviewPacketValue, loadRuntime, evidence,
+    resolvedAcceptance, relevantHash
+  });
 
   function canonicalPacketDigest(packet) {
     const canonical = JSON.parse(JSON.stringify(packet || {}));
@@ -137,52 +611,32 @@ export function createAuthorityRuntime({
     return latest;
   }
 
-  function requestAuthorityUnlocked(id, flags = {}, options = {}) {
-    const type = String(flags.type || "");
-    if (!["review", "acceptance"].includes(type))
-      fail("authority request --type must be review|acceptance");
-    validate(id, "active", { quiet: true });
-    const pending = pendingTasks(id);
-    if (pending.length)
-      fail(`authority request requires completed implementation tasks: ${pending.map((task) => task.id).join(", ")}`);
-    const repository = String(flags.repo || "").trim() || null;
-    const provider = authorityProvider(id, type, repository);
-    if (!provider || !requiredProviders(id).includes(provider))
-      fail(repository
-        ? `change '${id}' has no ${type} provider scoped to repository '${repository}'`
-        : `change '${id}' does not require ${type} authority`);
-    const workspaceHash = authorityWorkspaceHash(id, provider);
-    const existing = authorityStore.list(id).find((entry) =>
-      entry.value.type === type && entry.value.provider === provider &&
-      entry.value.workspaceHash === workspaceHash &&
-      ["requested", "dispatched", "pending"].includes(entry.value.status));
-    if (existing) {
-      if (!options.quiet) console.log(JSON.stringify(existing.value, null, 2));
-      return existing.value;
-    }
-    const packet = authorityPacket(id, type);
-    const requestId = `${type}-${Date.now()}-${randomBytes(8).toString("hex")}`;
-    const request = {
-      version: Number(protocolVersion), requestId, changeId: id, type, provider,
-      status: "requested", workspaceHash, claimIds: claimsForProvider(id, provider).map((claim) => claim.id),
-      packet, packetDigest: canonicalPacketDigest(packet), requestedAt: now(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      reviewCircuit: type === "review"
-        ? foundationPolicy().workflow.reviewCircuit : null,
-      requirements: type === "review" ? reviewPolicy(id) : {
-        actor: "human", acceptance: resolvedAcceptance(id)
-      }
-    };
-    authorityStore.writeRequest(id, request);
-    if (!options.quiet) console.log(JSON.stringify(request, null, 2));
-    return request;
-  }
+  const requestAuthorityUnlocked = requestAuthorityOperation.bind(null, {
+    validate,
+    pendingTasks,
+    authorityProvider,
+    requiredProviders,
+    authorityWorkspaceHash,
+    authorityStore,
+    authorityPacket,
+    claimsForProvider,
+    canonicalPacketDigest,
+    protocolVersion,
+    timestamp: Date.now,
+    randomHex: randomAuthorityRequestHex,
+    now,
+    policy: foundationPolicy,
+    reviewPolicy,
+    resolvedAcceptance,
+    displayValue: authorityRequestDisplayValue,
+    output: console
+  });
 
   function requestAuthority(id, flags = {}, options = {}) {
     return withAuthorityLock(id, () => requestAuthorityUnlocked(id, flags, options));
   }
 
-  function dispatchAuthorityUnlocked(id, flags = {}) {
+  function dispatchRequestContext(id, flags) {
     const requestId = String(flags.request || "");
     if (!requestId) fail("authority dispatch requires --request <id>");
     const entry = authorityStore.list(id)
@@ -191,7 +645,7 @@ export function createAuthorityRuntime({
     const request = entry.value;
     if (request.status === "dispatched") {
       console.log(JSON.stringify(request, null, 2));
-      return request;
+      return { handled: true, value: request };
     }
     if (request.type !== "review")
       fail("authority dispatch currently reserves review authority only");
@@ -208,15 +662,29 @@ export function createAuthorityRuntime({
     const reviewerType = String(flags["reviewer-type"] || "").toLowerCase();
     if (!["ai", "human"].includes(reviewerType))
       fail("authority dispatch requires --reviewer-type ai|human");
+    return { handled: false, entry, request, requestId, reviewerType };
+  }
+
+  function dispatchAuthorityUnlocked(id, flags = {}) {
+    const context = dispatchRequestContext(id, flags);
+    if (context.handled) return context.value;
+    const { entry, request, requestId, reviewerType } = context;
+    function dispatchRouting() {
     const routing = reviewPolicy(id);
     const historySnapshot = reviewHistoryState(id);
     const deliveredSnapshot = deliveredAiAttempts(id, historySnapshot);
-    const promotesLow = routing.tier === "low" && deliveredSnapshot.length >= 1 &&
-      request.workspaceHash !== deliveredSnapshot.at(-1).workspaceHash;
-    const maxAiAttempts = promotesLow ? 2 : Number(routing.maxAiAttempts || 2);
+    const { promotesLow, maxAiAttempts } = effectiveReviewAttemptLimit(
+      routing, deliveredSnapshot, request.workspaceHash);
+    const reviewSettings = foundationPolicy().review || {};
+    const configuredFallbacks = (Array.isArray(reviewSettings.fallbackReviewers)
+      ? reviewSettings.fallbackReviewers
+      : reviewSettings.fallbackReviewer ? [reviewSettings.fallbackReviewer] : [])
+      .filter((name) => name !== "main-session");
+    const maxInfrastructureRetries = Math.max(1,
+      (1 + configuredFallbacks.length) * Number(reviewSettings.infraFailureThreshold || 1));
     // The route-aware cap still wins over malformed scope/base details.
     const history = assertReviewDispatchAllowed(
-      id, reviewerType, maxAiAttempts);
+      id, reviewerType, maxAiAttempts, maxInfrastructureRetries);
     const deliveredAi = deliveredAiAttempts(id, history);
     if (unrecordedDeliveredAiResponse(id, history, request.provider))
       fail("a completed AI response has no matching recorded receipt; repair that authority record or pause instead of dispatching another reviewer");
@@ -230,6 +698,11 @@ export function createAuthorityRuntime({
         promotionReason: "post-review-correction"
       };
     }
+    return { routing, deliveredAi, maxAiAttempts, maxInfrastructureRetries };
+    }
+    const { routing, deliveredAi, maxAiAttempts,
+      maxInfrastructureRetries } = dispatchRouting();
+    function dispatchReviewer() {
     const reviewerIdentity = String(flags["reviewer-identity"] || "").trim();
     if (!reviewerIdentity)
       fail("authority dispatch requires --reviewer-identity");
@@ -244,6 +717,7 @@ export function createAuthorityRuntime({
       fail("AI dispatch requires reviewer provider/model family and model ID");
     if (reviewerType === "ai" && !reviewerSessionId && !sessionDeferred)
       fail("AI dispatch requires reviewer session unless a configured reviewer defers it to the actual thread.started event");
+    function validateDispatchReviewerRoute() {
     if (reviewerType === "ai" && deliveredAi.length > 0) {
       const priorAi = deliveredAi.at(-1);
       if (priorAi?.reviewerType === "ai" &&
@@ -252,6 +726,14 @@ export function createAuthorityRuntime({
     }
     if (reviewerType === "ai" && providerConfig(id, request.provider)?.repository)
       fail("AI full-delta review requires one composite unscoped review provider; reconfigure the provider or split the change");
+    }
+    validateDispatchReviewerRoute();
+    return { reviewerIdentity, reviewerProviderFamily, reviewerModelFamily,
+      reviewerModelId, reviewerSessionId, sessionDeferred };
+    }
+    const { reviewerIdentity, reviewerProviderFamily, reviewerModelFamily,
+      reviewerModelId, reviewerSessionId, sessionDeferred } = dispatchReviewer();
+    function dispatchScope() {
     const scopeMode = String(flags.scope || "").toLowerCase();
     if (!["full", "delta"].includes(scopeMode))
       fail("authority dispatch requires --scope full|delta");
@@ -261,6 +743,7 @@ export function createAuthorityRuntime({
     let scopeRows = currentManifest;
     let baseWorkspaceHash = null;
     let baseAttempt = null;
+    function resolveDeltaScope() {
     if (scopeMode === "delta") {
       baseAttempt = reviewAttemptByDigest(id, baseAttemptDigest);
       if (!baseAttempt || baseAttempt.reviewerType !== "ai")
@@ -279,16 +762,25 @@ export function createAuthorityRuntime({
       const currentRows = new Map(currentManifest.map((row) => [
         `${row.repositoryId}/${row.path}`, row
       ]));
-      scopeRows = currentManifest.filter((row) =>
-        baseRows.get(`${row.repositoryId}/${row.path}`)?.identity !== row.identity);
-      for (const [key, row] of baseRows)
-        if (!currentRows.has(key)) scopeRows.push({ ...row, identity: "reverted-to-base" });
+      const projected = request.packet.reviewScope?.mode === "delta" &&
+        request.packet.reviewScope.baseAttemptDigest === baseAttemptDigest &&
+        request.packet.changedSurface?.deltaFrom?.attemptDigest === baseAttemptDigest;
+      // A retry already carries a projected delta. Missing base rows there are
+      // unchanged files, not evidence of a revert in the current workspace.
+      if (!projected) {
+        scopeRows = currentManifest.filter((row) =>
+          baseRows.get(`${row.repositoryId}/${row.path}`)?.identity !== row.identity);
+        for (const [key, row] of baseRows)
+          if (!currentRows.has(key)) scopeRows.push({ ...row, identity: "reverted-to-base" });
+      }
       scopeRows.sort((left, right) =>
         `${left.repositoryId}/${left.path}`.localeCompare(`${right.repositoryId}/${right.path}`));
       if (scopeRows.length === 0)
         fail("AI delta review has no files changed since the first AI dispatch; do not spend the second review round");
       baseWorkspaceHash = baseAttempt.workspaceHash;
     }
+    }
+    resolveDeltaScope();
     const scopePaths = scopeRows.map((row) => `${row.repositoryId}/${row.path}`);
     const scopeDigest = stableHash({
       mode: scopeMode,
@@ -297,6 +789,12 @@ export function createAuthorityRuntime({
       workspaceHash: request.workspaceHash,
       rows: scopeRows
     });
+    return { scopeMode, baseAttemptDigest, baseWorkspaceHash, baseAttempt,
+      scopeRows, scopePaths, scopeDigest };
+    }
+    const { scopeMode, baseAttemptDigest, baseWorkspaceHash, baseAttempt,
+      scopeRows, scopePaths, scopeDigest } = dispatchScope();
+    function dispatchPacket() {
     const packet = JSON.parse(JSON.stringify(request.packet));
     packet.reviewScope = {
       mode: scopeMode,
@@ -306,6 +804,7 @@ export function createAuthorityRuntime({
       paths: scopePaths,
       digest: scopeDigest
     };
+    function applyHighRiskHumanClosure() {
     if (routing.tier === "high" && reviewerType === "human" && deliveredAi.length) {
       const baseAttempt = deliveredAi.at(-1);
       const closureFindings = (baseAttempt.findings || []).filter((finding) =>
@@ -316,7 +815,11 @@ export function createAuthorityRuntime({
         findings: closureFindings
       };
     }
+    }
+    applyHighRiskHumanClosure();
+    function applyDeltaPacket() {
     if (scopeMode === "delta") {
+      function deltaInspection() {
       const fullInspection = new Map((request.packet?.changedSurface?.inspection || [])
         .map((entry) => [entry.repositoryId, entry]));
       const inspection = [...scopeRows.reduce((groups, row) => {
@@ -330,6 +833,14 @@ export function createAuthorityRuntime({
         groups.get(key).paths.push(row.relativePath || row.path);
         return groups;
       }, new Map()).values()];
+      // Contract aliases need the control workspace even when no root product
+      // file changed. Keep its location without granting additional paths.
+      const control = fullInspection.get("root");
+      if (control && !inspection.some((entry) => entry.repositoryId === "root"))
+        inspection.push({ ...control, paths: [], pathCount: 0, truncated: false });
+      return inspection;
+      }
+      const inspection = deltaInspection();
       packet.changedSurface = {
         paths: scopePaths,
         digest: stableHash(scopePaths),
@@ -348,27 +859,47 @@ export function createAuthorityRuntime({
         ids: closureFindings.map((finding) => finding.id).sort(),
         findings: closureFindings
       };
+      function applyDeltaContractProjection() {
       const changedContractNames = new Set(scopeRows
         .filter((row) => row.kind === "contract-artifact")
         .map((row) => row.relativePath));
-      packet.contractArtifacts = Object.fromEntries(Object.entries(
-        request.packet?.contractArtifacts || {}).filter(([name]) =>
-        changedContractNames.has(name)));
-      packet.decisions = Object.fromEntries(Object.entries(
-        request.packet?.decisions || {}).filter(([, artifact]) =>
-        artifact && changedContractNames.has(artifact.relativePath)));
+      function artifactName(name) { return name; }
+      function artifactRelativePath(_name, artifact) {
+        return artifact?.relativePath || null;
+      }
+      function selectedDeltaArtifacts(artifacts, pathFor) {
+        return Object.fromEntries(Object.entries(artifacts).filter(([name, artifact]) =>
+          [...changedContractNames].some((path) => path === pathFor(name, artifact) ||
+            path.startsWith(`${pathFor(name, artifact)}/`))));
+      }
+      function artifactCollection(value) {
+        return value && typeof value === "object" ? value : {};
+      }
+      packet.contractArtifacts = selectedDeltaArtifacts(
+        artifactCollection(request.packet?.contractArtifacts), artifactName);
+      packet.decisions = selectedDeltaArtifacts(
+        artifactCollection(request.packet?.decisions), artifactRelativePath);
+      packet.references = selectedDeltaArtifacts(
+        artifactCollection(request.packet?.references), artifactRelativePath);
+      function applyDeltaGroundingAndClaims() {
       packet.grounding = changedContractNames.has("grounding.yaml")
         ? request.packet.grounding : null;
-      packet.references = Object.fromEntries(Object.entries(
-        request.packet?.references || {}).filter(([, artifact]) =>
-        artifact && changedContractNames.has(artifact.relativePath)));
       if (!changedContractNames.has("evidence.yaml")) packet.claims = {
         reuseFromAttempt: baseAttemptDigest,
         digest: stableHash(request.packet?.claims || [])
       };
+      }
+      applyDeltaGroundingAndClaims();
+      }
+      applyDeltaContractProjection();
     }
+    }
+    applyDeltaPacket();
     delete packet.packetDigest;
     packet.packetDigest = canonicalPacketDigest(packet);
+    return packet;
+    }
+    const packet = dispatchPacket();
     const attempt = dispatchReviewAttempt(id, {
       requestId,
       workspaceHash: request.workspaceHash,
@@ -386,7 +917,8 @@ export function createAuthorityRuntime({
         digest: scopeDigest
       },
       packetDigest: packet.packetDigest,
-      maxAiAttempts
+      maxAiAttempts,
+      maxInfrastructureRetries
     });
     const updated = {
       ...request,
@@ -417,116 +949,25 @@ export function createAuthorityRuntime({
     return withAuthorityLock(id, () => dispatchAuthorityUnlocked(id, flags));
   }
 
-  function abortAuthorityUnlocked(id, flags = {}) {
-    const requestId = String(flags.request || "");
-    const reason = String(flags.reason || "").trim();
-    if (!requestId || !reason)
-      fail("authority abort requires --request <id> --reason <text>");
-    const entry = authorityStore.list(id)
-      .find((row) => row.value.requestId === requestId);
-    if (!entry) fail(`unknown authority request '${requestId}'`);
-    const request = entry.value;
-    const dispatchedAttempt = request.dispatch?.attemptDigest
-      ? reviewAttemptByDigest(id, request.dispatch.attemptDigest) : null;
-    const attemptIsCurrent = dispatchedAttempt?.status === "dispatched" &&
-      reviewHistoryState(id, loadRuntime(id)).chainHead === dispatchedAttempt.digest;
-    if (attemptIsCurrent) {
-      completeReviewAttempt(id, dispatchedAttempt.digest, {
-        reviewerSessionId: dispatchedAttempt.reviewerSessionId || "",
-        resultStatus: "error",
-        findings: [],
-        verifiedFindingIds: []
-      });
-    }
-    if (request.status === "aborted" && attemptIsCurrent) {
-      console.log(JSON.stringify(request, null, 2));
-      return request;
-    }
-    if (!["requested", "dispatched"].includes(request.status))
-      fail(`authority request '${requestId}' is ${request.status}`);
-    const updated = {
-      ...request,
-      status: request.status === "dispatched" ? "aborted" : "cancelled",
-      abortedAt: now(),
-      abortReason: reason
-    };
-    authorityStore.replace(entry, updated);
-    console.log(JSON.stringify(updated, null, 2));
-    return updated;
-  }
+  const abortAuthorityUnlocked = abortAuthorityOperation.bind(null, {
+    authorityStore, reviewAttemptByDigest, reviewHistoryState, loadRuntime,
+    completeReviewAttempt, now, fail, output: console
+  });
 
   function abortAuthority(id, flags = {}) {
     return withAuthorityLock(id, () => abortAuthorityUnlocked(id, flags));
   }
 
-  function sessionTelemetryProvenance(id, sessionId) {
-    if (!sessionId) return {};
-    try {
-      const rows = readFileSync(join(root, ".foundation", "logs", id,
-        "events.jsonl"), "utf8").split(/\r?\n/).filter(Boolean)
-        .map((line) => {
-          try { return JSON.parse(line); } catch { return null; }
-        }).filter((row) => row && [row.sessionId, row.runId]
-          .some((value) => String(value || "").toLowerCase() ===
-            sessionId.toLowerCase()));
-      const row = rows.filter((candidate) => candidate.modelId).at(-1) ||
-        rows.at(-1) || null;
-      if (!row) return {};
-      const source = String(row.source || "").toLowerCase();
-      const modelId = String(row.modelId || "").trim();
-      const providerFamily = source.includes("claude") ? "anthropic"
-        : source.includes("codex") || source.includes("openai") ? "openai" : "";
-      return {
-        identity: String(row.agentId || "").trim(),
-        providerFamily,
-        // Telemetry does not currently expose a separate family field. The
-        // exact model ID is a conservative singleton family: it never claims
-        // diversity between two observations of the same model.
-        modelFamily: String(row.modelFamily || modelId).trim().toLowerCase(),
-        modelId
-      };
-    } catch { return {}; }
-  }
+  const sessionTelemetryProvenance = sessionTelemetryProvenanceOperation.bind(
+    null, { root, readFile: readFileSync });
 
   function mainSessionProvenance(id, flags, subject = {}) {
-    const claudeSession = String(process.env.FOUNDATION_CLAUDE_SESSION_ID || "").trim();
-    const codexSession = String(process.env.CODEX_THREAD_ID || "").trim();
-    const genericSession = String(process.env.FOUNDATION_SESSION_ID || "").trim();
-    const declaredMainSession = String(
-      process.env.FOUNDATION_MAIN_SESSION_ID || "").trim();
-    const ambientSession = claudeSession || genericSession || codexSession ||
-      declaredMainSession;
-    const requestedSession = String(flags["main-session-id"] || ambientSession).trim();
-    if (ambientSession && requestedSession && ambientSession !== requestedSession)
-      fail("main-session fallback session must match the calling host session");
-    const boundSession = ambientSession ? requestedSession : "";
-    const inheritsSubject = subject.sessionId && boundSession &&
-      String(subject.sessionId).toLowerCase() === boundSession.toLowerCase();
+    const environment = mainSessionEnvironment(process.env);
+    const boundSession = bindMainSession({ fail }, flags, environment);
     const telemetry = sessionTelemetryProvenance(id, boundSession);
-    const inferredProvider = claudeSession && ambientSession === claudeSession
-      ? "anthropic" : codexSession && ambientSession === codexSession ? "openai" : "";
-    const inferredIdentity = claudeSession && ambientSession === claudeSession
-      ? "claude-main-session"
-      : codexSession && ambientSession === codexSession ? "codex-main-session" : "";
-    const value = {
-      identity: String(flags["main-session-identity"] ||
-        process.env.FOUNDATION_MAIN_IDENTITY ||
-        (inheritsSubject ? subject.identity : telemetry.identity || inferredIdentity) || "").trim(),
-      sessionId: boundSession || null,
-      providerFamily: String(flags["main-session-provider-family"] ||
-        process.env.FOUNDATION_MAIN_PROVIDER_FAMILY ||
-        (inheritsSubject ? subject.providerFamily : telemetry.providerFamily ||
-          inferredProvider) || "").trim().toLowerCase(),
-      modelFamily: String(flags["main-session-model-family"] ||
-        process.env.FOUNDATION_MAIN_MODEL_FAMILY ||
-        (inheritsSubject ? subject.modelFamily : telemetry.modelFamily) || "").trim().toLowerCase(),
-      modelId: String(flags["main-session-model"] ||
-        process.env.FOUNDATION_MODEL_ID ||
-        (inheritsSubject ? subject.modelId : telemetry.modelId) || "").trim()
-    };
-    const missing = Object.entries(value)
-      .filter(([, fieldValue]) => !fieldValue).map(([name]) => name);
-    return { ...value, missing };
+    return mainSessionProvenanceValue(flags, subject, process.env, {
+      environment, boundSession
+    }, telemetry);
   }
 
   function mainSessionHandback(id, requestId, configuredIdentity,
@@ -559,11 +1000,77 @@ export function createAuthorityRuntime({
     };
   }
 
-  function runAuthorityReviewerUnlocked(id, flags = {}) {
+  function configuredReviewerRoute(settings, request, explicitReviewer = null,
+    automaticReviewer = null) {
+    if (explicitReviewer) return explicitReviewer;
+    if (automaticReviewer) return automaticReviewer;
+    const threshold = Number(settings.infraFailureThreshold || 1);
+    const fallbacks = Array.isArray(settings.fallbackReviewers)
+      ? settings.fallbackReviewers
+      : settings.fallbackReviewer ? [settings.fallbackReviewer] : [];
+    const configured = [settings.defaultReviewer,
+      ...fallbacks.filter((name) => name !== "main-session")].filter(Boolean);
+    const attempts = request.fallbackAttempts || [];
+    for (const reviewer of configured) {
+      const failures = attempts.filter((attempt) =>
+        attempt.reviewer === reviewer && !attempt.bindingRecoveredAt).length;
+      if (failures < threshold) return reviewer;
+    }
+    return fallbacks.includes("main-session") ? "main-session" : null;
+  }
+
+  function recoverReviewBindingsUnlocked(id, requestId = null) {
+    let recovered = false;
+    for (const entry of authorityStore.list(id)) {
+      const request = entry.value;
+      if (requestId && request.requestId !== requestId) continue;
+      if (request.type !== "review" || request.status !== "infrastructure-exhausted" ||
+          !["packet", "result"].includes(request.bindingFailure) ||
+          request.workspaceHash !== authorityWorkspaceHash(id, request.provider)) continue;
+      const failure = request.fallbackAttempts?.at(-1);
+      if (!failure?.reportReference) continue;
+      const failedAttempt = reviewAttemptByDigest(id, failure.attemptDigest);
+      if (canonicalPacketDigest(request.packet) !== request.packetDigest ||
+          failedAttempt?.packetDigest !== request.packetDigest ||
+          failedAttempt.status !== "completed" || failedAttempt.resultStatus !== "error") continue;
+      const report = readJson(resolve(root, failure.reportReference), null);
+      if (report?.status !== "error" || report.changeId !== id) continue;
+      const packet = structuredClone(request.packet);
+      if (!Array.isArray(packet?.reviewScope?.paths)) continue;
+      // Restore location metadata lost by old delta projection, never scope.
+      const inspection = packet.changedSurface?.inspection;
+      if (Array.isArray(inspection) && !inspection.some((row) => row.repositoryId === "root")) {
+        const control = reviewPacketValue(id).changedSurface?.inspection
+          ?.find((row) => row.repositoryId === "root");
+        if (control) inspection.push({ ...control, paths: [], pathCount: 0, truncated: false });
+      }
+      if (reviewPacketIssues(packet).length || request.bindingFailure === "result" &&
+          (!validReview({ ...report, status: "pass" }) || reviewFindingIssues(report, packet).length)) continue;
+      if (!reviewerStatus(failure.reviewer).ok) continue;
+      const at = now();
+      delete packet.packetDigest;
+      packet.packetDigest = canonicalPacketDigest(packet);
+      const { bindingFailure: _bindingFailure, ...rest } = request;
+      authorityStore.replace(entry, {
+        ...rest, status: "requested", packet, packetDigest: packet.packetDigest,
+        bindingRecoveredAt: at,
+        fallbackAttempts: request.fallbackAttempts.map((row) =>
+          row === failure ? { ...row, bindingRecoveredAt: at } : row)
+      });
+      // The immutable attempt and its infrastructure budget remain consumed.
+      // Only the repaired binding's reviewer-routing failure is released.
+      recovered = true;
+    }
+    return recovered;
+  }
+
+  function recoverReviewBindings(id) {
+    return withAuthorityLock(id, () => recoverReviewBindingsUnlocked(id));
+  }
+
+  function authorityRunSubject(flags) {
     const requestId = String(flags.request || "");
     if (!requestId) fail("authority run requires --request <id>");
-    const reviewerName = String(flags.reviewer || "").trim() ||
-      foundationPolicy().review.defaultReviewer;
     const subjectActor = String(flags["subject-actor"] || "").trim();
     if (!subjectActor) fail("authority run requires --subject-actor");
     const subjectSession = String(flags["subject-session"] || "").trim() || null;
@@ -575,23 +1082,65 @@ export function createAuthorityRuntime({
     if (aiSubject && [subjectSession, subjectProvider, subjectFamily, subjectModel]
       .some((value) => !value))
       fail("AI implementation provenance requires subject session, provider family, model family, and model");
-    const reviewSettings = foundationPolicy().review || {};
-    if (!reviewerName)
-      fail("authority run requires --reviewer or review.defaultReviewer");
-    const configured = reviewerConfig(reviewerName);
+    return { requestId, subjectActor, subjectSession, subjectProvider,
+      subjectFamily, subjectModel, aiSubject };
+  }
+
+  function authorityReviewerConfiguration(reviewerName, request) {
+    if (reviewerName !== "main-session") return reviewerConfig(reviewerName);
+    return {
+      identity: request.fallbackAttempts?.at(-1)?.reviewer || "configured-reviewer",
+      providerFamily: "",
+      modelFamily: ""
+    };
+  }
+
+  function assertAuthorityReviewerSeparation(reviewerName, configured, reviewSettings, subject) {
     const configuredProvider = String(configured.providerFamily).toLowerCase();
     const configuredFamily = String(configured.modelFamily).toLowerCase();
-    const sameFamily = aiSubject && subjectProvider === configuredProvider &&
-      subjectFamily === configuredFamily;
+    const sameFamily = subject.aiSubject && subject.subjectProvider === configuredProvider &&
+      subject.subjectFamily === configuredFamily;
     if (sameFamily && reviewSettings.diversity !== "single-model")
       fail(`configured reviewer '${reviewerName}' shares the implementation provider/model family; choose a diverse configured reviewer or commit review.diversity='single-model' before Build`);
-    if (aiSubject && reviewSettings.independence !== "self" &&
-        subjectActor.toLowerCase() === configured.identity.toLowerCase())
+    if (subject.aiSubject && reviewSettings.independence !== "self" &&
+        subject.subjectActor.toLowerCase() === configured.identity.toLowerCase())
       fail(`configured reviewer '${reviewerName}' shares the implementation identity; use a distinct reviewer identity/session or commit review.independence='self' before Build`);
+  }
+
+  function authorityRunReviewer(id, flags, subject) {
+    const { requestId } = subject;
+    const reviewSettings = foundationPolicy().review || {};
     const requestEntry = authorityStore.list(id)
       .find((row) => row.value.requestId === requestId);
     if (!requestEntry) fail(`unknown authority request '${requestId}'`);
-    if (requestEntry.value.mainSessionFallback) {
+    if (requestEntry.value.status === "infrastructure-exhausted" &&
+        recoverReviewBindingsUnlocked(id, requestId))
+      requestEntry.value = authorityStore.list(id)
+        .find((row) => row.value.requestId === requestId).value;
+    if (requestEntry.value.status === "infrastructure-exhausted")
+      fail("configured reviewer infrastructure retries are exhausted for this request");
+    const reviewerName = configuredReviewerRoute(reviewSettings, requestEntry.value,
+      String(flags.reviewer || "").trim() || null,
+      String(flags["automatic-reviewer"] || "").trim() || null);
+    if (!reviewerName)
+      fail("configured reviewer infrastructure retries are exhausted; configure a fallback reviewer or pause");
+    if (reviewerName === "main-session" && !requestEntry.value.mainSessionFallback)
+      fail("main-session fallback was selected without a recorded configured reviewer failure");
+    const configured = authorityReviewerConfiguration(reviewerName, requestEntry.value);
+    assertAuthorityReviewerSeparation(reviewerName, configured, reviewSettings, subject);
+    return { reviewSettings, requestEntry, reviewerName, configured };
+  }
+
+  function runAuthorityReviewerUnlocked(id, flags = {}) {
+    const subject = authorityRunSubject(flags);
+    const { requestId, subjectActor, subjectSession, subjectProvider,
+      subjectFamily, subjectModel, aiSubject } = subject;
+    const reviewer = authorityRunReviewer(id, flags, subject);
+    const { reviewSettings, reviewerName, configured } = reviewer;
+    let { requestEntry } = reviewer;
+    function resumeMainSessionFallback() {
+      if (!requestEntry.value.mainSessionFallback)
+        return { handled: false, value: null };
       const fallback = requestEntry.value.mainSessionFallback;
       if (fallback.status !== "provenance-unavailable")
         fail(`configured reviewer already failed; complete the reserved main-session fallback with authority status/record instead of rerunning authority run`);
@@ -610,7 +1159,7 @@ export function createAuthorityRuntime({
           action: "Expose the calling host session/model provenance and rerun authority run with --main-session-* fields; the failed reviewer will not run again."
         };
         console.log(JSON.stringify(blocked, null, 2));
-        return blocked;
+        return { handled: true, value: blocked };
       }
       const resumed = dispatchAuthorityUnlocked(id, {
         request: requestId,
@@ -647,10 +1196,50 @@ export function createAuthorityRuntime({
           "configured reviewer infrastructure failed",
         mainSession, resumed, storedSubject);
       console.log(JSON.stringify(handback, null, 2));
-      return handback;
+      return { handled: true, value: handback };
     }
-    if (requestEntry.value.status === "dispatched")
-      fail(`configured review dispatch '${requestId}' is indeterminate; do not rerun it automatically. Abort it with a reason, then request the next bounded route or pause`);
+    const resumedFallback = resumeMainSessionFallback();
+    if (resumedFallback.handled) return resumedFallback.value;
+    function recoverOrphanedController(entry) {
+      if (entry.value.status !== "dispatched") return entry;
+      requestEntry = entry;
+      const controller = requestEntry.value.configuredController;
+      if (!controller)
+        fail(`configured review dispatch '${requestId}' is indeterminate; do not rerun it automatically. Abort it with a reason, then request the next bounded route or pause`);
+      if (isProcessAlive(Number(controller.pid)))
+        fail(`configured review dispatch '${requestId}' is still running in controller PID ${controller.pid}`);
+      const attemptDigest = requestEntry.value.dispatch?.attemptDigest;
+      const attempt = attemptDigest ? reviewAttemptByDigest(id, attemptDigest) : null;
+      if (attempt?.status === "dispatched")
+        completeReviewAttempt(id, attemptDigest, {
+          reviewerSessionId: "",
+          resultStatus: "error",
+          findings: [],
+          verifiedFindingIds: []
+        });
+      const currentEntry = authorityStore.list(id)
+        .find((row) => row.value.requestId === requestId);
+      const {
+        dispatch: _orphanedDispatch,
+        configuredController: _orphanedController,
+        ...reopenable
+      } = currentEntry.value;
+      authorityStore.replace(currentEntry, {
+        ...reopenable,
+        status: "requested",
+        orphanedControllers: [
+          ...(currentEntry.value.orphanedControllers || []),
+          {
+            ...controller,
+            recoveredAt: now(),
+            result: "infrastructure-error"
+          }
+        ]
+      });
+      return authorityStore.list(id)
+        .find((row) => row.value.requestId === requestId);
+    }
+    requestEntry = recoverOrphanedController(requestEntry);
     const state = loadRuntime(id);
     const history = state.reviewHistory || {
       aiAttempts: 0, totalAttempts: 0, chainHead: null
@@ -674,6 +1263,17 @@ export function createAuthorityRuntime({
       "reviewer-model": configured.modelId,
       "reviewer-session-deferred": true
     });
+    const controllerEntry = authorityStore.list(id)
+      .find((row) => row.value.requestId === requestId);
+    authorityStore.replace(controllerEntry, {
+      ...controllerEntry.value,
+      configuredController: {
+        version: 1,
+        pid: process.pid,
+        reviewer: configured.identity,
+        startedAt: now()
+      }
+    });
     const report = runConfiguredReview({
       changeId: id,
       reviewer: reviewerName,
@@ -684,8 +1284,8 @@ export function createAuthorityRuntime({
         ...(scope === "delta" ? [deliveredAi.at(-1)?.reviewerSessionId] : [])
       ].filter(Boolean)
     });
-    if (report.status === "error" &&
-        reviewSettings.fallbackReviewer === "main-session") {
+    function handleConfiguredInfrastructureError() {
+      if (report.status !== "error") return { handled: false, value: null };
       const failed = completeReviewAttempt(id,
         dispatched.dispatch.attemptDigest, {
           reviewerSessionId: String(report.reviewer?.sessionId || "").trim(),
@@ -693,15 +1293,12 @@ export function createAuthorityRuntime({
         });
       const failedEntry = authorityStore.list(id)
         .find((row) => row.value.requestId === requestId);
-      const { dispatch: _failedDispatch, ...retryableRequest } = failedEntry.value;
-      const mainSession = mainSessionProvenance(id, flags, aiSubject ? {
-        identity: subjectActor,
-        sessionId: subjectSession,
-        providerFamily: subjectProvider,
-        modelFamily: subjectFamily,
-        modelId: subjectModel
-      } : {});
-      authorityStore.replace(failedEntry, {
+      const {
+        dispatch: _failedDispatch,
+        configuredController: _failedController,
+        ...retryableRequest
+      } = failedEntry.value;
+      const failedRequest = {
         ...retryableRequest,
         status: "requested",
         fallbackAttempts: [
@@ -712,7 +1309,55 @@ export function createAuthorityRuntime({
             reportReference: report.reportReference,
             summary: report.summary
           }
-        ],
+        ]
+      };
+      authorityStore.replace(failedEntry, failedRequest);
+      // Validation is deterministic for this packet/result. Changing models
+      // cannot repair its binding; retain the error and existing resume route.
+      const nextReviewer = report.retryable === false ? null
+        : configuredReviewerRoute(reviewSettings, failedRequest);
+      if (nextReviewer && nextReviewer !== "main-session") {
+        const nextFlags = {
+          ...flags,
+          reviewer: undefined,
+          "automatic-reviewer": nextReviewer
+        };
+        return { handled: true,
+          value: runAuthorityReviewerUnlocked(id, nextFlags) };
+      }
+      if (!nextReviewer) {
+        authorityStore.replace(failedEntry, {
+          ...failedRequest,
+          status: "infrastructure-exhausted",
+          infrastructureExhaustedAt: now(),
+          ...(report.bindingFailure ? { bindingFailure: report.bindingFailure } : {}),
+          infrastructureError: report.summary
+        });
+        const exhausted = {
+          status: "configured-reviewer-infrastructure-exhausted",
+          changeId: id,
+          requestId,
+          failedReviewer: configured.identity,
+          infrastructureError: report.summary,
+          attempts: failedRequest.fallbackAttempts,
+          action: report.retryable === false
+            ? "Repair the packet or finding bindings through the existing harness recovery; do not repeat the unchanged full review."
+            : "Configure review.fallbackReviewers, repair reviewer infrastructure, or pause."
+        };
+        console.log(JSON.stringify(exhausted, null, 2));
+        return { handled: true, value: exhausted };
+      }
+      const mainSession = mainSessionProvenance(id, flags, aiSubject ? {
+        identity: subjectActor,
+        sessionId: subjectSession,
+        providerFamily: subjectProvider,
+        modelFamily: subjectFamily,
+        modelId: subjectModel
+      } : {});
+      const refreshedEntry = authorityStore.list(id)
+        .find((row) => row.value.requestId === requestId);
+      authorityStore.replace(refreshedEntry, {
+        ...refreshedEntry.value,
         mainSessionFallback: {
           status: mainSession.missing.length
             ? "provenance-unavailable" : "dispatching",
@@ -747,7 +1392,7 @@ export function createAuthorityRuntime({
           action: "Expose the calling host session/model provenance and rerun authority run with --main-session-* fields; the failed reviewer will not run again."
         };
         console.log(JSON.stringify(blocked, null, 2));
-        return blocked;
+        return { handled: true, value: blocked };
       }
       const mainDispatched = dispatchAuthorityUnlocked(id, {
         request: requestId,
@@ -780,8 +1425,11 @@ export function createAuthorityRuntime({
           modelId: subjectModel
         });
       console.log(JSON.stringify(handback, null, 2));
-      return handback;
+      return { handled: true, value: handback };
     }
+    const infrastructureResult = handleConfiguredInfrastructureError();
+    if (infrastructureResult.handled) return infrastructureResult.value;
+    function validateConfiguredReviewResult() {
     const reviewerSession = String(report.reviewer?.sessionId || "").trim();
     const infrastructureError = report.status === "error";
     if (!reviewerSession && !infrastructureError)
@@ -804,6 +1452,9 @@ export function createAuthorityRuntime({
       if (outside.length)
         fail(`AI delta reviewer reported findings outside the dispatched correction scope: ${outside.map((finding) => finding.id).join(", ")}`);
     }
+    return { reviewerSession, infrastructureError };
+    }
+    const { reviewerSession, infrastructureError } = validateConfiguredReviewResult();
     const completed = completeReviewAttempt(id,
       dispatched.dispatch.attemptDigest, {
         reviewerSessionId: reviewerSession,
@@ -813,8 +1464,12 @@ export function createAuthorityRuntime({
       });
     const dispatchedEntry = authorityStore.list(id)
       .find((row) => row.value.requestId === requestId);
+    const {
+      configuredController: _completedController,
+      ...completedRequest
+    } = dispatchedEntry.value;
     const finalizedRequest = {
-      ...dispatchedEntry.value,
+      ...completedRequest,
       dispatch: {
         ...dispatchedEntry.value.dispatch,
         attemptDigest: completed.digest,
@@ -882,70 +1537,9 @@ export function createAuthorityRuntime({
   // discovers it one rejection at a time while the person who gave the verdict
   // waits. The identity fields are prefilled because those are exactly the
   // ones `validateResponse` matches against the request.
-  function responseTemplate(request) {
-    // An acceptance packet carries its claims as a plain array; a review packet
-    // compacts them past twelve into `{count, preview, digest}`. Only acceptance
-    // reads `criterion`, but this ran before the type check, so `.map` on the
-    // compact object threw for every review with more than twelve claims — the
-    // template was unreachable for exactly the changes with the most to inspect.
-    const claimRows = expandList(request.packet?.claims);
-    const criteria = claimRows.map((claim) => claim.criterion).filter(Boolean);
-    if (criteria.length && criteria.length < listCount(request.packet?.claims))
-      criteria.push(`<${listCount(request.packet?.claims) - criteria.length
-        } further criteria omitted from this preview; read the packet's claims>`);
-    const evidence = {
-      observed: "<what the responder actually saw, in their own words>",
-      artifact: [],
-      reference: ["<url or path the responder inspected>"]
-    };
-    if (request.type === "acceptance") {
-      evidence.acceptor = "<name of the person who decided>";
-      evidence.decision = "accept";
-      evidence.criterion = criteria.length ? criteria
-        : ["<criterion the responder confirmed>"];
-    } else {
-      // `validateResponse` forwards every key under `evidence` into the receipt
-      // flags, so this is where a reviewer states provenance. Omitting these
-      // fields from the template made the documented path a dead end: the
-      // receipt refused the response for a missing `--subject-actor`, and
-      // `authority record` does not accept that flag. Naming them here is the
-      // difference between a template a responder can complete and one that
-      // cannot be recorded at all.
-      const dispatched = request.dispatch?.reviewer || null;
-      evidence.reviewer = dispatched?.identity || "<independent reviewer identity>";
-      evidence["reviewer-type"] = dispatched?.type || "human|ai";
-      if (!dispatched || dispatched.type === "ai") {
-        evidence["reviewer-provider-family"] = dispatched?.providerFamily || "<AI provider family>";
-        evidence["reviewer-model-family"] = dispatched?.modelFamily || "<AI model family>";
-        evidence["reviewer-model"] = dispatched?.modelId || "<AI model id>";
-        evidence["reviewer-session"] = dispatched?.sessionId || "<AI review session>";
-      }
-      evidence["subject-actor"] = "<who or what implemented the change>";
-      evidence["subject-session"] = "<implementation session id, omit for a human implementer>";
-      evidence["subject-provider-family"] = "<implementation provider family, omit for a human implementer>";
-      evidence["subject-model-family"] = "<implementation model family, omit for a human implementer>";
-      evidence["subject-model"] = "<implementation model id, omit for a human implementer>";
-      // Numbers, not placeholders, because the receipt parses them. A passing
-      // review now has to state its blocker count rather than inherit a zero
-      // from an absent flag, so the template is where the responder is asked
-      // for it — the same lesson as the provenance fields above.
-      evidence["unresolved-blockers"] = 0;
-      evidence["verified-findings"] = 0;
-      evidence.findings = [];
-      evidence.verifiedFindingIds = request.packet?.closureFindings?.ids || [];
-      if (request.dispatch?.scope?.mode === "delta")
-        evidence["scope-path"] = request.dispatch.scope.paths;
-    }
-    return {
-      version: Number(protocolVersion),
-      requestId: request.requestId,
-      changeId: request.changeId,
-      type: request.type,
-      workspaceHash: request.workspaceHash,
-      status: "pass|fail|inconclusive|error",
-      evidence
-    };
-  }
+  const responseTemplate = authorityResponseTemplate.bind(null, {
+    protocolVersion, expandList, listCount
+  });
 
   function showAuthorityStatus(id, flags = {}) {
     const value = authorityStatusValue(id, flags.request || null);
@@ -960,7 +1554,7 @@ export function createAuthorityRuntime({
       ? responseTemplate(open[0]) : open.map(responseTemplate), null, 2));
   }
 
-  function recordAuthorityUnlocked(id, flags = {}) {
+  function recordAuthorityRequest(id, flags) {
     const requestId = String(flags.request || "");
     const responsePath = flags.response ? resolve(flags.response) : null;
     if (!requestId || !responsePath)
@@ -978,86 +1572,117 @@ export function createAuthorityRuntime({
         request.status !== "dispatched")
       fail(`authority request '${requestId}' must be dispatched before its response is recorded`);
     if (!existsSync(responsePath)) fail(`authority response not found: ${flags.response}`);
-    const response = readJson(responsePath);
-    const validated = authorityStore.validateResponse(response, request, id);
-    if (!validated.valid) fail(validated.reason);
-    const evidenceFlags = validated.evidence;
-    if (request.type === "review" && request.dispatch) {
-      const reviewer = request.dispatch.reviewer;
-      const identity = String(evidenceFlags["reviewer-identity"] ||
-        evidenceFlags.reviewer || "").trim();
-      const comparisons = [
-        ["reviewer identity", identity, reviewer.identity],
-        ["reviewer type", String(evidenceFlags["reviewer-type"] || "").toLowerCase(), reviewer.type],
-        ["reviewer provider family", String(evidenceFlags["reviewer-provider-family"] || "").toLowerCase() || null, reviewer.providerFamily],
-        ["reviewer model family", String(evidenceFlags["reviewer-model-family"] || "").toLowerCase() || null, reviewer.modelFamily],
-        ["reviewer model", String(evidenceFlags["reviewer-model"] || "") || null, reviewer.modelId],
-        ["reviewer session", String(evidenceFlags["reviewer-session"] || "") || null, reviewer.sessionId]
-      ];
-      const mismatch = comparisons.filter(([, actual, expected]) => actual !== expected)
-        .map(([label, actual, expected]) => `${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-      if (mismatch.length)
-        fail(`authority response does not match its dispatched reviewer\n  ${mismatch.join("\n  ")}`);
-      const suppliedScope = [...new Set(evidenceFlags["scope-path"] || [])].sort();
-      const dispatchedScope = [...new Set(request.dispatch.scope.paths || [])].sort();
-      if (suppliedScope.length && JSON.stringify(suppliedScope) !== JSON.stringify(dispatchedScope))
-        fail("authority response scope-path must exactly match the paths in its dispatched delta packet");
-      evidenceFlags["scope-path"] = dispatchedScope;
-      const findings = Array.isArray(evidenceFlags.findings) ? evidenceFlags.findings : [];
-      const verifiedFindingIds = Array.isArray(evidenceFlags.verifiedFindingIds)
-        ? evidenceFlags.verifiedFindingIds : [];
-      const unresolved = findings.filter((finding) =>
-        ["blocker", "major"].includes(String(finding?.severity || "").toLowerCase()));
-      if (Number(evidenceFlags["unresolved-blockers"] || 0) !== unresolved.length)
-        fail("review unresolved-blockers must equal the blocker/major finding rows");
-      if (request.packet?.closureFindings && response.status !== "error") {
-        const expectedIds = [...(request.packet?.closureFindings?.ids || [])].sort();
-        const suppliedIds = [...new Set(verifiedFindingIds.map((value) =>
-          String(value).trim()).filter(Boolean))].sort();
-        if (JSON.stringify(expectedIds) !== JSON.stringify(suppliedIds))
-          fail("delta review verifiedFindingIds must exactly close the first-round finding IDs");
-        const outside = request.dispatch.scope.mode === "delta" ? findings.filter((finding) => {
-          const path = String(finding?.path || "").replace(/^\.\//, "");
-          return !path || !dispatchedScope.some((candidate) =>
-            candidate === path || candidate.endsWith(`/${path}`));
-        }) : [];
-        if (outside.length)
-          fail("delta review findings must stay inside the dispatched correction paths");
-      }
-      const attempt = reviewAttemptByDigest(id, request.dispatch.attemptDigest);
-      if (attempt?.status === "dispatched") {
-        const completed = completeReviewAttempt(id, attempt.digest, {
-          reviewerSessionId: reviewer.sessionId,
-          resultStatus: response.status,
-          findings,
-          verifiedFindingIds
-        });
-        request.dispatch = {
-          ...request.dispatch,
-          attemptDigest: completed.digest,
-          reviewer: { ...request.dispatch.reviewer, sessionId: completed.reviewerSessionId }
-        };
-        authorityStore.replace(entry, request);
-      }
-    }
-    // A configured reviewer/tool failure is infrastructure telemetry, not a
-    // delivered review verdict. Persist the completed error attempt and close
-    // this request, but do not overwrite an earlier full/delta receipt or
-    // manufacture a baseline receipt from an error. The bounded infrastructure
-    // retry therefore starts full when no delivered baseline exists and keeps
-    // a prior delivered baseline when a closure runner failed.
-    if (request.type === "review" && response.status === "error") {
-      authorityStore.replace(entry, {
-        ...request,
-        status: "error",
-        infrastructureError: true,
-        responseDigest: fileDigest(responsePath),
-        receiptDigest: null,
-        completedAt: now()
-      });
-      console.log(`AUTHORITY ${requestId}: infrastructure error\n  receipt: unchanged\n  next: repair the configured reviewer, run doctor --stage prove, then request the bounded retry`);
-      return;
-    }
+    return { requestId, responsePath, entry, request };
+  }
+
+  function validateDispatchedReviewResponse(request, response, evidenceFlags) {
+    if (request.type !== "review" || !request.dispatch) return null;
+    const reviewer = request.dispatch.reviewer;
+    validateDispatchedReviewerIdentity(reviewer, evidenceFlags);
+    const { findings, verifiedFindingIds, dispatchedScope } =
+      normalizeDispatchedReviewEvidence(request, evidenceFlags);
+    validateReviewFindingClosure(request, response, evidenceFlags, findings,
+      verifiedFindingIds, dispatchedScope);
+    return { reviewer, findings, verifiedFindingIds };
+  }
+
+  function validateDispatchedReviewerIdentity(reviewer, evidenceFlags) {
+    const identity = reviewEvidenceText(evidenceFlags["reviewer-identity"] ||
+      evidenceFlags.reviewer).trim();
+    const comparisons = [
+      ["reviewer identity", identity, reviewer.identity],
+      ["reviewer type", reviewEvidenceText(evidenceFlags["reviewer-type"]).toLowerCase(), reviewer.type],
+      ["reviewer provider family", nullableReviewEvidence(
+        evidenceFlags["reviewer-provider-family"], true), reviewer.providerFamily],
+      ["reviewer model family", nullableReviewEvidence(
+        evidenceFlags["reviewer-model-family"], true), reviewer.modelFamily],
+      ["reviewer model", nullableReviewEvidence(evidenceFlags["reviewer-model"]), reviewer.modelId],
+      ["reviewer session", nullableReviewEvidence(evidenceFlags["reviewer-session"]), reviewer.sessionId]
+    ];
+    const mismatch = comparisons.filter(([, actual, expected]) => actual !== expected)
+      .map(([label, actual, expected]) => `${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+    if (mismatch.length)
+      fail(`authority response does not match its dispatched reviewer\n  ${mismatch.join("\n  ")}`);
+  }
+
+  function reviewEvidenceText(value) {
+    return String(value || "");
+  }
+
+  function nullableReviewEvidence(value, lowerCase = false) {
+    const text = lowerCase ? reviewEvidenceText(value).toLowerCase()
+      : reviewEvidenceText(value);
+    return text || null;
+  }
+
+  function normalizeDispatchedReviewEvidence(request, evidenceFlags) {
+    const suppliedScope = [...new Set(evidenceFlags["scope-path"] || [])].sort();
+    const dispatchedScope = [...new Set(request.dispatch.scope.paths || [])].sort();
+    if (suppliedScope.length && JSON.stringify(suppliedScope) !== JSON.stringify(dispatchedScope))
+      fail("authority response scope-path must exactly match the paths in its dispatched delta packet");
+    evidenceFlags["scope-path"] = dispatchedScope;
+    const findings = Array.isArray(evidenceFlags.findings) ? evidenceFlags.findings : [];
+    const verifiedFindingIds = Array.isArray(evidenceFlags.verifiedFindingIds)
+      ? evidenceFlags.verifiedFindingIds : [];
+    return { findings, verifiedFindingIds, dispatchedScope };
+  }
+
+  function validateReviewFindingClosure(request, response, evidenceFlags, findings,
+    verifiedFindingIds, dispatchedScope) {
+    const unresolved = findings.filter((finding) =>
+      ["blocker", "major"].includes(String(finding?.severity || "").toLowerCase()));
+    if (Number(evidenceFlags["unresolved-blockers"] || 0) !== unresolved.length)
+      fail("review unresolved-blockers must equal the blocker/major finding rows");
+    if (!request.packet?.closureFindings) return;
+    if (response.status === "error") return;
+    const expectedIds = [...(request.packet.closureFindings.ids || [])].sort();
+    const suppliedIds = [...new Set(verifiedFindingIds.map((value) =>
+      String(value).trim()).filter(Boolean))].sort();
+    if (JSON.stringify(expectedIds) !== JSON.stringify(suppliedIds))
+      fail("delta review verifiedFindingIds must exactly close the first-round finding IDs");
+    if (request.dispatch.scope.mode !== "delta") return;
+    const outside = findings.filter((finding) => {
+      const path = String(finding?.path || "").replace(/^\.\//, "");
+      return !path || !dispatchedScope.some((candidate) =>
+        candidate === path || candidate.endsWith(`/${path}`));
+    });
+    if (outside.length)
+      fail("delta review findings must stay inside the dispatched correction paths");
+  }
+
+  function completeDispatchedReview(id, entry, request, reviewResult) {
+    if (!reviewResult) return;
+    const attempt = reviewAttemptByDigest(id, request.dispatch.attemptDigest);
+    if (attempt?.status !== "dispatched") return;
+    const completed = completeReviewAttempt(id, attempt.digest, {
+      reviewerSessionId: reviewResult.reviewer.sessionId,
+      resultStatus: reviewResult.responseStatus,
+      findings: reviewResult.findings,
+      verifiedFindingIds: reviewResult.verifiedFindingIds
+    });
+    request.dispatch = {
+      ...request.dispatch,
+      attemptDigest: completed.digest,
+      reviewer: { ...request.dispatch.reviewer, sessionId: completed.reviewerSessionId }
+    };
+    authorityStore.replace(entry, request);
+  }
+
+  function recordAuthorityInfrastructureError(entry, request, requestId,
+    responsePath) {
+    authorityStore.replace(entry, {
+      ...request,
+      status: "error",
+      infrastructureError: true,
+      responseDigest: fileDigest(responsePath),
+      receiptDigest: null,
+      completedAt: now()
+    });
+    console.log(`AUTHORITY ${requestId}: infrastructure error\n  receipt: unchanged\n  next: repair the configured reviewer, run doctor --stage prove, then request the bounded retry`);
+  }
+
+  function recordAuthorityReceipt(id, entry, request, requestId, response,
+    responsePath, evidenceFlags) {
     const priorPath = receiptPath(id, request.provider);
     const prior = existsSync(priorPath) ? readFileSync(priorPath) : null;
     recordReceipt(id, request.provider, response.status, {
@@ -1077,62 +1702,80 @@ export function createAuthorityRuntime({
     console.log(`AUTHORITY ${requestId}: ${response.status}\n  receipt: ${relative(root, priorPath)}`);
   }
 
+  function recordAuthorityUnlocked(id, flags = {}) {
+    const { requestId, responsePath, entry, request } = recordAuthorityRequest(id, flags);
+    const response = readJson(responsePath);
+    const validated = authorityStore.validateResponse(response, request, id);
+    if (!validated.valid) fail(validated.reason);
+    const evidenceFlags = validated.evidence;
+    const reviewResult = validateDispatchedReviewResponse(request, response,
+      evidenceFlags);
+    completeDispatchedReview(id, entry, request, reviewResult && {
+      ...reviewResult, responseStatus: response.status
+    });
+    // A configured reviewer/tool failure is infrastructure telemetry, not a
+    // delivered review verdict. Persist the completed error attempt and close
+    // this request, but do not overwrite an earlier full/delta receipt or
+    // manufacture a baseline receipt from an error. The bounded infrastructure
+    // retry therefore starts full when no delivered baseline exists and keeps
+    // a prior delivered baseline when a closure runner failed.
+    if (request.type === "review" && response.status === "error") {
+      recordAuthorityInfrastructureError(entry, request, requestId, responsePath);
+      return;
+    }
+    recordAuthorityReceipt(id, entry, request, requestId, response, responsePath,
+      evidenceFlags);
+  }
+
   function recordAuthority(id, flags = {}) {
     return withAuthorityLock(id, () => recordAuthorityUnlocked(id, flags));
   }
 
-  function recordVerifiedCi(id, provider, source) {
-    const config = providerConfig(id, provider);
-    if (!config || config.adapter !== "external" || !config.ci?.publicKey || !config.ci?.issuer)
-      fail(`provider '${provider}' requires external ci.issuer and ci.publicKey configuration`);
-    const path = resolve(source || "");
-    if (!source || !existsSync(path)) fail("evidence verify-ci requires a signed JSON envelope");
-    const envelope = readJson(path);
-    const workspaceHash = providerWorkspaceHash(id, provider);
-    const repository = providerRepository(id, provider, config);
-    const head = repository ? gitHead(repository.workspacePath) : gitHead(providerWorkspace(id, provider));
-    const result = validateSignedCiEnvelope({
-      envelope,
-      protocolVersion: ciEvidenceProtocolVersion,
-      issuer: config.ci.issuer,
-      publicKey: config.ci.publicKey,
-      changeId: id,
-      provider,
-      workspaceHash,
-      head
-    });
-    if (!result.valid) fail(result.reason);
-    const { payload, artifacts, status } = result;
-    recordReceipt(id, provider, status, {
-      claims: providerClaims(id, provider, config).join(","), workspaceHash,
-      observed: String(payload.observed || `CI ${payload.status}; commit ${payload.commit || "unknown"}`),
-      source: `signed-ci:${payload.issuer}`,
-      reference: [payload.runUrl, ...artifacts.map((artifact) =>
-        `artifact:${artifact.name}:sha256:${artifact.sha256}`)],
-      "recorded-by": `evidence-verify-ci:${payload.issuer}`
-    });
-    console.log(`CI EVIDENCE ${id}/${provider}: ${status}\n  run: ${payload.runUrl}`);
-  }
+  const recordVerifiedCi = recordVerifiedCiOperation.bind(null, {
+    providerConfig,
+    resolvePath: resolve,
+    pathExists: existsSync,
+    readJson,
+    providerWorkspaceHash,
+    providerRepository,
+    providerWorkspace,
+    gitHead,
+    validateSignedCiEnvelope,
+    ciEvidenceProtocolVersion,
+    recordReceipt,
+    providerClaims,
+    fail,
+    output: console
+  });
 
   // The bounded infrastructure recovery consumed by a failed reviewer run has
   // no automatic escape: the guard's own message routes the operator through a
   // provider repair and doctor. This is that route — it re-runs the reviewer
   // diagnosis in-process and acknowledges the consumed attempts only when the
   // diagnosis passes and the decision reference is fresh.
-  function resetInfrastructureAuthority(id, flags = {}) {
+  const resetInfrastructureAuthorityUnlocked =
+    resetInfrastructureAuthorityOperation.bind(null, {
+      validate, reviewerStatus, acknowledgeInfrastructureAttempts, fail,
+      authorityStore, now, output: console
+    });
+
+  const resetInfrastructureAuthority = lockedAuthorityOperation(
+    withAuthorityLock, resetInfrastructureAuthorityUnlocked);
+
+  // A moved base whose replay altered the change's diff expires a delivered
+  // passing verdict through no fault of the work. This route releases exactly
+  // that attempt from the wave budget, on a recorded user decision, so the
+  // fresh review the move forces cannot brick the change at the cap. No
+  // reviewer diagnosis here — nothing is broken; only the accounting moves.
+  function resetBaseMoveAuthority(id, flags = {}) {
     return withAuthorityLock(id, () => {
       validate(id, "active", { quiet: true });
       const decisionRef = String(flags["decision-ref"] || "").trim();
-      if (!decisionRef) fail("authority reset-infra requires --decision-ref <ref>");
-      const reviewerName = String(flags.reviewer || "").trim() || null;
-      const status = reviewerStatus(reviewerName);
-      if (!status.ok)
-        fail(`configured reviewer '${status.reviewer}' still fails its ${status.check} diagnosis: ${status.detail}`);
-      const result = acknowledgeInfrastructureAttempts(id, decisionRef);
-      console.log(`AUTHORITY ${id}: infrastructure retries reset\n  reviewer: ${
-        status.reviewer} (${status.check})\n  acknowledged: ${
-        result.digests.length} attempt(s)\n  decision: ${decisionRef
-        }\n  next: request and dispatch the AI review again`);
+      if (!decisionRef) fail("authority reset-base-move requires --decision-ref <ref>");
+      const result = acknowledgeBaseMoveAttempts(id, decisionRef);
+      console.log(`AUTHORITY ${id}: base-move review release\n  movement: ${
+        result.movementKey}\n  released: ${result.digests.length} attempt(s)\n  decision: ${
+        decisionRef}\n  next: request and dispatch the AI review again`);
       return result;
     });
   }
@@ -1145,6 +1788,8 @@ export function createAuthorityRuntime({
     runAuthorityReviewer,
     abortAuthority,
     resetInfrastructureAuthority,
+    recoverReviewBindings,
+    resetBaseMoveAuthority,
     unrecordedDeliveredAiResponse,
     authorityStatusValue,
     showAuthorityStatus,

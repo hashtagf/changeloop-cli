@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { checkNpmWorkspace } from "./npm-lockfile-check.mjs";
 
 const PROVIDER_SCRIPT_ALIASES = {
   "static-analysis": ["check", "typecheck", "type-check", "lint"],
@@ -15,7 +16,7 @@ const PROVIDER_SCRIPT_ALIASES = {
   "dependency-supply-chain": ["supply-chain", "dependencies:audit", "audit:dependencies"]
 };
 
-function readJsonCandidate(path, warnings, source) {
+export function readJsonCandidate(path, warnings, source) {
   if (!existsSync(path)) return null;
   try { return JSON.parse(readFileSync(path, "utf8")); }
   catch (error) {
@@ -24,7 +25,7 @@ function readJsonCandidate(path, warnings, source) {
   }
 }
 
-function packageManagerAt(workspace) {
+export function packageManagerAt(workspace) {
   if (existsSync(join(workspace, "pnpm-lock.yaml"))) return "pnpm";
   if (existsSync(join(workspace, "yarn.lock"))) return "yarn";
   if (existsSync(join(workspace, "bun.lock")) || existsSync(join(workspace, "bun.lockb")))
@@ -32,18 +33,18 @@ function packageManagerAt(workspace) {
   return "npm";
 }
 
-function packageScriptCommand(manager, script, args = []) {
+export function packageScriptCommand(manager, script, args = []) {
   if (manager === "yarn") return ["yarn", script, ...args];
   if (manager === "pnpm") return ["pnpm", "run", script, ...args];
   if (manager === "bun") return ["bun", "run", script, ...args];
   return ["npm", "run", script, ...(args.length ? ["--", ...args] : [])];
 }
 
-function riskyPackageScript(value) {
+export function riskyPackageScript(value) {
   return /(?:^|[;&|])\s*(?:sudo|curl|wget)\b|\brm\s+-rf\b|\$\(|`/.test(String(value || ""));
 }
 
-function packageScriptRisk(tooling, script) {
+export function packageScriptRisk(tooling, script) {
   return [`pre${script}`, script, `post${script}`]
     .filter((name) => riskyPackageScript(tooling.scripts[name]));
 }
@@ -65,7 +66,7 @@ export function safePackageScriptInputs(workspace, raw, declaredSurface = []) {
     ? [...new Set([...declaredSurface, "package.json", ...files])].sort() : [];
 }
 
-function candidateInputs(tooling, script, repository, declaredSurface) {
+export function candidateInputs(tooling, script, repository, declaredSurface) {
   const lifecycle = [`pre${script}`, script, `post${script}`]
     .filter((name) => typeof tooling.scripts[name] === "string")
     .map((name) => tooling.scripts[name]);
@@ -74,7 +75,7 @@ function candidateInputs(tooling, script, repository, declaredSurface) {
   return inputs.length ? { inputs } : {};
 }
 
-function packageTooling(workspace, repository, warnings) {
+export function packageTooling(workspace, repository, warnings) {
   const path = join(workspace, "package.json");
   const packageJson = readJsonCandidate(path, warnings,
     `${repository.relativePath}/package.json`.replace(/^\.\//, ""));
@@ -88,12 +89,12 @@ function packageTooling(workspace, repository, warnings) {
   };
 }
 
-function providerInstanceName(capability, repository, repositoryCount) {
+export function providerInstanceName(capability, repository, repositoryCount) {
   return repositoryCount === 1 && repository.id === "root"
     ? capability : `${capability}-${repository.id}`;
 }
 
-function providerCandidate(provider, capability, repository, repositoryCount,
+export function providerCandidate(provider, capability, repository, repositoryCount,
   config, source, confidence = "high", detail = null) {
   const scoped = repositoryCount === 1 && repository.id === "root"
     ? config : { ...config, capability, repository: repository.id };
@@ -104,7 +105,7 @@ function providerCandidate(provider, capability, repository, repositoryCount,
   };
 }
 
-function testCandidates(tooling, repository, repositoryCount, declaredSurface) {
+export function testCandidates(tooling, repository, repositoryCount, declaredSurface) {
   if (!tooling) return [];
   const { dependencies, scripts, manager } = tooling;
   const script = scripts.test ? "test" :
@@ -149,7 +150,7 @@ function testCandidates(tooling, repository, repositoryCount, declaredSurface) {
     : `structured ${framework.name} output; multi-repository discovery wiring requires review`)];
 }
 
-function browserCandidates(tooling, repository, repositoryCount, declaredSurface) {
+export function browserCandidates(tooling, repository, repositoryCount, declaredSurface) {
   if (!tooling) return [];
   const { dependencies, scripts, manager } = tooling;
   if (!dependencies["@playwright/test"] && !dependencies.playwright) return [];
@@ -165,7 +166,7 @@ function browserCandidates(tooling, repository, repositoryCount, declaredSurface
   }, `package.json#scripts.${script}`, "high", "project-owned Playwright script")];
 }
 
-function scriptCandidates(capability, tooling, repository, repositoryCount, declaredSurface) {
+export function scriptCandidates(capability, tooling, repository, repositoryCount, declaredSurface) {
   if (!tooling) return [];
   const aliases = PROVIDER_SCRIPT_ALIASES[capability] || [];
   const matches = aliases.filter((name) => typeof tooling.scripts[name] === "string");
@@ -186,7 +187,21 @@ function scriptCandidates(capability, tooling, repository, repositoryCount, decl
   safe.length > 1 ? `alternatives detected: ${safe.join(", ")}` : "project-owned package script"));
 }
 
-function capabilityRepositories(capability, repositories, contract) {
+export function npmLockfileCandidates(tooling, repository, repositoryCount, declaredSurface) {
+  if (!tooling || tooling.manager !== "npm" ||
+      !existsSync(join(repository.workspacePath, "package-lock.json")) ||
+      !existsSync(join(repository.workspacePath, ".claude", "harness", "runtime",
+        "evidence", "npm-lockfile-check.mjs"))) return [];
+  return [providerCandidate(null, "dependency-supply-chain", repository, repositoryCount, {
+    adapter: "command",
+    version: "2",
+    command: ["node", ".claude/harness/runtime/evidence/npm-lockfile-check.mjs"]
+  }, "package.json + package-lock.json", repositoryCount === 1 ? "high" : "review",
+  `built-in deterministic npm manifest/lockfile consistency check (discovery: ${
+    checkNpmWorkspace(repository.workspacePath, { validateInstall: false }).status})`)];
+}
+
+export function capabilityRepositories(capability, repositories, contract) {
   const scoped = new Set(contract.claims
     .filter((claim) => claim.capabilities.includes(capability))
     .flatMap((claim) => claim.repositories || []));
@@ -194,32 +209,53 @@ function capabilityRepositories(capability, repositories, contract) {
   return repositories.filter((repository) => scoped.has(repository.id));
 }
 
-export function detectEvidenceWiring({
-  id, root, contract, repositories, required, providerConfig, providerCapability,
-  knownProviders, commandExists, stableHash, declaredSurface = []
+export function configuredEvidenceProviders({
+  contract, repositories, providerCapability, commandExists, root
 }) {
-  const warnings = [];
-  const tooling = new Map(repositories.map((repository) => [
-    repository.id, packageTooling(repository.workspacePath, repository, warnings)
-  ]));
-  const configured = Object.entries(contract.providers || {}).map(([provider, config]) => {
+  return Object.entries(contract.providers || {}).map(([provider, config]) => {
     const repositoryId = config.repository || "root";
     const repository = repositories.find((row) => row.id === repositoryId);
     const executable = config.adapter === "external" ? null : config.command?.[0] || null;
     return {
       provider, capability: providerCapability(provider, config), repository: repositoryId,
       adapter: config.adapter, executable,
-      available: executable === null ? null : commandExists(executable, repository?.workspacePath || root)
+      available: executable === null ? null :
+        commandExists(executable, repository?.workspacePath || root)
     };
   });
-  const missing = required.filter((provider) => !providerConfig(provider));
+}
+
+export function requiredEvidenceCapability(
+  requiredProvider, knownProviders, providerCapability, providerConfig
+) {
+  const existingConfig = providerConfig(requiredProvider);
+  return knownProviders.has(requiredProvider)
+    ? requiredProvider : providerCapability(requiredProvider, existingConfig) || requiredProvider;
+}
+
+export function evidenceCandidateRows(
+  capability, tooling, repository, repositoryCount, declaredSurface
+) {
+  if (capability === "test")
+    return testCandidates(tooling, repository, repositoryCount, declaredSurface);
+  if (capability === "browser")
+    return browserCandidates(tooling, repository, repositoryCount, declaredSurface);
+  if (capability === "dependency-supply-chain")
+    return npmLockfileCandidates(tooling, repository, repositoryCount, declaredSurface);
+  if (capability === "discovery") return [];
+  return scriptCandidates(capability, tooling, repository, repositoryCount, declaredSurface);
+}
+
+export function discoverMissingEvidence({
+  missing, providerConfig, providerCapability, knownProviders, repositories, contract,
+  tooling, declaredSurface, root = process.cwd()
+}) {
   const candidates = [];
   const unresolved = [];
   const discoveryCovered = new Set();
   for (const requiredProvider of missing) {
-    const existingConfig = providerConfig(requiredProvider);
-    const capability = knownProviders.has(requiredProvider)
-      ? requiredProvider : providerCapability(requiredProvider, existingConfig) || requiredProvider;
+    const capability = requiredEvidenceCapability(
+      requiredProvider, knownProviders, providerCapability, providerConfig);
     if (capability === "discovery" && discoveryCovered.size) continue;
     if (["review", "acceptance"].includes(capability)) {
       unresolved.push({ provider: requiredProvider, capability, repository: null,
@@ -227,21 +263,38 @@ export function detectEvidenceWiring({
       continue;
     }
     const targets = capabilityRepositories(capability, repositories, contract);
+    const consumerQualityConfig = join(root, "quality", "foundation-quality.json");
+    if (capability === "static-analysis" && existsSync(consumerQualityConfig)) {
+      candidates.push({
+        provider: requiredProvider,
+        capability,
+        // Quality is an orchestration provider: it starts from the Foundation
+        // root workspace and routes its own selected repository lanes.
+        repository: null,
+        confidence: "high",
+        recommended: true,
+        source: "quality/foundation-quality.json",
+        detail: "Foundation consumer quality gate bound to all affected repositories",
+        config: {
+          adapter: "command",
+          command: ["node", ".claude/harness/foundation.mjs", "quality-run", "--enforce"],
+          repositories: targets.map((repository) => repository.id)
+        }
+      });
+      continue;
+    }
     let found = false;
     for (const repository of targets) {
-      const packageInfo = tooling.get(repository.id);
-      const rows = capability === "test" ? testCandidates(packageInfo, repository, repositories.length, declaredSurface) :
-        capability === "browser" ? browserCandidates(packageInfo, repository, repositories.length, declaredSurface) :
-        capability === "discovery" ? [] :
-        scriptCandidates(capability, packageInfo, repository, repositories.length, declaredSurface);
-      if (rows.length) {
-        found = true;
-        candidates.push(...rows.map((row) =>
-          row.provider === capability && requiredProvider !== capability
-            ? { ...row, provider: requiredProvider } : row));
-        if (capability === "test" && rows.some((row) => row.config?.adapter === "test-discovery"))
-          discoveryCovered.add(repository.id);
-      }
+      const rows = evidenceCandidateRows(capability, tooling.get(repository.id), repository,
+        repositories.length, declaredSurface);
+      if (!rows.length) continue;
+      found = true;
+      candidates.push(...rows.map((row) =>
+        row.provider === capability && requiredProvider !== capability
+          ? { ...row, provider: requiredProvider } : row));
+      if (capability === "test" &&
+          rows.some((row) => row.config?.adapter === "test-discovery"))
+        discoveryCovered.add(repository.id);
     }
     if (!found && capability !== "discovery") unresolved.push({
       provider: requiredProvider, capability,
@@ -254,18 +307,50 @@ export function detectEvidenceWiring({
     unresolved.push({ provider: "discovery", capability: "discovery", repository: null,
       reason: "structured-test-count-unavailable",
       next: "configure test-discovery with JSON or TAP output" });
-  const dedupe = (rows) => [...new Map(rows.map((row) =>
-    [stableHash([row.provider, row.capability, row.repository, row.source, row.reason]), row])).values()];
-  const unavailable = configured.filter((row) => row.available === false).map((row) => ({
+  return { candidates, unresolved };
+}
+
+export function dedupeEvidenceRows(rows, stableHash) {
+  return [...new Map(rows.map((row) =>
+    [stableHash([row.provider, row.capability, row.repository, row.source, row.reason]), row]
+  )).values()];
+}
+
+export function unavailableEvidenceProviders(configured) {
+  return configured.filter((row) => row.available === false).map((row) => ({
     provider: row.provider, capability: row.capability, repository: row.repository,
     reason: "command-unavailable", executable: row.executable,
     next: `install or reconfigure the project-owned executable '${row.executable}'`
   }));
+}
+
+export function evidenceWiringStatus(unavailable, unresolved, candidates) {
+  return unavailable.length ? "INFRASTRUCTURE_ERROR" :
+    unresolved.length || candidates.length ? "NEEDS_CONFIGURATION" : "READY";
+}
+
+export function detectEvidenceWiring({
+  id, root, contract, repositories, required, providerConfig, providerCapability,
+  knownProviders, commandExists, stableHash, declaredSurface = []
+}) {
+  const warnings = [];
+  const tooling = new Map(repositories.map((repository) => [
+    repository.id, packageTooling(repository.workspacePath, repository, warnings)
+  ]));
+  const configured = configuredEvidenceProviders({
+    contract, repositories, providerCapability, commandExists, root
+  });
+  const missing = required.filter((provider) => !providerConfig(provider));
+  const { candidates, unresolved } = discoverMissingEvidence({
+    missing, providerConfig, providerCapability, knownProviders, repositories, contract,
+    tooling, declaredSurface, root
+  });
+  const unavailable = unavailableEvidenceProviders(configured);
   return {
     version: 1, changeId: id,
-    status: unavailable.length ? "INFRASTRUCTURE_ERROR" :
-      unresolved.length || candidates.length ? "NEEDS_CONFIGURATION" : "READY",
-    configured, candidates: dedupe(candidates), unresolved: dedupe(unresolved),
+    status: evidenceWiringStatus(unavailable, unresolved, candidates),
+    configured, candidates: dedupeEvidenceRows(candidates, stableHash),
+    unresolved: dedupeEvidenceRows(unresolved, stableHash),
     unavailable, warnings
   };
 }

@@ -1,4 +1,104 @@
 import { findCyclePath } from "../core/graph.mjs";
+import { scheduleReadyBatch } from "../core/graph-execution.mjs";
+
+export function neededExecutionProviders(context, id, hash) {
+  return context.requiredProviders(id)
+    .filter((provider) => context.receiptValidity(id, provider, hash).validity !== "valid");
+}
+
+export function providerAvailabilityIssue(context, id, provider, config) {
+  if (config.adapter !== "contract-digest" &&
+      !context.commandExists(config.command?.[0],
+        context.providerWorkspace(id, provider, config)))
+    return `${provider}:command`;
+  if (config.adapter !== "playwright") return null;
+  const availability = context.playwrightAvailability(
+    context.providerWorkspace(id, provider, config));
+  return availability.packageOwned && availability.binaryAvailable
+    ? null : `${provider}:project-owned-playwright`;
+}
+
+export function discoveryProducer(provider, config, providers, providerCapability) {
+  if (providerCapability(provider, config) !== "discovery") return null;
+  return Object.entries(providers).find(([candidate, value]) =>
+    value?.adapter === "test-discovery" &&
+    providerCapability(candidate, value) === "test" &&
+    (value.discoveryProvider || "discovery") === provider) || null;
+}
+
+export function executionNodeCovers(provider, config, needed) {
+  const outputs = config.adapter === "test-discovery"
+    ? [provider, config.discoveryProvider || "discovery"]
+    : [...new Set([provider, ...(config.outputs || [])])];
+  return outputs.filter((output) => needed.includes(output));
+}
+
+export function providerExecutionNode(context, provider, config, producer, needed) {
+  const nodeProvider = producer ? producer[0] : provider;
+  const nodeConfig = producer ? producer[1] : config;
+  return {
+    provider: nodeProvider,
+    covers: executionNodeCovers(nodeProvider, nodeConfig, needed),
+    config: nodeConfig,
+    resources: context.adapterResources(nodeProvider, nodeConfig),
+    dependsOn: nodeConfig.dependsOn || []
+  };
+}
+
+export function executionNodesOperation(context, id, hash) {
+  const needed = neededExecutionProviders(context, id, hash);
+  const nodes = [];
+  const unconfigured = [];
+  const unavailable = [];
+  const claimed = new Set();
+  const providers = context.evidence(id).providers || {};
+  for (const provider of needed) {
+    if (claimed.has(provider)) continue;
+    const config = context.providerConfig(id, provider);
+    if (!config || config.adapter === "external") {
+      unconfigured.push(provider);
+      continue;
+    }
+    const issue = providerAvailabilityIssue(context, id, provider, config);
+    if (issue) {
+      unavailable.push(issue);
+      continue;
+    }
+    const producer = discoveryProducer(
+      provider, config, providers, context.providerCapability);
+    const node = providerExecutionNode(context, provider, config, producer, needed);
+    node.covers.forEach((item) => claimed.add(item));
+    nodes.push(node);
+  }
+  return { nodes, unconfigured, unavailable };
+}
+
+export function providerExecutionBatch(context, id, pending, completed, owner, ready) {
+  const schedulable = [];
+  for (const node of pending.values()) {
+    const dependsOn = [];
+    for (const dependency of node.dependsOn)
+      dependsOn.push(owner.get(dependency) || dependency);
+    schedulable.push({ ...node, id: node.provider, dependsOn });
+  }
+  const schedulerCompleted = new Set();
+  for (const output of completed) schedulerCompleted.add(owner.get(output) || output);
+  for (const node of pending.values())
+    for (const dependency of node.dependsOn)
+      if (context.receiptValidity(id, dependency).validity === "valid")
+        schedulerCompleted.add(owner.get(dependency) || dependency);
+  const { selected } = scheduleReadyBatch(schedulable, schedulerCompleted, {
+    maxParallel: context.maxParallelProviders(),
+    conflicts: (left, right) => context.resourcesConflict(left.resources, right.resources)
+  });
+  const selectedIds = new Set();
+  for (const node of selected) selectedIds.add(node.id);
+  const batch = [];
+  for (const node of ready)
+    if (selectedIds.has(node.provider)) batch.push(node);
+  if (!batch.length) batch.push(ready[0]);
+  return batch;
+}
 
 export function createProviderScheduler({
   requiredProviders,
@@ -14,71 +114,28 @@ export function createProviderScheduler({
   executeAdapter,
   fail,
   log = console.log,
-  logError = console.error
+  logError = console.error,
+  maxParallelProviders,
+  recordScheduler,
+  timestamp
 }) {
+  const executionNodeContext = {
+    requiredProviders, receiptValidity, providerConfig, commandExists,
+    providerWorkspace, playwrightAvailability, evidence, providerCapability,
+    adapterResources
+  };
   function executionNodes(id, hash) {
-    const needed = requiredProviders(id)
-      .filter((provider) => receiptValidity(id, provider, hash).validity !== "valid");
-    const nodes = [];
-    const unconfigured = [];
-    const unavailable = [];
-    const claimed = new Set();
-    for (const provider of needed) {
-      if (claimed.has(provider)) continue;
-      const config = providerConfig(id, provider);
-      if (!config || config.adapter === "external") {
-        unconfigured.push(provider);
-        continue;
-      }
-      // contract-digest runs no command: its work is reading and hashing the
-      // declared artifact on each side.
-      if (config.adapter !== "contract-digest" &&
-          !commandExists(config.command?.[0], providerWorkspace(id, provider, config))) {
-        unavailable.push(`${provider}:command`);
-        continue;
-      }
-      if (config.adapter === "playwright") {
-        const availability = playwrightAvailability(providerWorkspace(id, provider, config));
-        if (!availability.packageOwned || !availability.binaryAvailable) {
-          unavailable.push(`${provider}:project-owned-playwright`);
-          continue;
-        }
-      }
-      // A discovery provider is written by the test provider that names it, in
-      // the same execution — it is never a node of its own. Which one owns it
-      // used to be inferred from an identical config hash, and that can only
-      // ever match the single provider literally named `discovery`: a
-      // repository-scoped pair differs in `capability` by construction, so
-      // `discovery-api` was scheduled standalone and no adapter can produce a
-      // discovered count alone. Follow the `discoveryProvider` reference
-      // instead, which states the ownership directly and works whichever of the
-      // pair `needed` happens to reach first.
-      const producer = providerCapability(provider, config) === "discovery"
-        ? Object.entries(evidence(id).providers || {}).find(([candidate, value]) =>
-          value?.adapter === "test-discovery" &&
-          providerCapability(candidate, value) === "test" &&
-          (value.discoveryProvider || "discovery") === provider)
-        : null;
-      const nodeProvider = producer ? producer[0] : provider;
-      // The node runs the producer's command, so it must carry the producer's
-      // config; using the discovery entry's would execute the wrong thing and
-      // record the receipt against the wrong workspace.
-      const nodeConfig = producer ? producer[1] : config;
-      const covers = nodeConfig.adapter === "test-discovery"
-        ? [nodeProvider, nodeConfig.discoveryProvider || "discovery"]
-          .filter((output) => needed.includes(output))
-        : [...new Set([provider, ...(nodeConfig.outputs || [])])]
-          .filter((output) => needed.includes(output));
-      covers.forEach((item) => claimed.add(item));
-      nodes.push({
-        provider: nodeProvider,
-        covers,
-        config: nodeConfig,
-        resources: adapterResources(nodeProvider, nodeConfig),
-        dependsOn: nodeConfig.dependsOn || []
-      });
-    }
-    return { nodes, unconfigured, unavailable };
+    const required = requiredProviders(id);
+    const result = executionNodesOperation(executionNodeContext, id, hash);
+    recordScheduler({
+      scheduler: "provider-selection", wave: 0,
+      // Selection only identifies work and reusable receipts. Readiness and
+      // execution belong to the dependency/resource waves below.
+      readyNodes: 0, executedNodes: 0,
+      reusedNodes: required.length - neededExecutionProviders(executionNodeContext, id, hash).length,
+      queueingMs: null, peakConcurrency: 0
+    });
+    return result;
   }
 
   async function runExecutionDag(id, nodes, proofRunId) {
@@ -87,6 +144,8 @@ export function createProviderScheduler({
     const failedOutputs = new Set();
     const commandCache = new Map();
     const outcomes = [];
+    const readySince = new Map();
+    let wave = 0;
     // A dependency may name a covered output of another pending node, not the
     // node's own provider id; resolve those to the owning node for cycle edges.
     const owner = new Map(nodes.flatMap((node) =>
@@ -96,6 +155,9 @@ export function createProviderScheduler({
         node.dependsOn.every((dependency) =>
           completed.has(dependency) ||
           receiptValidity(id, dependency).validity === "valid"));
+      const observedAt = timestamp();
+      for (const node of ready)
+        if (!readySince.has(node.provider)) readySince.set(node.provider, observedAt);
       // Throw rather than fail(): fail is process.exit, which skips the
       // caller's catch — the thing that stops services and clears
       // activeProofRun — so the next `evidence record` bound a dead run's
@@ -119,16 +181,27 @@ export function createProviderScheduler({
           throw new Error(`provider dependency cycle: ${cycle.join(" -> ")}`);
         throw new Error(`provider dependency unresolvable: ${[...pending.keys()].join(", ")}`);
       }
-      const batch = [];
-      for (const node of ready)
-        if (batch.every((selected) => !resourcesConflict(selected.resources, node.resources)))
-          batch.push(node);
+      const batch = providerExecutionBatch({
+        receiptValidity, maxParallelProviders, resourcesConflict
+      }, id, pending, completed, owner, ready);
+      wave += 1;
+      recordScheduler({
+        scheduler: "provider", wave, readyNodes: ready.length,
+        executedNodes: batch.length, reusedNodes: 0,
+        queueingMs: batch.reduce((total, node) =>
+          total + Math.max(0, observedAt - readySince.get(node.provider)), 0),
+        peakConcurrency: batch.length
+      });
       log(`EXECUTION ${proofRunId}: ${batch.map((node) => node.provider).join(", ")}`);
       const results = await Promise.all(batch.map((node) =>
         executeAdapter(id, node.provider, node.config, proofRunId, commandCache)));
       for (let index = 0; index < batch.length; index += 1) {
         pending.delete(batch[index].provider);
-        outcomes.push({ provider: batch[index].provider, status: results[index].status });
+        outcomes.push({
+          provider: batch[index].provider,
+          status: results[index].status,
+          observations: results[index].observations || []
+        });
         if (results[index].status === "pass") {
           for (const covered of batch[index].covers) completed.add(covered);
         } else {

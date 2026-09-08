@@ -23,31 +23,33 @@ artifacts:
     requires: [proposal]
   - id: grounding
     generates: grounding.yaml
-    description: Locked single-batch decisions, read set, and claim-to-production evidence map
+    description: Conditional non-derived material decisions; legacy grounding remains compatible
     template: grounding.yaml
-    instruction: Record the completed discovery and the one locked decision batch before Build.
+    instruction: Prefer Grounding v3 decisions-only and omit the file when no material decision exists.
     requires: [proposal, evidence]
   - id: repositories
     generates: repositories.yaml
     description: Repositories this change may touch, and their write scope
     template: repositories.yaml
-    instruction: Select every repository the change writes plus their dependency closure. A single-repository change keeps the default root entry.
+    instruction: Create only for explicit multi-repository scope; absence means the versioned single-root default.
     requires: [proposal]
   - id: execution
     generates: execution.yaml
     description: Executable provider, report, service, and readiness wiring
     template: execution.yaml
-    instruction: Configure project-owned adapters separately from the behavioral contract.
+    instruction: Create only for custom project-owned adapter, report, service, timeout, or readiness wiring.
     requires: [evidence]
   - id: handoffs
     generates: handoffs.yaml
     description: Permission-bound external operations and their activation-safe delivery contract
     template: handoffs.yaml
-    instruction: Declare operator work separately from implementation tasks; owner defaults to workflow.handoffDefaultOwner, and an empty operations array means none exists.
+    instruction: Create only when permission-bound operator work exists; never materialize an empty operations placeholder.
     requires: [proposal, tasks, evidence, grounding]
 
 apply:
-  # Runtime state marks new v3.3 changes and validates handoffs there. Keep the
-  # schema dependency additive for active changes created by older releases.
-  requires: [tasks, evidence, grounding, execution, repositories]
+  # Runtime state applies versioned conditional-artifact requirements. Legacy
+  # packets keep their materialized files; semantic v3 packets use virtual
+  # defaults when no grounding, repository, execution, or handoff override is
+  # needed.
+  requires: [tasks, evidence]
   tracks: tasks.md

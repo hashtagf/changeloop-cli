@@ -55,13 +55,24 @@
     "sourceReason": "replace-with-source-reason",
     "rows": []
   },
+  "nfrAssessment": {
+    "performance": { "status": "replace-with-applicable-or-not-applicable", "sourceReason": "replace-with-source-reason", "target": "replace-with-measurable-target-or-none", "claimIds": [] },
+    "capacity": { "status": "replace-with-applicable-or-not-applicable", "sourceReason": "replace-with-source-reason", "target": "replace-with-measurable-target-or-none", "claimIds": [] },
+    "availability": { "status": "replace-with-applicable-or-not-applicable", "sourceReason": "replace-with-source-reason", "target": "replace-with-observable-target-or-none", "claimIds": [] },
+    "securityPrivacy": { "status": "replace-with-applicable-or-not-applicable", "sourceReason": "replace-with-source-reason", "target": "replace-with-negative-path-or-control-outcome-or-none", "claimIds": [] },
+    "accessibility": { "status": "replace-with-applicable-or-not-applicable", "sourceReason": "replace-with-source-reason", "target": "replace-with-observable-target-or-none", "claimIds": [] },
+    "operability": { "status": "replace-with-applicable-or-not-applicable", "sourceReason": "replace-with-source-reason", "target": "replace-with-observable-target-or-none", "claimIds": [] },
+    "compatibility": { "status": "replace-with-applicable-or-not-applicable", "sourceReason": "replace-with-source-reason", "target": "replace-with-observable-target-or-none", "claimIds": [] },
+    "recoverability": { "status": "replace-with-applicable-or-not-applicable", "sourceReason": "replace-with-source-reason", "target": "replace-with-observable-target-or-none", "claimIds": [] }
+  },
+  "semanticInvariants": [],
   "readSet": [
     {
       "repository": "root",
       "path": "replace-with-relevant-file",
       "role": "requirement",
       "mode": "full",
-      "sha256": "replace-with-file-sha256"
+      "sha256": "replace-with-file-sha256-or-planned-for-a-new-task-owned-path"
     }
   ],
   "claims": [

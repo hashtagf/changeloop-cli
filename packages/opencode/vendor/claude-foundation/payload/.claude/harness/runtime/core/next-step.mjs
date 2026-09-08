@@ -17,19 +17,20 @@
 // `land check`, which performs that same freshness comparison itself rather
 // than guessing at it here.
 const NEXT_BY_STATUS = {
-  "ready-to-land": "land check",
-  "stale-proof": "proof readiness",
-  change: "change validate",
-  building: "proof readiness",
-  proven: "land check",
-  applied: "land archive",
-  landing: "land resume"
+  "ready-to-land": "advance",
+  "stale-proof": "advance --through proven",
+  change: "advance --through build",
+  building: "advance --through build",
+  proven: "advance",
+  applied: "advance --through archived",
+  landing: "advance --through archived"
 };
 
 export function nextCommand(status, id) {
   const operation = NEXT_BY_STATUS[status];
+  const [name, ...args] = operation ? operation.split(" ") : [];
   return operation
-    ? `claude-foundation ${operation} ${id}`
+    ? `claude-foundation ${name} ${id}${args.length ? ` ${args.join(" ")}` : ""}`
     : `claude-foundation doctor --change ${id}`;
 }
 

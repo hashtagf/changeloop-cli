@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the OpenSpec-native Foundation harness into an existing project.
+# Install the OpenSpec-native Change Loop harness into an existing project.
 
 set -euo pipefail
 
@@ -18,7 +18,7 @@ usage() {
 claude-foundation init [target-path] [options]
 
 Options:
-  --source <path>  Foundation source checkout
+  --source <path>  Change Loop source checkout
   --yes, -y        Do not ask for confirmation
   --dry-run        Show files without writing
   --force, -f      Accepted for backward compatibility; managed files refresh
@@ -46,10 +46,14 @@ while [ "$#" -gt 0 ]; do
 done
 
 TARGET_PATH="${TARGET_PATH:-$PWD}"
-mkdir -p "$TARGET_PATH"
-TARGET_PATH="$(cd "$TARGET_PATH" && pwd)"
+[ "$DRY_RUN" = yes ] || mkdir -p "$TARGET_PATH"
+if [ -d "$TARGET_PATH" ]; then
+  TARGET_PATH="$(cd "$TARGET_PATH" && pwd)"
+else
+  case "$TARGET_PATH" in /*) ;; *) TARGET_PATH="$PWD/$TARGET_PATH" ;; esac
+fi
 SOURCE_PATH="$(cd "$SOURCE_PATH" && pwd)"
-[ "$TARGET_PATH" != "$SOURCE_PATH" ] || fail "target cannot be the Foundation source"
+[ "$TARGET_PATH" != "$SOURCE_PATH" ] || fail "target cannot be the Change Loop source"
 
 for required in \
   .claude/orchestrator.md .claude/commands .claude/harness/foundation.mjs \
@@ -118,8 +122,6 @@ if [ "$ASSUME_YES" != yes ]; then
 fi
 
 MANIFEST_PATH="$TARGET_PATH/.foundation/install-manifest.txt"
-NEW_MANIFEST="$(mktemp)"
-BACKUP_DIR="$(mktemp -d)"
 INSTALL_COMMITTED=no
 PROJECT_MUTABLE=(
   ".claude/settings.json"
@@ -130,14 +132,32 @@ PROJECT_MUTABLE=(
   "openspec/repositories.yaml"
   "foundation.json"
 )
-for rel in "${MANAGED[@]}"; do
-  if [ -e "$TARGET_PATH/$rel" ]; then
-    mkdir -p "$BACKUP_DIR/$(dirname "$rel")"
-    cp -R "$TARGET_PATH/$rel" "$BACKUP_DIR/$rel"
-  fi
-done
-for rel in "${PROJECT_MUTABLE[@]}"; do
-  if [ -e "$TARGET_PATH/$rel" ]; then
+validate_managed_path() {
+  case "$1" in
+    /*|*..*|*\\*|*$'\n'*) fail "refusing unsafe managed manifest path: $1" ;;
+  esac
+  case "$1" in
+    .claude/*|openspec/schemas/*|.foundation/.gitignore|.foundation/README.md|WORKFLOW.md) ;;
+    *) fail "refusing unsafe managed manifest path: $1" ;;
+  esac
+}
+# Backup and rollback share the complete mutation set, including removals
+# outside today's managed directories. Validate all old paths before mutation.
+MUTATION_PATHS=("${MANAGED[@]}" "${PROJECT_MUTABLE[@]}" "${LEGACY[@]}")
+if [ -f "$MANIFEST_PATH" ]; then
+  while IFS= read -r old_rel; do
+    [ -n "$old_rel" ] || continue
+    validate_managed_path "$old_rel"
+    MUTATION_PATHS+=("$old_rel")
+  done < "$MANIFEST_PATH"
+fi
+NEW_MANIFEST="$(mktemp)"
+BACKUP_DIR="$(mktemp -d)"
+trap 'rm -f "$NEW_MANIFEST"; rm -rf "$BACKUP_DIR"' EXIT
+for rel in "${MUTATION_PATHS[@]}"; do
+  # A parent directory backup already contains its children.
+  if { [ -e "$TARGET_PATH/$rel" ] || [ -L "$TARGET_PATH/$rel" ]; } &&
+     [ ! -e "$BACKUP_DIR/$rel" ] && [ ! -L "$BACKUP_DIR/$rel" ]; then
     mkdir -p "$BACKUP_DIR/$(dirname "$rel")"
     cp -R "$TARGET_PATH/$rel" "$BACKUP_DIR/$rel"
   fi
@@ -145,16 +165,11 @@ done
 [ ! -f "$MANIFEST_PATH" ] || cp "$MANIFEST_PATH" "$BACKUP_DIR/install-manifest.txt"
 rollback_install() {
   [ "$INSTALL_COMMITTED" != yes ] || return 0
-  for rel in "${MANAGED[@]}"; do
-    [ ! -e "$TARGET_PATH/$rel" ] || rm -rf "$TARGET_PATH/$rel"
-    if [ -e "$BACKUP_DIR/$rel" ]; then
-      mkdir -p "$TARGET_PATH/$(dirname "$rel")"
-      cp -R "$BACKUP_DIR/$rel" "$TARGET_PATH/$rel"
+  for rel in "${MUTATION_PATHS[@]}"; do
+    if [ -e "$TARGET_PATH/$rel" ] || [ -L "$TARGET_PATH/$rel" ]; then
+      rm -rf "$TARGET_PATH/$rel"
     fi
-  done
-  for rel in "${PROJECT_MUTABLE[@]}"; do
-    [ ! -e "$TARGET_PATH/$rel" ] || rm -rf "$TARGET_PATH/$rel"
-    if [ -e "$BACKUP_DIR/$rel" ]; then
+    if [ -e "$BACKUP_DIR/$rel" ] || [ -L "$BACKUP_DIR/$rel" ]; then
       mkdir -p "$TARGET_PATH/$(dirname "$rel")"
       cp -R "$BACKUP_DIR/$rel" "$TARGET_PATH/$rel"
     fi
@@ -187,6 +202,19 @@ for rel in "${MANAGED[@]}"; do
   fi
 done | LC_ALL=C sort -u > "$NEW_MANIFEST"
 
+# Capture the installed label before managed files are refreshed. The
+# diagnostic below is advisory only: the exact source cohort is emitted by the
+# refreshed runtime because old releases did not record a content digest.
+PREVIOUS_RUNTIME_VERSION=unknown
+if [ -f "$TARGET_PATH/.claude/harness/protocol.json" ] &&
+    command -v jq >/dev/null 2>&1; then
+  PREVIOUS_RUNTIME_VERSION="$(jq -r '.runtime // "unknown"' "$TARGET_PATH/.claude/harness/protocol.json")"
+fi
+CURRENT_RUNTIME_VERSION=unknown
+if command -v jq >/dev/null 2>&1; then
+  CURRENT_RUNTIME_VERSION="$(jq -r '.runtime // "unknown"' "$SOURCE_PATH/.claude/harness/protocol.json")"
+fi
+
 # Remove only files previously recorded as Foundation-owned and no longer
 # shipped. Never infer ownership from a directory name.
 if [ -f "$MANIFEST_PATH" ]; then
@@ -195,13 +223,7 @@ if [ -f "$MANIFEST_PATH" ]; then
     # Prefix alone is not containment: `.claude/../../../tmp/x` starts with
     # `.claude/` and resolves outside the project, and this list guards a
     # delete. Reject traversal, absolute paths, and backslashes outright.
-    case "$old_rel" in
-      /*|*..*|*\\*|*$'\n'*) fail "refusing unsafe managed manifest path: $old_rel" ;;
-    esac
-    case "$old_rel" in
-      .claude/*|openspec/schemas/*|.foundation/.gitignore|.foundation/README.md|WORKFLOW.md) ;;
-      *) fail "refusing unsafe managed manifest path: $old_rel" ;;
-    esac
+    validate_managed_path "$old_rel"
     if ! grep -qxF "$old_rel" "$NEW_MANIFEST"; then
       [ ! -e "$TARGET_PATH/$old_rel" ] || rm -f "$TARGET_PATH/$old_rel"
     fi
@@ -261,16 +283,25 @@ elif command -v jq >/dev/null 2>&1; then
     .workflow.reviewPolicy //= $src[0].workflow.reviewPolicy |
     .review //= {} |
     .review.defaultReviewer //= $src[0].review.defaultReviewer |
-    if .review.fallbackReviewer == null and .review.independence == "self"
-      then .review.fallbackReviewer = $src[0].review.fallbackReviewer
-      else . end |
+    .review.fallbackReviewers //= (
+      if .review.fallbackReviewer == "main-session" then ["main-session"]
+      elif .review.independence == "self" then $src[0].review.fallbackReviewers
+      else [] end) |
+    .review.infraFailureThreshold //= $src[0].review.infraFailureThreshold |
+    del(.review.fallbackReviewer) |
     .review.reviewers //= {} |
-    .review.reviewers = ($src[0].review.reviewers + .review.reviewers)
+    .review.reviewers = ($src[0].review.reviewers + .review.reviewers) |
+    .telemetry = ($src[0].telemetry + (.telemetry // {})) |
+    .land = ($src[0].land + (.land // {}))
   ' "$TARGET_PATH/foundation.json" > "$tmp"
   mv "$tmp" "$TARGET_PATH/foundation.json"
   printf '✓ installed risk-tiered workflow and configured reviewer defaults; existing explicit review waivers were preserved\n'
 else
   printf '⚠ jq unavailable; inspect legacy numeric execution.packetBytes manually\n' >&2
+fi
+
+if command -v node >/dev/null 2>&1; then
+  node "$SOURCE_PATH/.claude/harness/runtime/core/update-advisory.mjs" upgrade-diagnostics --root "$TARGET_PATH" --previous-version "$PREVIOUS_RUNTIME_VERSION" --current-version "$CURRENT_RUNTIME_VERSION"
 fi
 
 for rel in "${LEGACY[@]}"; do
@@ -283,7 +314,8 @@ if [ ! -e "$SETTINGS_DST" ]; then
   mkdir -p "$(dirname "$SETTINGS_DST")"
   cp "$SETTINGS_SRC" "$SETTINGS_DST"
 elif command -v jq >/dev/null 2>&1; then
-  backup="$SETTINGS_DST.backup-$(date +%Y%m%d-%H%M%S)"
+  backup="$(mktemp "$SETTINGS_DST.backup-XXXXXXXX")"
+  MUTATION_PATHS+=("${backup#"$TARGET_PATH/"}")
   cp "$SETTINGS_DST" "$backup"
   merged="$(jq --slurpfile src "$SETTINGS_SRC" '
     # `upsert` below matches on the command string, so a hook whose command
@@ -330,6 +362,9 @@ elif command -v jq >/dev/null 2>&1; then
       else .hooks[$event] += [{matcher:$matcher,hooks:[$hook]}] end;
     remove_legacy |
     quote_foundation_hooks |
+    .permissions //= {} |
+    .permissions.allow = (((.permissions.allow // []) +
+      ($src[0].permissions.allow // [])) | unique) |
     reduce ($src[0].hooks | to_entries[]) as $event (.;
       reduce ($event.value[]) as $entry (.;
         reduce ($entry.hooks[]) as $hook (.;
@@ -405,9 +440,9 @@ else
 fi
 
 if ! command -v node >/dev/null 2>&1; then
-  printf '⚠ Node.js >=20.19 is required by OpenSpec and the Foundation harness\n' >&2
+  printf '⚠ Node.js >=20.19 is required by OpenSpec and the Change Loop harness\n' >&2
 elif ! command -v openspec >/dev/null 2>&1; then
-  printf '⚠ Install pinned OpenSpec: npm install -g @fission-ai/openspec@1.7.0\n' >&2
+  printf '▸ The harness prepares pinned OpenSpec project-locally under .foundation/tools when needed.\n'
 fi
 
 if command -v node >/dev/null 2>&1; then
@@ -417,7 +452,7 @@ if command -v node >/dev/null 2>&1; then
 fi
 
 INSTALL_COMMITTED=yes
-ok "OpenSpec-native Foundation installed at $TARGET_PATH"
+ok "Change Loop installed at $TARGET_PATH"
 printf '  Your product source was not changed; managed workflow files were installed or updated.\n'
 
 # Until these files are committed they are the working tree's dirt, and the loop
@@ -433,8 +468,8 @@ if command -v git >/dev/null 2>&1 &&
     .claude/settings.json >/dev/null 2>&1 || true
   if ! git -C "$TARGET_PATH" diff --cached --quiet 2>/dev/null; then
     printf '▸ Setup is complete, but the managed workflow files are only staged.\n'
-    printf '  Commit them before the first Foundation change so they are not mistaken for product work:\n'
-    printf '    git commit -m "chore: install claude-foundation harness"\n'
+    printf '  Commit them before the first Change Loop change so they are not mistaken for product work:\n'
+    printf '    git commit -m "chore: install Change Loop"\n'
     printf '  The loop treats uncommitted files as the change surface, so an\n'
     printf '  uncommitted harness becomes the first change'"'"'s surface.\n'
   fi

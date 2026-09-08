@@ -106,22 +106,23 @@ export function createAbandonRuntime({
     return moved;
   }
 
-  function abandonChange(id, flags = {}) {
+  function abandonRequest(id, suppliedFlags) {
+    const flags = Object.assign({}, suppliedFlags);
     const reason = String(flags.reason || "").trim();
     if (!reason) fail("change abandon requires --reason <reason>");
     const decisionRef = String(flags["decision-ref"] || "").trim();
     if (!decisionRef)
       fail("change abandon requires --decision-ref <host-user-decision>; ask the user whether to retire, keep, or resume this change before discarding it");
-    // Recoverable: abandon is the designed exit from a change that cannot
-    // proceed, so it has to survive the state file being deleted or corrupt —
-    // the very conditions that leave every other command refusing.
     const state = loadRuntime(id, { recoverable: true });
     if (state.recoveredState)
       console.error(`WARNING: runtime state for '${id}' is ${
         state.recoveredState}; quarantining what remains on disk`);
     if (state.status === "archived")
       fail(`change '${id}' is archived; an archived change is already terminal`);
+    return { flags, reason, decisionRef, state };
+  }
 
+  function appliedWorkspaceState(id, flags, state) {
     const journals = transactionJournals(id);
     const divergent = journals.filter((journal) =>
       ["rolling-back", "manual-recovery", "recovering-backup", "settling-current"]
@@ -133,13 +134,12 @@ export function createAbandonRuntime({
     if (appliedMode !== null && !APPLIED_MODES.includes(appliedMode))
       fail("change abandon --applied must be keep|revert");
     if ((applied || divergent.length) && appliedMode === null)
-      blockWithDecision(id, "abandon-applied-workspace",
-        appliedDecision(id, divergent, applied));
+      blockWithDecision(id, "abandon-applied-workspace", appliedDecision(id, divergent, applied));
+    return { journals, divergent, interrupted, applied, appliedMode };
+  }
 
-    // Before anything moves. The record below carries outcomes — what was
-    // reverted, what was cleaned — so it can only be written afterwards, and
-    // an abandon interrupted partway through the reverts would otherwise leave
-    // no trace of what was attempted or who authorized it.
+  function appendAbandonStarted(id, reason, decisionRef, state, appliedState) {
+    const { applied, appliedMode, divergent } = appliedState;
     const auditPath = join(paths.logs, "abandoned.jsonl");
     mkdirSync(dirname(auditPath), { recursive: true });
     appendFileSync(auditPath, `${JSON.stringify({
@@ -151,11 +151,12 @@ export function createAbandonRuntime({
       actor: process.env.USER || process.env.LOGNAME || "operator",
       startedAt: now()
     })}\n`);
+    return auditPath;
+  }
 
+  function revertAbandonedWork(id, reason, appliedState) {
+    const { journals, interrupted, applied, appliedMode } = appliedState;
     const reverted = [];
-    // An interrupted apply never represents a state the user chose, so it is
-    // undone regardless of the applied decision; only the completed projection
-    // is theirs to keep.
     for (const journal of interrupted) {
       const result = revertJournal(id, journal, `abandoned: ${reason}`);
       if (result) reverted.push(result);
@@ -168,14 +169,22 @@ export function createAbandonRuntime({
       const result = revertJournal(id, journal, `abandoned: ${reason}`);
       if (result) reverted.push(result);
     }
+    return reverted;
+  }
 
+  function cleanupAbandonedWork(id, state) {
     cleanupChangeLeases(id);
-    const workspaceCleanup = state.workspace
-      ? cleanupAppliedSandbox(id, state) : { status: "not-needed" };
-    const repositoryCleanup = state.repositories
-      ? cleanupRepositorySandboxes(id, state) : null;
+    return {
+      workspaceCleanup: state.workspace
+        ? cleanupAppliedSandbox(id, state) : { status: "not-needed" },
+      repositoryCleanup: state.repositories
+        ? cleanupRepositorySandboxes(id, state) : null
+    };
+  }
 
-    const record = {
+  function abandonRecord(id, reason, decisionRef, state, appliedState, reverted, cleanup) {
+    const { applied, appliedMode, divergent } = appliedState;
+    return {
       version: 1,
       changeId: id,
       reason,
@@ -184,17 +193,17 @@ export function createAbandonRuntime({
       appliedPaths: applied?.touchedPaths || [],
       reverted,
       unresolvedTransactions: divergent.map((journal) => journal.transactionId),
-      workspaceCleanup,
-      repositoryCleanup,
+      workspaceCleanup: cleanup.workspaceCleanup,
+      repositoryCleanup: cleanup.repositoryCleanup,
       schema: state.schema || null,
       status: state.status || null,
       actor: process.env.USER || process.env.LOGNAME || "operator",
       abandonedAt: now()
     };
-    // The outcome line, paired with the intent line written above.
-    appendFileSync(auditPath, `${JSON.stringify({ ...record, event: "abandoned" })}\n`);
+  }
 
-    const moved = quarantine(id, [
+  function quarantineChange(id) {
+    return quarantine(id, [
       ["change", join(paths.changes, id)],
       ["runtime.json", join(paths.runtime, `${id}.json`)],
       ["receipts", join(paths.receipts, id)],
@@ -205,14 +214,28 @@ export function createAbandonRuntime({
       ["logs", join(paths.logs, id)],
       ["snapshot.json", join(paths.snapshots, `${id}.json`)]
     ]);
-    record.quarantined = moved;
-    writeJson(join(recoveryRoot(id), "abandon.json"), record);
+  }
 
-    const relative = join(recoveryRoot(id)).slice(root.length + 1);
+  function reportAbandoned(id, reason, appliedMode, workspaceCleanup) {
+    const relative = recoveryRoot(id).slice(root.length + 1);
     console.log(`ABANDONED ${id}\n  reason: ${reason}\n  applied: ${
       appliedMode || "none"}\n  quarantined: ${relative}`);
     if (["failed", "refused"].includes(workspaceCleanup.status))
       console.error(`WARNING: sandbox cleanup ${workspaceCleanup.status}: ${workspaceCleanup.reason}`);
+  }
+
+  function abandonChange(id, suppliedFlags) {
+    const { flags, reason, decisionRef, state } = abandonRequest(id, suppliedFlags);
+    const appliedState = appliedWorkspaceState(id, flags, state);
+    const auditPath = appendAbandonStarted(id, reason, decisionRef, state, appliedState);
+    const reverted = revertAbandonedWork(id, reason, appliedState);
+    const cleanup = cleanupAbandonedWork(id, state);
+    const record = abandonRecord(
+      id, reason, decisionRef, state, appliedState, reverted, cleanup);
+    appendFileSync(auditPath, `${JSON.stringify({ ...record, event: "abandoned" })}\n`);
+    record.quarantined = quarantineChange(id);
+    writeJson(join(recoveryRoot(id), "abandon.json"), record);
+    reportAbandoned(id, reason, appliedState.appliedMode, cleanup.workspaceCleanup);
   }
 
   return { abandonChange, recoveryRoot };

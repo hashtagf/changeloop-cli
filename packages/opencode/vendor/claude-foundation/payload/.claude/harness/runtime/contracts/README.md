@@ -15,7 +15,7 @@ unavailable rather than invalid, preserving legacy compatibility.
 
 Important invariants:
 
-- instruction paths must remain inside the Foundation root;
+- instruction paths must remain inside the installed harness root;
 - missing files, duplicate skill names, and invalid/mismatched skill
   frontmatter are rejected;
 - instruction content is hashed after CRLF normalization but never returned;

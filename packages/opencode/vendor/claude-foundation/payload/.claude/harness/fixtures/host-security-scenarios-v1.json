@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "protocol": "foundation-host-security-scenarios-v1",
+  "hosts": ["claude-code", "opencode", "cursor", "codex"],
+  "scenarios": [
+    { "id": "HOST-INSTALL-UPGRADE", "surface": "installer", "category": "installed-host", "test": ".claude/tests/harness/run-installer-tests.sh" },
+    { "id": "HOST-TERMINAL-TRUTH", "surface": "runtime", "category": "terminal-truth", "test": ".claude/tests/harness/run-agent-contract-tests.sh" },
+    { "id": "HOST-PHASE-ISOLATION", "surface": "hook", "category": "phase-isolation", "test": ".claude/tests/hooks/run-phase-mutation-guard-tests.sh" },
+    { "id": "HOST-STALE-PROOF", "surface": "proof", "category": "stale-proof", "test": ".claude/tests/harness/run-stale-recovery-tests.mjs" },
+    { "id": "HOST-EXPLICIT-LAND", "surface": "land", "category": "explicit-land", "test": ".claude/tests/harness/run-harness-tests.sh" },
+    { "id": "SEC-HOSTILE-ARGUMENT", "surface": "cli", "category": "hostile-argument", "test": ".claude/harness/tests/operation-profile.test.mjs" },
+    { "id": "SEC-HOSTILE-FILENAME", "surface": "hook", "category": "hostile-filename", "test": ".claude/tests/hooks/run-phase-mutation-guard-tests.sh" },
+    { "id": "SEC-SYMLINK-ESCAPE", "surface": "artifact-and-land", "category": "symlink", "test": ".claude/harness/tests/artifact-store.test.mjs" },
+    { "id": "SEC-PATH-CONTROL", "surface": "provider-and-land", "category": "path", "test": ".claude/harness/tests/land-check-phases.test.mjs" },
+    { "id": "SEC-SECRET-REDACTION", "surface": "hook-and-handoff", "category": "secret", "test": ".claude/tests/hooks/run-hook-tests.sh" },
+    { "id": "SEC-COMMAND-INJECTION", "surface": "process", "category": "command-injection", "test": ".claude/harness/tests/process-runtime.test.mjs" },
+    { "id": "SEC-MANIFEST-TRAVERSAL", "surface": "installer", "category": "path-traversal", "test": ".claude/tests/harness/run-installer-tests.sh" }
+  ]
+}

@@ -17,16 +17,16 @@ artifacts:
     requires: [proposal]
   - id: design
     generates: design.md
-    description: Load-bearing technical decisions and rollback
+    description: Conditional load-bearing decisions, diagrams, integrations, and rollback
     template: design.md
-    instruction: Record only decisions needed to implement safely in the existing system.
+    instruction: Semantic draft v3 creates this only when durable design context exists; record no empty/default design.
     requires: [proposal, specs]
   - id: tasks
     generates: tasks.md
     description: Single implementation ledger
     template: tasks.md
     instruction: Create coherent, verifiable implementation work items without lifecycle phases.
-    requires: [proposal, specs, design]
+    requires: [proposal, specs]
   - id: evidence
     generates: evidence.yaml
     description: Stable behavioral claims and required evidence capabilities
@@ -35,31 +35,32 @@ artifacts:
     requires: [proposal, specs]
   - id: grounding
     generates: grounding.yaml
-    description: Locked single-batch decisions, complete read set, and claim-to-production evidence map
+    description: Conditional non-derived material decisions; legacy grounding remains compatible
     template: grounding.yaml
-    instruction: Record discovery and every locked material choice/default before Build.
+    instruction: Prefer Grounding v3 decisions-only and omit the file when no material decision exists.
     requires: [proposal, specs, evidence]
   - id: repositories
     generates: repositories.yaml
     description: Repositories this change may touch, and their write scope
     template: repositories.yaml
-    instruction: Select every repository the change writes plus their dependency closure. A single-repository change keeps the default root entry.
+    instruction: Create only for explicit multi-repository scope; absence means the versioned single-root default.
     requires: [proposal]
   - id: execution
     generates: execution.yaml
     description: Executable provider, report, service, and readiness wiring
     template: execution.yaml
-    instruction: Configure project-owned adapters separately from the behavioral contract.
+    instruction: Create only for custom project-owned adapter, report, service, timeout, or readiness wiring.
     requires: [evidence]
   - id: handoffs
     generates: handoffs.yaml
     description: Permission-bound external operations and their activation-safe delivery contract
     template: handoffs.yaml
-    instruction: Declare DevOps, SRE, security, or operator work separately from implementation tasks; owner defaults to workflow.handoffDefaultOwner, and an empty operations array means none exists.
+    instruction: Create only when DevOps, SRE, security, or operator work exists; never materialize an empty operations placeholder.
     requires: [proposal, tasks, evidence, grounding]
 
 apply:
-  # handoffs is required by v3.3 lifecycle state, but remains optional here so
-  # an active pre-v3.3 change can still apply without mutating its agreement.
-  requires: [tasks, evidence, grounding, execution, repositories]
+  # Runtime state applies versioned conditional-artifact requirements. Design,
+  # grounding, repositories, execution, and handoffs remain available when the
+  # semantic contract calls for them, without forcing empty placeholders.
+  requires: [specs, tasks, evidence]
   tracks: tasks.md

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "hosts": {
     "claude-code": {
       "nativeDispatch": "available",
@@ -10,7 +10,14 @@
         "lint": "live",
         "sessionDigest": "live"
       },
-      "finalEnforcement": "Land gates"
+      "finalEnforcement": "Land gates",
+      "workflowGuarantees": {
+        "terminalTruth": "runtime-enforced",
+        "phaseIsolation": "live-hook-and-runtime",
+        "staleProof": "runtime-enforced",
+        "explicitLand": "runtime-enforced"
+      },
+      "unattendedWrites": { "mode": "supported", "requires": "fresh phase context and isolated workspace" }
     },
     "opencode": {
       "nativeDispatch": "available",
@@ -21,7 +28,14 @@
         "lint": "live",
         "sessionDigest": "unavailable"
       },
-      "finalEnforcement": "Land gates"
+      "finalEnforcement": "Land gates",
+      "workflowGuarantees": {
+        "terminalTruth": "runtime-enforced",
+        "phaseIsolation": "live-plugin-and-runtime",
+        "staleProof": "runtime-enforced",
+        "explicitLand": "runtime-enforced"
+      },
+      "unattendedWrites": { "mode": "supported", "requires": "Foundation OpenCode plugin and isolated workspace" }
     },
     "cursor": {
       "nativeDispatch": "available",
@@ -32,7 +46,14 @@
         "lint": "unavailable",
         "sessionDigest": "unavailable"
       },
-      "finalEnforcement": "Land gates"
+      "finalEnforcement": "Land gates",
+      "workflowGuarantees": {
+        "terminalTruth": "runtime-enforced",
+        "phaseIsolation": "final-audit-only",
+        "staleProof": "runtime-enforced",
+        "explicitLand": "runtime-enforced"
+      },
+      "unattendedWrites": { "mode": "blocked-without-equivalent-boundary", "requires": "host-proven sandbox boundary" }
     },
     "codex": {
       "nativeDispatch": "available",
@@ -43,7 +64,14 @@
         "lint": "unavailable",
         "sessionDigest": "unavailable"
       },
-      "finalEnforcement": "Land gates"
+      "finalEnforcement": "Land gates",
+      "workflowGuarantees": {
+        "terminalTruth": "runtime-enforced",
+        "phaseIsolation": "final-audit-only",
+        "staleProof": "runtime-enforced",
+        "explicitLand": "runtime-enforced"
+      },
+      "unattendedWrites": { "mode": "blocked-without-equivalent-boundary", "requires": "signed host attestation for an isolated workspace" }
     }
   }
 }

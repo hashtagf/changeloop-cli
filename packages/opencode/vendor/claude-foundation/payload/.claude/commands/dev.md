@@ -1,20 +1,24 @@
 ---
-description: Compatibility composition for change → build → prove.
+description: Compose change → build → prove.
 argument-hint: <intent> | --resume <change> | --plan-only <intent>
 ---
 
-Execute **$ARGUMENTS**.
+`--resume` reads state; `--plan-only` runs `/change` only.
 
-With `--resume`, continue the first incomplete operation; never replay work.
-With `--plan-only`, run `/change` and stop after validation.
+For fresh work use `/change`; it compiles one semantic draft. Then run
+`claude-foundation advance <id> --through proven`; execute each protocol-v5
+action and `resume`. These are agent-only control fields. The coordinator skips
+completed Build work and reused evidence automatically. Do not reconstruct chains.
 
-For all fresh work use `/change`; only it may run `change start --template` after the
-complete read and Decision Sheet. Then run `/build` and `/prove`.
+Stop only at `DONE`/`proven` or a real typed boundary. `/dev` never
+infers Land authority; `/land` creates the internal grant and completes through
+`archived`. `ASK_USER` asks only for a work decision; `WAIT` reports an external
+owner and condition, not a user command. Resume internal work yourself.
 
-Do not reread framework files unless blocked. Report phase progress; finish in
-the user's language with behavior, evidence, risk, and next action.
+Do not reread framework files. Report evidence in the user's language.
 
-Workflow is mandatory. Code/test success without Foundation runtime state is a failed `/dev` invocation.
+Use Edit/Write.
 
-Never Land, commit, push, open a PR, create `.workflow/` state, lifecycle agents,
-phase mirrors, or another ledger.
+Code/test success without the corresponding Foundation state is incomplete.
+
+Never infer Land authority, commit, push, open PR, or add a ledger.

@@ -27,12 +27,38 @@ export function taskBlocks(content) {
   return blocks;
 }
 
+// Annotation values may themselves contain brackets — a Next.js dynamic route
+// such as `app/[tenant]/passes/**` is a legitimate `[paths:]` entry — so the
+// value runs to the bracket that balances the opener, not to the first `]`.
+// A `]`-terminated regex truncated exactly that path to `app/[tenant` and blocked
+// an entire change from proving.
+function annotationValue(text, name) {
+  const marker = `[${name.toLowerCase()}:`;
+  const lower = text.toLowerCase();
+  let from = 0;
+  while (true) {
+    const start = lower.indexOf(marker, from);
+    if (start === -1) return null;
+    let depth = 1;
+    for (let i = start + marker.length; i < text.length; i += 1) {
+      if (text[i] === "[") depth += 1;
+      else if (text[i] === "]") {
+        depth -= 1;
+        if (depth === 0) return text.slice(start + marker.length, i);
+      }
+    }
+    // Unbalanced to the end of the block: skip this opener rather than
+    // swallowing the rest of the task text as a value.
+    from = start + marker.length;
+  }
+}
+
 export function taskMetadata(task) {
   const value = task.text;
   const list = (name) => {
-    const match = value.match(new RegExp(`\\[${name}:([^\\]]+)\\]`, "i"));
-    return match
-      ? match[1].split(",").map((item) => item.trim()).filter(Boolean)
+    const match = annotationValue(value, name);
+    return match !== null
+      ? match.split(",").map((item) => item.trim()).filter(Boolean)
       : [];
   };
   return {

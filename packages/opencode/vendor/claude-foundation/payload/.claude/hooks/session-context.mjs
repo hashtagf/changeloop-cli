@@ -4,6 +4,7 @@ import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { nextCommand } from "../harness/runtime/core/next-step.mjs";
+import { shellDisplayArgument } from "../harness/runtime/core/shell-mutation-policy.mjs";
 
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(process.env.CLAUDE_PROJECT_DIR || join(HOOK_DIR, "..", ".."));
@@ -55,8 +56,16 @@ function workflowDigest() {
   else {
     lines.push(`Foundation: ${active.length} active change(s).`);
     for (const id of active) {
-      const status = readState(runtimeDir, id).status || "unknown";
+      const state = readState(runtimeDir, id);
+      const status = state.status || "unknown";
       lines.push(`  ${id} [${status}] next: ${nextCommand(status, id)}`);
+      // The rule a Build session breaks most often is a shell write without
+      // its workspace anchor, and the refusal arrives one wasted turn later.
+      // Name the exact prefix where the session begins, so it is in context
+      // before the first command instead of after the first refusal.
+      if (status === "building" && typeof state.workspace?.path === "string")
+        lines.push(`    Build shell rule: start every mutating Bash call with \`cd ${
+          shellDisplayArgument(state.workspace.path)} && \`; the phase guard refuses unanchored writes.`);
     }
     lines.push("  Proof freshness is not checked here; run `claude-foundation changes` for readiness.");
   }

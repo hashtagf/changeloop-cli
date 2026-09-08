@@ -26,7 +26,7 @@ describe("Foundation build bundle", () => {
 
     expect(result.manifest.files).toContainEqual({
       path: "install-opencode.sh",
-      sha256: "c602bf2227fd025fa0f17f667d210d173be8bb202e9224aa0be5ea060d703e1d",
+      sha256: "67b216d86c8d6dfc1e6ae10a16141eb646665ff3b0b3878e20d27d3bd558acb0",
       mode: 0o755,
     })
     expect(result.source).toContain('"payload/install-opencode.sh"')

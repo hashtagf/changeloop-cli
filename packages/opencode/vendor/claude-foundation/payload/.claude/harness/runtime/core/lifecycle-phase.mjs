@@ -34,6 +34,9 @@ export const PHASE_BY_COMMAND = {
   "evidence-init": "change",
   "evidence-doctor": "change",
   "evidence-upgrade": "change",
+  "quality-discover": "change",
+  "quality-init": "change",
+  "quality-doctor": "change",
 
   sandbox: "build",
   "agent-plan": "build",
@@ -56,16 +59,22 @@ export const PHASE_BY_COMMAND = {
   "authority-status": "prove",
   "authority-record": "prove",
   "authority-reset-infra": "prove",
+  "authority-reset-base-move": "prove",
   "evidence-verify-ci": "prove",
   receipt: "prove",
   "run-provider": "prove",
   prove: "prove",
+  "quality-run": "prove",
+  "quality-report": "prove",
+  "quality-baseline": "prove",
+  "quality-debt": "prove",
 
   "handoff-status": "land",
   "handoff-packet": "land",
   "handoff-record": "land",
 
   "land-check": "land",
+  "land-advance": "land",
   "land-recover": "land",
   "land-plan": "land",
   "land-record": "land",
@@ -74,9 +83,13 @@ export const PHASE_BY_COMMAND = {
   archive: "land",
 
   "budget-continue": "meta",
+  "budget-checkpoint": "meta",
   event: "meta",
   "telemetry-sync": "meta",
-  "telemetry-import": "meta"
+  "telemetry-import": "meta",
+  advance: "meta",
+  amend: "change",
+  feedback: "meta"
 };
 
 // The bucket an operations row is filed under. `meta` is a real answer here.

@@ -7,6 +7,69 @@ const MULTI_VALUE_EVIDENCE = [
   "artifact", "artifacts", "reference", "criterion", "scope-path", "subject-provenance"
 ];
 
+export function authorityResponseProblems(response, request, changeId, protocolVersion) {
+  const problems = [];
+  const expect = (field, actual, expected) => {
+    if (actual !== expected)
+      problems.push(`${field}: expected ${JSON.stringify(expected)}, ` +
+        `got ${JSON.stringify(actual ?? null)}`);
+  };
+  expect("version", String(response?.version ?? ""), protocolVersion);
+  expect("requestId", response?.requestId ?? null, request.requestId);
+  expect("changeId", response?.changeId ?? null, changeId);
+  expect("type", response?.type ?? null, request.type);
+  expect("workspaceHash", response?.workspaceHash ?? null, request.workspaceHash);
+  if (!RESPONSE_STATUSES.has(response?.status))
+    problems.push(`status: expected one of ${[...RESPONSE_STATUSES].join("|")}, ` +
+      `got ${JSON.stringify(response?.status ?? null)}`);
+  return problems;
+}
+
+export function normalizeAuthorityEvidence(value) {
+  const evidence = value && typeof value === "object" ? { ...value } : {};
+  for (const key of MULTI_VALUE_EVIDENCE)
+    if (evidence[key] !== undefined && !Array.isArray(evidence[key]))
+      evidence[key] = [evidence[key]];
+  return evidence;
+}
+
+export function validateAuthorityResponseOperation({ protocolVersion }, response, request, changeId) {
+  const problems = authorityResponseProblems(response, request, changeId, protocolVersion);
+  if (problems.length)
+    return {
+      valid: false,
+      reason: `authority response does not match the request and workspace\n  ${
+        problems.join("\n  ")}`
+    };
+  return {
+    valid: true,
+    status: response.status,
+    evidence: normalizeAuthorityEvidence(response.evidence)
+  };
+}
+
+function openAuthorityStatus(value, workspaceHash, expectedHashFor, now) {
+  const expected = expectedHashFor ? expectedHashFor(value) : workspaceHash;
+  if (value.workspaceHash !== expected) return "stale";
+  if (Date.parse(value.expiresAt || "") <= now()) return "expired";
+  return value.status;
+}
+
+function healedAuthorityStatus(value, expectedHashFor, now) {
+  if (value.status !== "stale" || !expectedHashFor) return value.status;
+  if (value.workspaceHash !== expectedHashFor(value)) return value.status;
+  if (Date.parse(value.expiresAt || "") <= now()) return value.status;
+  return "requested";
+}
+
+export function authorityStatusValue(entry, workspaceHash, expectedHashFor = null, now = Date.now) {
+  const value = { ...entry.value };
+  value.status = OPEN_STATUSES.has(value.status)
+    ? openAuthorityStatus(value, workspaceHash, expectedHashFor, now)
+    : healedAuthorityStatus(value, expectedHashFor, now);
+  return value;
+}
+
 export function createAuthorityStore({ root, protocolVersion, readJson, writeJson, now }) {
   const requestRoot = (id) => join(root, id);
 
@@ -42,21 +105,9 @@ export function createAuthorityStore({ root, protocolVersion, readJson, writeJso
   function status(id, workspaceHash, requestId = null, expectedHashFor = null) {
     const rows = list(id)
       .filter((entry) => !requestId || entry.value.requestId === requestId)
-      .map((entry) => {
-        const value = { ...entry.value };
-        if (OPEN_STATUSES.has(value.status)) {
-          const expected = expectedHashFor ? expectedHashFor(value) : workspaceHash;
-          if (value.workspaceHash !== expected) value.status = "stale";
-          else if (Date.parse(value.expiresAt || "") <= Date.now()) value.status = "expired";
-        } else if (value.status === "stale" && expectedHashFor &&
-            value.workspaceHash === expectedHashFor(value) &&
-            Date.parse(value.expiresAt || "") > Date.now()) {
-          // Heal the value in memory. Status is deliberately side-effect free;
-          // request transitions are serialized by the authority mutation lock.
-          value.status = "requested";
-        }
-        return value;
-      });
+      // Heal values in memory only. Status is deliberately side-effect free;
+      // request transitions are serialized by the authority mutation lock.
+      .map((entry) => authorityStatusValue(entry, workspaceHash, expectedHashFor));
     return {
       found: !requestId || rows.length > 0,
       value: {
@@ -65,34 +116,7 @@ export function createAuthorityStore({ root, protocolVersion, readJson, writeJso
     };
   }
 
-  function validateResponse(response, request, changeId) {
-    // Name every field that disagrees, not just the first one found.
-    const problems = [];
-    const expect = (field, actual, expected) => {
-      if (actual !== expected)
-        problems.push(`${field}: expected ${JSON.stringify(expected)}, ` +
-          `got ${JSON.stringify(actual ?? null)}`);
-    };
-    expect("version", String(response?.version ?? ""), protocolVersion);
-    expect("requestId", response?.requestId ?? null, request.requestId);
-    expect("changeId", response?.changeId ?? null, changeId);
-    expect("type", response?.type ?? null, request.type);
-    expect("workspaceHash", response?.workspaceHash ?? null, request.workspaceHash);
-    if (!RESPONSE_STATUSES.has(response?.status))
-      problems.push(`status: expected one of ${[...RESPONSE_STATUSES].join("|")}, ` +
-        `got ${JSON.stringify(response?.status ?? null)}`);
-    if (problems.length)
-      return {
-        valid: false,
-        reason: `authority response does not match the request and workspace\n  ${
-          problems.join("\n  ")}`
-      };
-    const evidence = response.evidence && typeof response.evidence === "object"
-      ? { ...response.evidence } : {};
-    for (const key of MULTI_VALUE_EVIDENCE)
-      if (evidence[key] !== undefined && !Array.isArray(evidence[key])) evidence[key] = [evidence[key]];
-    return { valid: true, status: response.status, evidence };
-  }
+  const validateResponse = validateAuthorityResponseOperation.bind(null, { protocolVersion });
 
   function complete(entry, request, response, responseDigest, receiptDigest) {
     writeJson(entry.path, {

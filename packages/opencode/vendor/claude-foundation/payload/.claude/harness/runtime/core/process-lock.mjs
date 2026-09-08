@@ -10,7 +10,7 @@ function safeReadJson(path) {
   catch { return null; }
 }
 
-function processAlive(pid) {
+export function isProcessAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; }
   catch (error) { return error?.code === "EPERM"; }
@@ -50,7 +50,7 @@ export function acquireProcessLock(path, {
       } catch {
         return true;
       }
-      if (residue || (current?.token && !processAlive(Number(current.pid)))) {
+      if (residue || (current?.token && !isProcessAlive(Number(current.pid)))) {
         rmSync(path, { force: true });
         return true;
       }

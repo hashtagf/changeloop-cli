@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-function pathInside(parent, candidate) {
+export function pathInside(parent, candidate) {
   const rel = relative(resolve(parent), resolve(candidate));
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
@@ -11,31 +11,195 @@ function pathInside(parent, candidate) {
 // Only an http(s) readiness URL names a port another run can be holding. A
 // data: URL, for instance, always answers, and pre-probing one would report
 // every service as already served.
-function servesOverNetwork(url) {
+export function servesOverNetwork(url) {
   if (!url) return false;
   try { return ["http:", "https:"].includes(new URL(url).protocol); }
   catch { return false; }
 }
 
-export function createProcessRuntime({ root, logs, now, resolveServiceCwd }) {
-  async function readinessMatches(readiness) {
-    try {
-      const response = await fetch(readiness.url, { signal: AbortSignal.timeout(750) });
-      const expectedStatus = readiness.expectStatus === undefined ? 200 : Number(readiness.expectStatus);
-      if (response.status !== expectedStatus) return false;
-      if (readiness.expectHeader &&
-          !Object.entries(readiness.expectHeader).every(([key, value]) =>
-            response.headers.get(key) === String(value))) return false;
-      if (readiness.expectBody !== undefined) {
-        const body = await response.text();
-        if (!body.includes(readiness.expectBody)) return false;
-      }
-      return true;
-    } catch {
-      return false;
+export async function readinessMatches(readiness, request = fetch) {
+  try {
+    const response = await request(readiness.url, { signal: AbortSignal.timeout(750) });
+    const expectedStatus = readiness.expectStatus === undefined
+      ? 200 : Number(readiness.expectStatus);
+    if (response.status !== expectedStatus) return false;
+    if (readiness.expectHeader &&
+        !Object.entries(readiness.expectHeader).every(([key, value]) =>
+          response.headers.get(key) === String(value))) return false;
+    if (readiness.expectBody !== undefined) {
+      const body = await response.text();
+      if (!body.includes(readiness.expectBody)) return false;
     }
+    return true;
+  } catch {
+    return false;
   }
+}
 
+export function staticServiceIdentity(name, proofRunId, identityHeader) {
+  return {
+    ...(identityHeader || { "x-foundation-service": name }),
+    "x-foundation-proof-run": String(proofRunId)
+  };
+}
+
+export function staticServiceRequestHandler({
+  staticRoot, readinessUrl, identityHeaders, onRequest = () => {}
+}) {
+  const mime = {
+    ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml"
+  };
+  return (request, response) => {
+    onRequest();
+    let pathname;
+    try { pathname = decodeURIComponent(new URL(request.url, readinessUrl).pathname); }
+    catch {
+      response.writeHead(400, identityHeaders);
+      response.end("bad request");
+      return;
+    }
+    const requested = resolve(staticRoot, `.${pathname === "/" ? "/index.html" : pathname}`);
+    if (!pathInside(staticRoot, requested) || !existsSync(requested) ||
+        !statSync(requested).isFile()) {
+      response.writeHead(404, identityHeaders);
+      response.end("not found");
+      return;
+    }
+    const extension = requested.slice(requested.lastIndexOf("."));
+    response.writeHead(200, {
+      ...identityHeaders,
+      "content-type": mime[extension] || "application/octet-stream"
+    });
+    response.end(readFileSync(requested));
+  };
+}
+
+export function writeServiceLog({
+  root, logs, id, proofRunId, name, content, status
+}) {
+  const logPath = join(logs, id, `${proofRunId}-service-${name}.log`);
+  mkdirSync(dirname(logPath), { recursive: true });
+  writeFileSync(logPath, content);
+  return {
+    name, path: relative(root, logPath).replaceAll("\\", "/"), status
+  };
+}
+
+export async function startNativeStaticService({
+  id, name, config, proofRunId, cwd, root, logs, now,
+  readinessCheck = readinessMatches, serverFactory = createServer
+}) {
+  const staticRoot = resolve(cwd, config.staticRoot);
+  if (!pathInside(cwd, staticRoot) || !existsSync(staticRoot) ||
+      !statSync(staticRoot).isDirectory())
+    throw new Error(`service '${name}' staticRoot is not a workspace directory`);
+  const readinessUrl = new URL(config.readiness.url);
+  const port = Number(readinessUrl.port || (readinessUrl.protocol === "https:" ? 443 : 80));
+  const host = readinessUrl.hostname;
+  const identityHeaders = staticServiceIdentity(name, proofRunId, config.identityHeader);
+  let requests = 0;
+  const server = serverFactory(staticServiceRequestHandler({
+    staticRoot, readinessUrl: config.readiness.url, identityHeaders,
+    onRequest: () => { requests += 1; }
+  }));
+  await new Promise((complete, reject) => {
+    server.once("error", reject);
+    server.listen(port, host, complete);
+  });
+  const runBoundReadiness = {
+    ...config.readiness,
+    expectHeader: {
+      ...(config.readiness.expectHeader || {}),
+      "x-foundation-proof-run": String(proofRunId)
+    }
+  };
+  if (!await readinessCheck(runBoundReadiness)) {
+    await new Promise((complete) => server.close(complete));
+    throw new Error(`service '${name}' native static readiness failed`);
+  }
+  return {
+    name, child: null, startedAt: now(),
+    stop() {
+      server.close();
+      return writeServiceLog({
+        root, logs, id, proofRunId, name,
+        content: `native-static root=${relative(cwd, staticRoot)} requests=${requests}\n`,
+        status: "terminated"
+      });
+    }
+  };
+}
+
+export function serviceEnvironment(config, id, root, proofRunId, name) {
+  const inherited = Object.fromEntries((config.envFrom || [])
+    .filter((envName) => process.env[envName] !== undefined)
+    .map((envName) => [envName, process.env[envName]]));
+  return {
+    ...process.env, ...inherited, ...(config.env || {}),
+    FOUNDATION_CHANGE_ID: id,
+    FOUNDATION_CONTROL_ROOT: root,
+    FOUNDATION_REPOSITORY_ID: config.repository || "root",
+    FOUNDATION_PROOF_RUN_ID: proofRunId,
+    FOUNDATION_SERVICE_NAME: name
+  };
+}
+
+export async function startSpawnedService({
+  id, name, config, proofRunId, cwd, root, logs, now,
+  readinessCheck = readinessMatches, spawnProcess = spawn,
+  wait = () => new Promise((complete) => setTimeout(complete, 100))
+}) {
+  const [command, ...args] = config.command;
+  let stdout = "";
+  let stderr = "";
+  let closed = false;
+  let exitStatus = null;
+  const child = spawnProcess(command, args, {
+    cwd, env: serviceEnvironment(config, id, root, proofRunId, name),
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  child.on("close", (status) => { closed = true; exitStatus = status; });
+  let spawnError = null;
+  child.on("error", (error) => { spawnError = error; closed = true; });
+  const deadline = Date.now() + Number(config.timeoutMs || 30000);
+  while (Date.now() < deadline) {
+    if (spawnError)
+      throw new Error(`service '${name}' could not start: ${spawnError.message}`);
+    if (closed)
+      throw new Error(
+        `service '${name}' exited before readiness (status ${exitStatus}): ` +
+        `${stderr.trim() || stdout.trim() || "no output"}`
+      );
+    if (await readinessCheck(config.readiness)) {
+      return {
+        name, child, startedAt: now(),
+        stop() {
+          if (!closed) child.kill("SIGTERM");
+          return writeServiceLog({
+            root, logs, id, proofRunId, name, content: `${stdout}${stderr}`,
+            status: closed ? exitStatus : "terminated"
+          });
+        }
+      };
+    }
+    await wait();
+  }
+  if (!closed) child.kill("SIGTERM");
+  throw new Error(`service '${name}' readiness timed out`);
+}
+
+export function serviceWorkspace({ root, loadRuntime, repositoryById }, id, config) {
+  const state = loadRuntime(id);
+  return config.repository
+    ? repositoryById(id, config.repository, state).workspacePath
+    : state.workspace?.path || root;
+}
+
+export function createProcessRuntime({ root, logs, now, resolveServiceCwd }) {
   function runCommand(command, args, options) {
     return new Promise((complete) => {
       const startedAt = now();
@@ -104,132 +268,10 @@ export function createProcessRuntime({ root, logs, now, resolveServiceCwd }) {
         `service '${name}' readiness URL ${config.readiness.url} is already being served ` +
         "before this run started it; another run may have leaked a process holding the port"
       );
-    if (config.staticRoot) {
-      const staticRoot = resolve(cwd, config.staticRoot);
-      if (!pathInside(cwd, staticRoot) || !existsSync(staticRoot) || !statSync(staticRoot).isDirectory())
-        throw new Error(`service '${name}' staticRoot is not a workspace directory`);
-      const readinessUrl = new URL(config.readiness.url);
-      const port = Number(readinessUrl.port || (readinessUrl.protocol === "https:" ? 443 : 80));
-      const host = readinessUrl.hostname;
-      // The service name is copied byte-identical into every sandbox, so it
-      // tells "our service" from "some other program" but cannot tell change
-      // A's server from change B's. The run id can.
-      const identityHeaders = {
-        ...(config.identityHeader || { "x-foundation-service": name }),
-        "x-foundation-proof-run": String(proofRunId)
-      };
-      const mime = {
-        ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8",
-        ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8",
-        ".svg": "image/svg+xml"
-      };
-      let requests = 0;
-      const server = createServer((request, response) => {
-        requests += 1;
-        let pathname;
-        try { pathname = decodeURIComponent(new URL(request.url, config.readiness.url).pathname); }
-        catch {
-          response.writeHead(400, identityHeaders);
-          response.end("bad request");
-          return;
-        }
-        const requested = resolve(staticRoot, `.${pathname === "/" ? "/index.html" : pathname}`);
-        if (!pathInside(staticRoot, requested) || !existsSync(requested) || !statSync(requested).isFile()) {
-          response.writeHead(404, identityHeaders);
-          response.end("not found");
-          return;
-        }
-        const extension = requested.slice(requested.lastIndexOf("."));
-        response.writeHead(200, {
-          ...identityHeaders,
-          "content-type": mime[extension] || "application/octet-stream"
-        });
-        response.end(readFileSync(requested));
-      });
-      await new Promise((complete, reject) => {
-        server.once("error", reject);
-        server.listen(port, host, complete);
-      });
-      const runBoundReadiness = {
-        ...config.readiness,
-        expectHeader: {
-          ...(config.readiness.expectHeader || {}),
-          "x-foundation-proof-run": String(proofRunId)
-        }
-      };
-      if (!await readinessMatches(runBoundReadiness)) {
-        await new Promise((complete) => server.close(complete));
-        throw new Error(`service '${name}' native static readiness failed`);
-      }
-      return {
-        name, child: null, startedAt: now(),
-        stop() {
-          server.close();
-          const logPath = join(logs, id, `${proofRunId}-service-${name}.log`);
-          mkdirSync(dirname(logPath), { recursive: true });
-          writeFileSync(logPath, `native-static root=${relative(cwd, staticRoot)} requests=${requests}\n`);
-          return { name, path: relative(root, logPath).replaceAll("\\", "/"), status: "terminated" };
-        }
-      };
-    }
-    const [command, ...args] = config.command;
-    const inherited = Object.fromEntries((config.envFrom || [])
-      .filter((envName) => process.env[envName] !== undefined)
-      .map((envName) => [envName, process.env[envName]]));
-    let stdout = "";
-    let stderr = "";
-    let closed = false;
-    let exitStatus = null;
-    const child = spawn(command, args, {
-      cwd,
-      env: {
-        ...process.env, ...inherited, ...(config.env || {}),
-        FOUNDATION_CHANGE_ID: id,
-        FOUNDATION_CONTROL_ROOT: root,
-        FOUNDATION_REPOSITORY_ID: config.repository || "root",
-        FOUNDATION_PROOF_RUN_ID: proofRunId,
-        FOUNDATION_SERVICE_NAME: name
-      },
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("close", (status) => { closed = true; exitStatus = status; });
-    // Without this listener Node rethrows a spawn failure as an asynchronous
-    // uncaught exception, so the caller's try/catch — the thing that stops the
-    // services already started — never runs, and the process dies holding
-    // their ports.
-    let spawnError = null;
-    child.on("error", (error) => { spawnError = error; closed = true; });
-    const deadline = Date.now() + Number(config.timeoutMs || 30000);
-    while (Date.now() < deadline) {
-      if (spawnError)
-        throw new Error(`service '${name}' could not start: ${spawnError.message}`);
-      if (closed)
-        throw new Error(
-          `service '${name}' exited before readiness (status ${exitStatus}): ` +
-          `${stderr.trim() || stdout.trim() || "no output"}`
-        );
-      if (await readinessMatches(config.readiness)) {
-        return {
-          name, child, startedAt: now(),
-          stop() {
-            if (!closed) child.kill("SIGTERM");
-            const logPath = join(logs, id, `${proofRunId}-service-${name}.log`);
-            mkdirSync(dirname(logPath), { recursive: true });
-            writeFileSync(logPath, `${stdout}${stderr}`);
-            return {
-              name,
-              path: relative(root, logPath).replaceAll("\\", "/"),
-              status: closed ? exitStatus : "terminated"
-            };
-          }
-        };
-      }
-      await new Promise((complete) => setTimeout(complete, 100));
-    }
-    if (!closed) child.kill("SIGTERM");
-    throw new Error(`service '${name}' readiness timed out`);
+    const common = { id, name, config, proofRunId, cwd, root, logs, now };
+    return config.staticRoot
+      ? startNativeStaticService(common)
+      : startSpawnedService(common);
   }
 
   return { runCommand, startServiceSession };

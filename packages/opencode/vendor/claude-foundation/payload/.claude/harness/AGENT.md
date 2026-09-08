@@ -1,24 +1,24 @@
-# Foundation agent contract
+# Change Loop agent contract
 
-Use `investigate → change → build → prove → land`. OpenSpec owns intent,
-`tasks.md` implementation, `handoffs.yaml` external work, `.foundation/` state.
+Before work, verify Change Loop 3.5.14/runtime API `33`; run doctors. Harness repairs setup
+and host integration. Surface only product decisions or external owners.
+`single-model` review retains distinct identity.
 
-Before developer work, verify Foundation 3.3.1/runtime API `24`; run both
-doctors. On failure relay
-`.claude/harness/DEVELOPER-SETUP.md`; never improvise installation.
-Single-family: select reviewer plus `single-model`; retain distinct identity/session.
+Compile one semantic draft. Use `advance <change> --through
+build|proven|archived`; edit only returned workspaces/tasks/paths. OpenSpec is
+canonical.
+Build/Prove: `TARGET_REACHED`. Only archived means `DELIVERED`.
 
-Use `packet <change> --phase <phase>`. Edit sandbox paths only; claims in
-`evidence.yaml`, providers in `execution.yaml`.
+Harness output is a machine handoff: translate in the user's language. Routes
+are agent-only control data. Never ask users to run a safe action you can.
+`ASK_USER` requests a decision, not CLI execution; `WAIT` names owner/condition.
+Run authorized `automaticRecovery`.
+Use AskUserQuestion, plain text otherwise; never offer only a passing option.
 
-Harness output is a machine handoff: translate in the user's language. Run
-authorized `automaticRecovery`; never ask the user to run a safe action you can.
-Otherwise use AskUserQuestion, plain text otherwise; never present only the option that makes the workflow pass.
+For `notification.surface: true`, load `README.md`; false is the
+suppression decision.
 
-Settle production, wire, activation, proof, and authority once. Build/Prove fix
-in-contract defects, recover providers, and hand off missing permission. Ask
-again only for a locked material change.
+Settle semantics and authority once; reask only after material change.
+Build/Prove fix product defects; Harness owns setup, permission, and recovery.
 
-Land requires authority; never fabricate evidence or delivery.
-Follow `.claude/rules/fundamentals.md` for conduct and skill routing, then
-`.claude/orchestrator.md`.
+Land: `.claude/orchestrator.md`. Follow `.claude/rules/fundamentals.md` for conduct and skill routing.

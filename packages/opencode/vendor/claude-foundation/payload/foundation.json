@@ -2,6 +2,8 @@
   "version": 1,
   "execution": {
     "maxParallelAgents": 3,
+    "maxParallelProviders": 4,
+    "maxParallelSetups": 3,
     "packetBytes": {
       "task": 8192,
       "review": 8192,
@@ -16,6 +18,7 @@
       "rapid": 100,
       "standard": 200
     },
+    "maxContinuationWindows": 3,
     "planSummaryBytes": 4096,
     "leaseMinutes": 45
   },
@@ -50,7 +53,8 @@
     "independence": "self",
     "diversity": "single-model",
     "defaultReviewer": "claude-opus",
-    "fallbackReviewer": "main-session",
+    "fallbackReviewers": ["codex-sol", "main-session"],
+    "infraFailureThreshold": 2,
     "reviewers": {
       "codex-sol": {
         "adapter": "codex-cli",
@@ -74,8 +78,17 @@
       }
     }
   },
+  "telemetry": {
+    "requireUsage": true
+  },
+  "quality": {
+    "changeGate": "warn"
+  },
+  "land": {
+    "riskBasedCi": false
+  },
   "workflow": {
-    "grounding": "required",
+    "grounding": "optional",
     "reviewCircuit": "full-delta",
     "reviewPolicy": "risk-tiered",
     "handoffDefaultOwner": "devops-team"

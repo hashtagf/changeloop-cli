@@ -15,11 +15,19 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXPECTED_RUNTIME_API=24
+EXPECTED_RUNTIME_API=33
 PROJECT_START="${CLAUDE_FOUNDATION_PROJECT:-$PWD}"
 
 fail() { printf 'claude-foundation: %s\n' "$*" >&2; exit 1; }
 warn() { printf 'claude-foundation: warning: %s\n' "$*" >&2; }
+
+installed_version() {
+  if [ -f "$SCRIPT_DIR/VERSION" ]; then
+    tr -d '[:space:]' < "$SCRIPT_DIR/VERSION"
+  else
+    printf 'unknown\n'
+  fi
+}
 
 find_project_root() {
   local cursor="$PROJECT_START"
@@ -70,14 +78,15 @@ run_runtime() {
   fi
   local phase=""
   case "${1:-}" in
-    new|start|resolve|validate|audit-change|abandon|waive|evidence-detect|evidence-init|evidence-doctor|evidence-upgrade) phase="change" ;;
+    new|start|resolve|amend|validate|audit-change|abandon|waive|evidence-detect|evidence-init|evidence-doctor|evidence-upgrade|quality-discover|quality-init|quality-doctor) phase="change" ;;
     sandbox|agent-plan|agent-dispatch|agent-acquire|agent-release) phase="build" ;;
-    proof-plan|proof-readiness|proof-advance|proof-run|proof-collect|proof-preflight|proof-execute|proof-audit|prove|receipt|run-provider|evidence-verify-ci|authority-request|authority-dispatch|authority-run|authority-abort|authority-status|authority-record|authority-reset-infra) phase="prove" ;;
-    handoff-status|handoff-packet|handoff-record|land-check|land-recover|land-plan|land-record|land-pointers|land-resume|archive) phase="land" ;;
+    proof-plan|proof-readiness|proof-advance|proof-run|proof-collect|proof-preflight|proof-execute|proof-audit|prove|receipt|run-provider|evidence-verify-ci|authority-request|authority-dispatch|authority-run|authority-abort|authority-status|authority-record|authority-reset-infra|authority-reset-base-move|quality-run|quality-report|quality-baseline|quality-debt) phase="prove" ;;
+    handoff-status|handoff-packet|handoff-record|land-check|land-advance|land-recover|land-plan|land-record|land-pointers|land-resume|archive) phase="land" ;;
   esac
   telemetry=1
   [ "$access" != "inspect" ] || telemetry=0
-  FOUNDATION_TELEMETRY="$telemetry" FOUNDATION_PUBLIC_OPERATION="$phase" exec node "$runtime" "$@"
+  FOUNDATION_TELEMETRY="$telemetry" FOUNDATION_PUBLIC_OPERATION="$phase" \
+    FOUNDATION_INSTALLED_CLI_VERSION="$(installed_version)" exec node "$runtime" "$@"
 }
 
 need_arg() {
@@ -120,14 +129,16 @@ usage() {
 const fs = require("fs");
 const registry = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const showAll = process.argv[3] === "--all";
-const groups = showAll
-  ? [["Workflow", "agent"], ["Conditional recovery", "conditional"],
-     ["Administration", "admin"], ["Host integration", "host"],
-     ["Internal compatibility", "internal"]]
-  : [["Workflow", "agent"], ["Conditional recovery", "conditional"]];
+const groups = [["Workflow", "agent"], ["Conditional recovery", "conditional"],
+  ["Administration", "admin"], ["Host integration", "host"],
+  ["Internal compatibility", "internal"]];
+const primary = new Set([
+  "advance", "change start", "change amend", "changes", "doctor", "describe"
+]);
 console.log("claude-foundation — OpenSpec-native software-change harness\n");
 for (const [title, audience] of groups) {
-  const rows = registry.commands.filter((command) => command.audience === audience);
+  const rows = registry.commands.filter((command) => command.audience === audience &&
+    (showAll || primary.has(command.name)));
   if (!rows.length) continue;
   console.log(`${title}:`);
   for (const command of rows) {
@@ -140,7 +151,7 @@ for (const [title, audience] of groups) {
 console.log("Global options: --project <path>, -C <path>");
 console.log("Workflow: /investigate → /change → /build → /prove → /land");
 console.log("Normal use: describe the outcome to your coding agent; it runs recovery and CLI details for you.");
-if (!showAll) console.log("Run `claude-foundation help --all` for host and compatibility commands.");
+if (!showAll) console.log("Run `claude-foundation help --all` for primitive, recovery, host, and compatibility commands.");
 NODE
 }
 
@@ -155,7 +166,7 @@ esac
 # `describe` before the per-command argument checks below, which otherwise
 # reject it as an unexpected argument for every zero-argument command.
 case "${1:-}" in
-  ""|help|--help|-h|version|--version|-v|describe|host) : ;;
+  ""|help|--help|-h|version|--version|-v|describe|host|update) : ;;
   *)
     for arg in "$@"; do
       [ "$arg" = "--help" ] || continue
@@ -174,7 +185,8 @@ case "${1:-}" in
     run_runtime inspect describe "$@" ;;
   help|--help|-h)
     [ "$#" -le 2 ] || fail "help accepts only --all"
-    [ "${2:-}" != "" ] && [ "${2:-}" != "--all" ] && fail "help accepts only --all"
+    [ "${2:-}" != "" ] && [ "${2:-}" != "--all" ] && \
+      [ "${2:-}" != "--help" ] && fail "help accepts only --all"
     usage "${2:-}"; exit 0 ;;
   host)
     shift
@@ -225,6 +237,17 @@ case "${1:-}" in
       *) fail "unknown host '$host'; expected claude, cursor, opencode, or codex" ;;
     esac
     exec bash "$SCRIPT_DIR/$installer" ${init_args[@]+"${init_args[@]}"} --source "$SCRIPT_DIR" ;;
+  update)
+    shift
+    [ "${1:-}" = "check" ] || fail "update requires 'check'"
+    if [ "${2:-}" = "--help" ] && [ "$#" -eq 2 ]; then
+      printf '%s\n' \
+        'claude-foundation update check [--refresh] [--json]' \
+        'Inspect the latest stable release advisory without applying an update.'
+      exit 0
+    fi
+    command -v node >/dev/null 2>&1 || fail "Node.js is required to check for updates"
+    exec node "$SCRIPT_DIR/.claude/harness/runtime/core/update-advisory.mjs" "$@" ;;
   providers)
     shift; [ "$#" -eq 0 ] || fail "providers takes no arguments"
     run_runtime read providers ;;
@@ -270,6 +293,12 @@ case "${1:-}" in
   metrics)
     shift; need_arg "metrics" "${1:-}"
     run_runtime read metrics "$@" ;;
+  feedback)
+    shift; need_arg "feedback" "${1:-}"
+    run_runtime read feedback "$@" ;;
+  advance)
+    shift; need_arg "advance" "${1:-}"
+    run_runtime write advance "$@" ;;
   exec)
     shift; need_arg "exec" "${1:-}"
     run_runtime write exec "$@" ;;
@@ -282,8 +311,9 @@ case "${1:-}" in
     sub="${1:-}"; [ "$#" -gt 0 ] && shift
     need_arg "budget ${sub:-continue}" "${1:-}"
     case "$sub" in
+      checkpoint) run_runtime read budget-checkpoint "$@" ;;
       continue) run_runtime write budget-continue "$@" ;;
-      *) fail "budget requires 'continue'" ;;
+      *) fail "budget requires 'checkpoint' or 'continue'" ;;
     esac ;;
   telemetry)
     shift
@@ -313,6 +343,9 @@ case "${1:-}" in
       resolve)
         [ "$#" -ge 1 ] || fail "change resolve requires <change>"
         run_runtime write resolve "$@" ;;
+      amend)
+        [ "$#" -ge 2 ] || fail "change amend requires <change> <amendment.json>"
+        run_runtime write amend "$@" ;;
       validate)
         need_arg "change validate" "${1:-}"
         run_runtime write validate "$@" ;;
@@ -325,7 +358,7 @@ case "${1:-}" in
       waive)
         need_arg "change waive" "${1:-}"
         run_runtime write waive "$@" ;;
-      *) fail "change requires 'new', 'start', 'resolve', 'validate', 'audit', 'abandon', or 'waive'" ;;
+      *) fail "change requires 'new', 'start', 'resolve', 'amend', 'validate', 'audit', 'abandon', or 'waive'" ;;
     esac ;;
   validate)
     warn "'validate' is deprecated; use 'change validate'"
@@ -382,6 +415,19 @@ case "${1:-}" in
         run_runtime write evidence-upgrade "$@" ;;
       *) fail "evidence requires 'detect', 'init', 'doctor', 'verify-ci', 'run', 'record', or 'upgrade'" ;;
     esac ;;
+  quality)
+    shift
+    sub="${1:-}"; [ "$#" -gt 0 ] && shift
+    case "$sub" in
+      discover) run_runtime read quality-discover "$@" ;;
+      init) run_runtime write quality-init "$@" ;;
+      doctor) run_runtime read quality-doctor "$@" ;;
+      run) run_runtime write quality-run "$@" ;;
+      report) run_runtime read quality-report "$@" ;;
+      baseline) run_runtime write quality-baseline "$@" ;;
+      debt) run_runtime write quality-debt "$@" ;;
+      *) fail "quality requires 'discover', 'init', 'doctor', 'run', 'report', 'baseline', or 'debt'" ;;
+    esac ;;
   authority)
     shift
     sub="${1:-}"; [ "$#" -gt 0 ] && shift
@@ -394,7 +440,8 @@ case "${1:-}" in
       status) run_runtime read authority-status "$@" ;;
       record) run_runtime write authority-record "$@" ;;
       reset-infra) run_runtime write authority-reset-infra "$@" ;;
-      *) fail "authority requires 'request', 'dispatch', 'run', 'abort', 'status', 'record', or 'reset-infra'" ;;
+      reset-base-move) run_runtime write authority-reset-base-move "$@" ;;
+      *) fail "authority requires 'request', 'dispatch', 'run', 'abort', 'status', 'record', 'reset-infra', or 'reset-base-move'" ;;
     esac ;;
   handoff)
     shift
@@ -419,8 +466,9 @@ case "${1:-}" in
   land)
     shift
     sub="${1:-}"; [ "$#" -gt 0 ] && shift
-    need_arg "land ${sub:-<check|recover|plan|record|pointers|resume|archive>}" "${1:-}"
+    need_arg "land ${sub:-<advance|check|recover|plan|record|pointers|resume|archive>}" "${1:-}"
     case "$sub" in
+      advance) run_runtime write land-advance "$@" ;;
       check) run_runtime read land-check "$@" ;;
       recover) run_runtime write land-recover "$@" ;;
       plan) run_runtime write land-plan "$@" ;;
@@ -428,7 +476,7 @@ case "${1:-}" in
       pointers) run_runtime write land-pointers "$@" ;;
       resume) run_runtime write land-resume "$@" ;;
       archive) run_runtime write archive "$@" ;;
-      *) fail "land requires 'check', 'recover', 'plan', 'record', 'pointers', 'resume', or 'archive'" ;;
+      *) fail "land requires 'advance', 'check', 'recover', 'plan', 'record', 'pointers', 'resume', or 'archive'" ;;
     esac ;;
   migrate)
     shift
@@ -439,7 +487,7 @@ case "${1:-}" in
     shift
     [ "$#" -gt 0 ] || fail "runtime requires an internal harness command"
     warn "'runtime' is an internal compatibility namespace; use canonical public commands"
-    case "$1" in version|api-version|hash|doctor|packet|metrics) access=read ;; *) access=write ;; esac
+    case "$1" in version|api-version|hash|doctor|packet|metrics|feedback) access=read ;; *) access=write ;; esac
     run_runtime "$access" "$@" ;;
   dashboard|dashboard-up|dashboard-down|dashboard-status)
     sub="$1"; shift

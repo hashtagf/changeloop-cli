@@ -124,13 +124,29 @@ glob_targets_secret() {
   return 1
 }
 
+# ---------------------------------------------------------------------------
+# glob_is_docs_only GLOB  ->  exit 0 if every file the glob can match is a
+# documentation/template extension that is_secret_path always allows (see its
+# allow-list above). Used to exempt a content-mode Grep whose glob makes it
+# structurally impossible to touch a secret file, e.g. "*.md" or "**/*.md" —
+# no filename ending in .md can ever be a .env or credential file.
+# ---------------------------------------------------------------------------
+glob_is_docs_only() {
+  local lc
+  lc="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$lc" in
+    *.md|*.example|*.sample|*.template|*.dist|*.pub) return 0 ;;
+  esac
+  return 1
+}
+
 block() {
   jq -n --arg reason "$1 No secret contents were read; use a template, public key, or metadata-only search instead." \
     '{decision: "block", reason: $reason}'
   exit 0
 }
 
-REF="See .claude/hooks/protect-secrets.sh. If this read is genuinely required, the user can run the command themselves with a leading \"! \" in the prompt, or temporarily disable the hook."
+REF="See .claude/hooks/protect-secrets.sh. Keep the blocked command internal. If secret-bearing work is genuinely required, ask for an external result or scope decision without requesting secret contents or suggesting that this guard be disabled."
 
 case "$tool_name" in
   # ---- Read --------------------------------------------------------------
@@ -158,8 +174,12 @@ case "$tool_name" in
     # .env underneath it. The pattern is what makes that a leak: a repo-wide
     # content search for credential-shaped text is the accidental disclosure
     # this hook exists to stop. Narrower modes (files_with_matches, count)
-    # print no line content and stay allowed.
+    # print no line content and stay allowed. Skipped when the glob itself
+    # proves no secret file could ever match (glob_is_docs_only), so a search
+    # scoped to "*.md" for documentation mentioning "password" or "API_KEY"
+    # is not treated the same as an unscoped repo-wide leak.
     if [ "$g_mode" = "content" ] && [ -n "$g_pattern" ] &&
+       { [ -z "$g_glob" ] || ! glob_is_docs_only "$g_glob"; } &&
        printf '%s' "$g_pattern" | grep -Eqi \
          '(api[_-]?key|secret|passwd|password|private[_-]?key|access[_-]?token|auth[_-]?token|bearer|credential|client[_-]?secret|aws_[a-z_]*key)'; then
       block "BLOCKED by secrets guard: Grep pattern \"$g_pattern\" with output_mode \"content\" would print credential-shaped lines from every matching file, including .env files under \"${g_path:-the working directory}\". Use output_mode \"files_with_matches\" to locate them without printing their contents. $REF"

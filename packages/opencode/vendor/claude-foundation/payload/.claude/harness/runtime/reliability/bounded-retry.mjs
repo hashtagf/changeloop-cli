@@ -14,8 +14,21 @@ export function isTransientInfrastructureFailure(error) {
     || TRANSIENT_CODES.has(error?.code);
 }
 
-export async function boundedRetry(operation, options = {}) {
+function validateRetryInput(operation, idempotent, maxAttempts) {
   if (typeof operation !== "function") throw new TypeError("operation must be a function");
+  if (!idempotent) throw new TypeError("boundedRetry requires idempotent: true");
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) throw new RangeError("maxAttempts must be a positive integer");
+}
+
+function nextRetryDelay({ transient, attempt, maxAttempts, baseDelayMs, maxDelayMs, random, started, retryBudgetMs }) {
+  if (!transient || attempt === maxAttempts) return null;
+  const exponential = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
+  const delay = Math.floor(exponential * (0.5 + random() * 0.5));
+  if (Date.now() - started + delay > retryBudgetMs) return null;
+  return delay;
+}
+
+function retryOptions(options) {
   const {
     idempotent = false,
     maxAttempts = 3,
@@ -28,8 +41,12 @@ export async function boundedRetry(operation, options = {}) {
     random = Math.random,
     onAttempt = () => {},
   } = options;
-  if (!idempotent) throw new TypeError("boundedRetry requires idempotent: true");
-  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) throw new RangeError("maxAttempts must be a positive integer");
+  return { idempotent, maxAttempts, baseDelayMs, maxDelayMs, timeoutMs, retryBudgetMs, classify, sleep, random, onAttempt };
+}
+
+export async function boundedRetry(operation, options = {}) {
+  const { idempotent, maxAttempts, baseDelayMs, maxDelayMs, timeoutMs, retryBudgetMs, classify, sleep, random, onAttempt } = retryOptions(options);
+  validateRetryInput(operation, idempotent, maxAttempts);
 
   const started = Date.now();
   let lastError;
@@ -44,10 +61,8 @@ export async function boundedRetry(operation, options = {}) {
       lastError = error;
       const transient = Boolean(classify(error));
       onAttempt({ attempt, status: "failed", transient, code: error?.code || null, httpStatus: error?.status || error?.statusCode || null });
-      if (!transient || attempt === maxAttempts) break;
-      const exponential = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
-      const delay = Math.floor(exponential * (0.5 + random() * 0.5));
-      if (Date.now() - started + delay > retryBudgetMs) break;
+      const delay = nextRetryDelay({ transient, attempt, maxAttempts, baseDelayMs, maxDelayMs, random, started, retryBudgetMs });
+      if (delay === null) break;
       await sleep(delay);
     }
   }

@@ -53,7 +53,11 @@ export function createBlockedDecision({ fail }) {
   function blockWithDecision(changeId, code, decision) {
     const value = blockedDecisionValue(changeId, code, decision);
     console.log(JSON.stringify(value, null, 2));
-    fail(`${decision.summary} [${code}]`);
+    fail(`${decision.summary} [${code}]`, 1, {
+      decision: value.decision,
+      boundary: "user-authority",
+      code
+    });
   }
 
   return { blockedDecisionValue, blockWithDecision };

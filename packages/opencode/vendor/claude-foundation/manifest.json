@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "release": "v3.3.1",
-  "commit": "86f09134e19b05e540ab7c3d4890e5805f90ba6c",
-  "version": "3.3.1",
+  "release": "v3.5.14",
+  "commit": "334e3b94a0624553f8807287e91971fcf8eae203",
+  "version": "3.5.14",
   "tagged": true,
   "hostProtocols": {
     "instruction": 1,
@@ -11,12 +11,12 @@
   "files": [
     {
       "path": ".claude/commands/build.md",
-      "sha256": "2b5f18e68106d5b33fab911c7ff7fc15394a1faee3e9efab639cdcb819981531",
+      "sha256": "3f7e5e5e2667b87a4d09edcbc75dafbf88fa08da730fb7c8552fd0fe90d7cc43",
       "mode": 420
     },
     {
       "path": ".claude/commands/change.md",
-      "sha256": "fd80000c4c5bd4fa33ba3704b2902e51735f9b4b87d4116b4d641d56b7c0f31c",
+      "sha256": "4e649899f2491d24bd2d4e71fb9f90b4988820bc0d21e3f0c87af182ddfbb323",
       "mode": 420
     },
     {
@@ -26,7 +26,7 @@
     },
     {
       "path": ".claude/commands/dev.md",
-      "sha256": "988f428b4c0db85f1e022b1431c1135cb0861b6a019c46353063ca97139563e8",
+      "sha256": "c50382567aa097a2aba327ad8b07b4047d37757b7d1fb9d24ac5d39ad3c87661",
       "mode": 420
     },
     {
@@ -36,57 +36,67 @@
     },
     {
       "path": ".claude/commands/investigate.md",
-      "sha256": "2e7ef07be3d65fb7d331a238ad6e12fe41328527e06c453327b715be6e9c08c4",
+      "sha256": "fbb1754d297517b5a573e7b1e4c84d4d24b7a3ac528dcf6e91db82cf882a2bc2",
       "mode": 420
     },
     {
       "path": ".claude/commands/land.md",
-      "sha256": "224d837478a8adb4fa769f3f3111b10493ab6619ce34092d8cc84320c248c032",
+      "sha256": "62ce96718d9f32b1af0e0bf06e84ce06aab66bb10ddf1a4b4190552c2bd1b80c",
       "mode": 420
     },
     {
       "path": ".claude/commands/prove.md",
-      "sha256": "573e1ea951848ccea42aaf7a2cb703a150d0c7b08325dfd5348cce1dfd4bee4a",
+      "sha256": "7b6fe7315cb3efe3e83ccf583dc0c77466f80e4031afd8cbd58d2cf330d38e78",
       "mode": 420
     },
     {
       "path": ".claude/commands/references/build-dispatch.md",
-      "sha256": "0d6df1559d39a014cb49eff562bab24f131e90aff50d55a16dab18c877677a97",
+      "sha256": "434a051c54728d4adc28efdb206b678e85c8a5e475a6cd44761180222d233305",
       "mode": 420
     },
     {
       "path": ".claude/commands/references/build-policy.md",
-      "sha256": "566b9f0a9150f315d40b50a5f1a6a571b983a1187ef08a6d77039c3f62f2fa9c",
+      "sha256": "011d5a865e6a530d6ef85d3e45f7c4c2fed22f90ee03009c519c0d13fdc70095",
+      "mode": 420
+    },
+    {
+      "path": ".claude/commands/references/decision-policy.md",
+      "sha256": "2507c11be8187f98620c234a5de750bd50b63b8ad3913b22fa4a5e78247560e7",
       "mode": 420
     },
     {
       "path": ".claude/harness/AGENT.md",
-      "sha256": "6694c76aa2ef2213f1398090df4b2b998f17af08cc4fb4140fdf40a192ef97dc",
+      "sha256": "af8722fb909ffe98a214080c1c6b71ef0556c8c84606c3404a59525db37460ae",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/CONSUMER-QUALITY.md",
+      "sha256": "d1c592b16e0a89f963ddbefb334355c993108aab834a536e9cd28c400948ceb6",
       "mode": 420
     },
     {
       "path": ".claude/harness/DEVELOPER-SETUP.md",
-      "sha256": "e20867aa2d01d38f05284566b530600495280d919190182ed03e1d4ba7b472aa",
+      "sha256": "1b6fe18d4b7460961b111458185330f6e0767448dda83cb00362480a0441c84f",
       "mode": 420
     },
     {
       "path": ".claude/harness/EVIDENCE.md",
-      "sha256": "f149459d90323aad722b9d659d62a152de07e2d06a705234e6cb2f291bdb1ad7",
+      "sha256": "aa9657aa50840da8eb1201e389956b9fc35a50617fc2bf5407c19716f3654256",
       "mode": 420
     },
     {
       "path": ".claude/harness/README.md",
-      "sha256": "d93b903bcaa772dae121ab7ad364542404670c5746bb48ba32b09c3093516308",
+      "sha256": "22e88efc9f4690d49432d9a97fcc125ba3ebed68520eba1825321a617f6b555a",
       "mode": 420
     },
     {
       "path": ".claude/harness/adapters/cursor-human-guidance.mdc",
-      "sha256": "40d1f03474d78bfb035074506015ec3ec1a28acbe6ada8fca71f98542b6a85c7",
+      "sha256": "90408272dc92029ed7e5f001f48a6cbe9271f537806356f5524c61d76a701855",
       "mode": 420
     },
     {
       "path": ".claude/harness/adapters/host-capabilities.json",
-      "sha256": "5192d807d6ceaede3f35ee0701bc2c59e17ed785e0cf645b16e29133510b8b59",
+      "sha256": "56136652235b0f9feee97885b173226e4bcb54217f9ec14af464a5d8a0b044b7",
       "mode": 420
     },
     {
@@ -101,37 +111,62 @@
     },
     {
       "path": ".claude/harness/commands.json",
-      "sha256": "421d3558df0f721edb84ae996cab2626f53118345f4dd5afb8bb54538093de9c",
+      "sha256": "77e46c875fb2dbb5137a7b8d60df28979a402340546e90b927bf0fa733b88412",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/fixtures/host-security-scenarios-v1.json",
+      "sha256": "73f5c083fd4ce6c08ab2cd4e9d31ea0bffb300d80db7f652ebf4ec5a0c16d51f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/fixtures/public-command-contract-v1.json",
+      "sha256": "b5c0ebcdd1507975cdb0f6dcc77f2460ee4c47aa07a174042e12a028d0bf7db1",
       "mode": 420
     },
     {
       "path": ".claude/harness/foundation.mjs",
-      "sha256": "a5effc5455d9f9819749ef97d047a43f073af985d3caa9bcb53ab2aaaa0f27fd",
+      "sha256": "1655904d09c26eb947aabfbe90a24258a6225268c3901380ed27c9a9c2c6d533",
       "mode": 493
     },
     {
       "path": ".claude/harness/protocol.json",
-      "sha256": "32c2d2375b2c14e5c398f26788f45554d834143d8e4d14560767e6abc5b1825f",
+      "sha256": "a3cd834e3eb11fbbf0ef6dc4d0b0c70b94a12a0cf0951b1c0e536a549d053a3e",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/README.md",
-      "sha256": "12f08a8cdba65ea9205dd824a97f6e10ba9d3ab5ea8e23f302ebbc3f4b3071be",
+      "sha256": "b692c65393feefe2b0f86b2143193b71dc1bbc676ba8da8fdbeca7d2cff60aad",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/composition/bootstrap.mjs",
-      "sha256": "e34abb7972c76ce5d5569dfd4aecf64b6e1e8b27e6a77d6daeb3f356b1f8a6c4",
+      "sha256": "9915f6ea85ab512bcd870925c0b3adac7aa8e13b5dfc1129ddcea05d9c3ae9cd",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/contracts/README.md",
-      "sha256": "6f4486ce4d0180cd1656aa8a33ffd5e45c25ff93f50929cf6133eba507380306",
+      "sha256": "9350fbf56bc15037e4f4286570cd385c42f005f09008bda5a711cf7a84c4f34b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/automated-mutation-report.schema.json",
+      "sha256": "2349723fb14ee67bc861dd89cad57a8ce2bd2eb3be7c023dbdc896f1210adc53",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/contracts/change-artifacts.mjs",
-      "sha256": "da232a5deffef9769f1584fb28a579f8e6bc67ee3776951cba08adb18c5051c7",
+      "sha256": "913f6d211ee17a4cc10d99389a5a20ebd9e5753ba01614c9e390868d0512fd3e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/consumer-quality-config.schema.json",
+      "sha256": "98ae55e2dfb7038d592e843c2c87c4ffa40e293a69740874040081d427fda3c8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/contracts/crap-report.schema.json",
+      "sha256": "efc780021bb8a555bfd6b91b4cea02d625676e3c99495e4d3de33733364c77d5",
       "mode": 420
     },
     {
@@ -146,7 +181,7 @@
     },
     {
       "path": ".claude/harness/runtime/contracts/host-instruction.schema.json",
-      "sha256": "428f73e93d1b33f740db36f8137e500d7730fda436ad2d018beaecd29a07dd0e",
+      "sha256": "3f43c250fae30be318aedc25d22092d863c8d0f920f747614ef548c97c944c24",
       "mode": 420
     },
     {
@@ -160,8 +195,18 @@
       "mode": 420
     },
     {
+      "path": ".claude/harness/runtime/contracts/quality-capabilities.schema.json",
+      "sha256": "590e259e55a34ce3150cdd5f684bd2a0149692c0a7da2d37e1a42c8c7184e641",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/authority-policy.mjs",
+      "sha256": "3c5c86e25386f108b2740b929fc0bc37cb72958df48ec18f735a5d24266b76a9",
+      "mode": 420
+    },
+    {
       "path": ".claude/harness/runtime/core/blocked-decision.mjs",
-      "sha256": "42efc87a07bda9512b07d297bd09e1123a02b227adc67bfb6e07930dc8cc83c3",
+      "sha256": "94ce9ecc5726bad232f0e00d2a82e7c623105d6f7c7d2c244ac23eae010dc276",
       "mode": 420
     },
     {
@@ -171,22 +216,32 @@
     },
     {
       "path": ".claude/harness/runtime/core/cli-router.mjs",
-      "sha256": "c9daa8e8b454639066b8a3cde6914ce28949e7fb6c1868142e09dde10c8505b0",
+      "sha256": "5b40eb922aaabfd38aa80ebfe9facc19e3a466c5f3fee7d26e4068b5d2d62e61",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/command-registry.mjs",
-      "sha256": "e291a0253051ff0dbd727f731d6094c77c5b1557dd183869020aa6086e525ff5",
+      "sha256": "53437e61a3a623239b9f49934010564c7ed4f3cbe1fe5307ad50351fe3ec2bf8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/convergent-gate.mjs",
+      "sha256": "bc23615ef91b5578dd0d4093a507455c059336e3240d2fcaa2ce6c9f64d58fd6",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/diagnostics-runtime.mjs",
-      "sha256": "9b1ae0df236d9f6acc6d97eade6b3882078ab82b014bb1d6860cfbf8c82a677d",
+      "sha256": "f98b76a2b75e90c470fd77e4a78a2361ea1ff6f3a36d70217a59c44844585715",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/execution-contract.mjs",
+      "sha256": "dd2c136551bb0be9b0588d910889c4045fa024868024afb583197b6fff8119c8",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/graph-execution.mjs",
-      "sha256": "a57fc754c1d88c76607d422f712378f5768e43d777ca0ca71f751cd299a0d7ca",
+      "sha256": "076b2a55e35e4136b39f822e601058073119df3f3a6260e2685d9495fbfe37dc",
       "mode": 420
     },
     {
@@ -201,12 +256,12 @@
     },
     {
       "path": ".claude/harness/runtime/core/host-instruction.mjs",
-      "sha256": "5e2363c9ca50b791591e8c8a3087b0a3f1e383bd4143a57a81dae2355ff8eb38",
+      "sha256": "eaa48198ce11c52bb9bdc1d60ef9a8306bc06eeea3057c413d04532f002d9a4b",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/instruction-manifest.mjs",
-      "sha256": "28749bc470915b3cb5fca78c11460c2f2fce7ee213ea6b1061d48e36c09bf85a",
+      "sha256": "563451437279b8b2ee255052bbb7ca9bede21d8496ad8588040d954112d62e32",
       "mode": 420
     },
     {
@@ -215,38 +270,83 @@
       "mode": 420
     },
     {
+      "path": ".claude/harness/runtime/core/land-grant.mjs",
+      "sha256": "e20747c66eadc2831e3c5b92b83accce8b3eb87f4672a9782631657f7efa2367",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/lifecycle-outcome.mjs",
+      "sha256": "9614195fdd69eb1e619f7de94d6e5a18a053554db3d32693313b280b7a17ac0d",
+      "mode": 420
+    },
+    {
       "path": ".claude/harness/runtime/core/lifecycle-phase.mjs",
-      "sha256": "baea7b2e93ae5eaa0a9d84d83fe42071fe01d581a7f96281760d14645ea78411",
+      "sha256": "0b6962d6766636863bc51b52ba99eddbd29e30d8c5e401f0b88324cff6c7bddd",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/lifecycle-reducer.mjs",
+      "sha256": "80d37d892382cb7fa16506fec7b49366bf190de3488f640237f77b38cc4cfe80",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/measured-number.mjs",
+      "sha256": "21bbd75cb05694fa06f66363ed5fea38b938814b693079f08dbe2bfbbb75fbb9",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/next-step.mjs",
-      "sha256": "a8dbc8dc6da9df43c4b4d5c3322a0e098d57d926d47b82e26b42af63fcea4607",
+      "sha256": "45c9f055a7ac316eac40ac4b95a785128bfcaf2eae9eb958587cdac46fe6a624",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/process-lock.mjs",
-      "sha256": "33c14825bea313890a6ed998b130b160c72f1f03ae612a19a98ff5c427512107",
+      "sha256": "35b10a00b9149a303c497bbe69959b9e2f35b97ace7dd5339288bd787dee06fc",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/process-runtime.mjs",
-      "sha256": "54c6441ecf716e65b4bce7199663187dc45fd6d10dc488f3810dafe8d08b2322",
+      "sha256": "f69167086087707e6fe4903ae3e8cfff2536f84cd914a732060575344336ee75",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/repository-binding.mjs",
+      "sha256": "d19d4b3b582942be3937e61eb194adb19021695456f608939263b97c3f0b743b",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/runtime-environment.mjs",
-      "sha256": "0c49e1ffc36714e6ee211ca9a60f14fd543f4fdbca48a16d8236d5f0769991c9",
+      "sha256": "ff53e13d8da2387fca5abfc4d476f178ba5bb7774a2e54756b96fa3e7f738424",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/shell-mutation-policy.mjs",
+      "sha256": "d8d84149fad29d38054618a233261afa9630e13ded722f308d3184cd752350d5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/state-projections.mjs",
+      "sha256": "1353aeb6348ce82d4a229c7c498afdfc04c0187d4890b9c193157948803f96d7",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/state-runtime.mjs",
-      "sha256": "91cccf0a1ca80f8f402b359bdfe8e2d6483ba0ceaf68b6ac9714b77780f930f0",
+      "sha256": "6549a13072c8b6e04de714e1c58462edf6be413c99e7c06f82cc82d43ccdeb05",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/tool-preparation.mjs",
+      "sha256": "ba0c59ed2e778baead0ab7dd486c0a92df616ecfa80c53925340cd4764707b1f",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/core/trust.mjs",
       "sha256": "e9e765fd082709658e5d3ff57b7b0f721cc28421a93931e7c546cf8c6c69c708",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/core/update-advisory.mjs",
+      "sha256": "519ca03e9d1f3efc70352242cb817a394efb86bad28a66d2683abfd3866d69a9",
       "mode": 420
     },
     {
@@ -261,17 +361,17 @@
     },
     {
       "path": ".claude/harness/runtime/evidence/adapter-runtime.mjs",
-      "sha256": "f3daabeb300decad5c36193f43d0a9852a86401a605bb128bfbce6b4406a8347",
+      "sha256": "70b75e4a39b04c4c4694124b248f698d0d1d1cfc0215215a13adb6a9a7251fbb",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/artifact-store.mjs",
-      "sha256": "c86b440216e1d0af7c3c4b56c62b0b6a2a945064d3663d79efcea9595f87b7cf",
+      "sha256": "816b28330383aeb969f2ef30e246390944c2d0a2371253c0fc2c536236724cda",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/attestation.mjs",
-      "sha256": "64d90eee8dcad6ea9d66ed7d7051e4b6547c0b6d4f3f98b12afea938df9bf631",
+      "sha256": "575d20b87b0c70eda4d5f0c2a872186ff91be3b54c461cf3097f692f9ea23c02",
       "mode": 420
     },
     {
@@ -281,27 +381,32 @@
     },
     {
       "path": ".claude/harness/runtime/evidence/configured-reviewer.mjs",
-      "sha256": "f0a0fd5dd2d64d205db922dd7c2f8983fdd8a002ed06339fd76f55a37eb1d67e",
+      "sha256": "f78b9e6efc91e319b2d5a236b21081a66b0717b2d18a480f1724cb58fd0b47da",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/evidence-bootstrap.mjs",
-      "sha256": "ee9a312e16e0e83447a1bf51d9f31dc8bc2b9f13115a1518e518fd9b5c8694be",
+      "sha256": "a15038cfe91ce08d8bc5c1b47c3bd764a3b96a31c4bbb4e9ec619b95a1e65333",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/evidence-contract.mjs",
-      "sha256": "320fd222e0593787ade1b7107cc274e4daca45dbceec8c0e4f4b47ed57d4ac9d",
+      "sha256": "04d596774bcda858fc92bed0b326a8ce6f1ec9bbb475190eab72b0207098eebd",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/evidence-results.mjs",
-      "sha256": "c502c5b8df8f23f52c8cda6ecd785c2b944889b5fa458baabafd8a425fc7d14d",
+      "sha256": "fed6602e14893ff4f9f0e6a50c40ffd87b0d06e98b74df9a0e28a72af273d108",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/npm-lockfile-check.mjs",
+      "sha256": "51a6282589769a7316842b2ce99fbc58658d1df5f98e1f8118d731b0cb1211f5",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/proof-execution-runtime.mjs",
-      "sha256": "b680a854740b99652e6deaffa80d44f90a4acc56c250a02b7490c4d552373a5b",
+      "sha256": "dd0afbf2454289b6a9fb60651c61fbcac4867ccc7aed7ac61bfaa22f2721244a",
       "mode": 420
     },
     {
@@ -311,72 +416,92 @@
     },
     {
       "path": ".claude/harness/runtime/evidence/proof-readiness.mjs",
-      "sha256": "cd2e67c1f11e5e3809846eb6d9267aa6e215e8d3fa532cc0d4fe2e93cbdd26ab",
+      "sha256": "58c01389c40cf9c905a0b79043ff875829e3676b15612f36fb7b27c7c84f699c",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/proof-runtime.mjs",
-      "sha256": "a7afb1474cc8a7eaeb00d266b68d1ff2bfbad0fec435cd35dac79a4dcb632db3",
+      "sha256": "38085f753875922209ffbdad89f5487ad6f09a577ffb67f40f0b2b191e436016",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/provider-catalog.mjs",
-      "sha256": "47bac6793fd12a1bae33e28de5033542c81819945b28f187f8e721028fb08d5b",
+      "sha256": "929809ac00a4d4213a6f21d982896f0e298c1cc05768f5c559db5a469e5b2614",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/provider-scheduler.mjs",
-      "sha256": "802d4d2a9eb655ab51bac5ad96aff0386cd4b2d4b689419f35bf8e96ea7e98c6",
+      "sha256": "55ccfd0535ed87f620477fc056e8755a5ecb34209b9c9000c70af3724f4a5dc7",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/receipt-runtime.mjs",
-      "sha256": "1e5bf00c3d9de9184eb9bcbd918c8a8806621bcc6bc5cf7f9e43623acc087fec",
+      "sha256": "d07dbadf2121ea24dcbb93f032b919ba4caf6cebe510318af006c17803a4ebf4",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/receipt-validity.mjs",
-      "sha256": "6dc2b4f5576fab2e6a48b7d1bd0de74f1e119de5c785a9881041e20c68a22106",
+      "sha256": "4990cf705d189aa6cd9312ec729906166766d59de52564a1502d18feb1dd07d8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/repair-runtime.mjs",
+      "sha256": "6333ac9b225b14f603fc3b98bf778d32759318a41934ec23f677e88815d47b2a",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/review-attempt-store.mjs",
-      "sha256": "f4351641e1271e8ffb2968cee3f6db13c38a2179ff97ad91f22331c9d520b8fb",
+      "sha256": "313c56669fb3dc8e7a6f0a1712fed42e6f42fb054740c97ac8f3c640b9111517",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/review-protocol.mjs",
-      "sha256": "9337bc709c39adac790c209c83d3cd9ed1a9d2471b984224e059e289df58ad6b",
+      "sha256": "83c29c8f6a28f6702087a9bc34a3279b84d44d61f8eb4e45cb1b65cacc557e6a",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/review-routing.mjs",
-      "sha256": "2b60595094fcceb6e3068cf4dc3d4b577f73f1777b5c8cef3e2e8562e6e57a85",
+      "sha256": "d09db9dbbf5e7659077658b46af3b0a8ad62f4d139c4416fb18e1fb305008ded",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/evidence/semantic-acceptance.mjs",
+      "sha256": "1b4ff010dcfdf33104688800d83bd8f23a4c47d988ab4b1bdd6e2fd28eea3a03",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/signed-ci.mjs",
-      "sha256": "e7ed0ba24c8eb3e37e700f3e04e6ae81d510baf80f26361e352efc7aa8c045cf",
+      "sha256": "20fcbe8053012a63bf915e7499a13f6797793876ecf052b2ac93b0403283d3fe",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/evidence/traceability.mjs",
-      "sha256": "3ac537a4a4519021d3a7e21b8f705eb65b53dfbd7ded8dfd62dd5f01b147d2ef",
+      "sha256": "747b76647d99fa95bbb185508f5347ac3fb83eadd65f2a146ee09034b04c1cc8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/observability/diagnostic-export.mjs",
+      "sha256": "44e7d8d387e362cdc7c5a82204cb4d8c9045f7ee2c861b999ae4dad308e7cc0e",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/observability/exec-runtime.mjs",
-      "sha256": "823ff74edec19183e4d7f9462fefe5518a54178aad72736a47e00ab4f3ab5634",
+      "sha256": "ef6d2d1ecf218879d5ce0bf97fe28f357eb3a374e42ba0c3369ab6d34eef1f4e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/observability/feedback-runtime.mjs",
+      "sha256": "ddb6b911ff0eb63ec68f27d257fd09695ade4bdf0ec8b5b144d73804be39ac58",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/observability/host-execution-contract.mjs",
-      "sha256": "82a10daf0755ccb469be26aa1c1c5b765636ffe748a3c9cb52fe5d122b593be9",
+      "sha256": "0d7fd879e6df837ea9515de56e98c9017a8ceaacab2a2dc77d117c860d16a819",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/observability/metrics-runtime.mjs",
-      "sha256": "08b4a79928733e3411fda1cd61d646c6d2b191a21df2599b0f63a8a01721d2c7",
+      "sha256": "a93345ec5f579c04c43ce66aa354846da9daa412b8bc56de6a4239f67a8c74bd",
       "mode": 420
     },
     {
@@ -385,153 +510,288 @@
       "mode": 420
     },
     {
+      "path": ".claude/harness/runtime/observability/operation-profile.mjs",
+      "sha256": "f62fafe15dbb3a883b0424ef6b883f9f867e01ebcf193971d395b0ac13074c8a",
+      "mode": 420
+    },
+    {
       "path": ".claude/harness/runtime/observability/telemetry-runtime.mjs",
-      "sha256": "0e749fa98418c70623e6c0dee027f68625d1e81deb8af7f541e25c078e752571",
+      "sha256": "3535a754128f025c0426731dd23e74988b18329ca54bace9c826d16749d34909",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/observability/telemetry.mjs",
-      "sha256": "0529f5affd1d68853fe8427a4e46d8d78a1784c0d29ceaa4cd73c9ab32449750",
+      "sha256": "94f1d3dede32fd77633fa8b540c32c270d661837a09943709e9fc4f815f9ea74",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/quality/adapter-registry.mjs",
+      "sha256": "3d2b5919cb195b3558233560b5b35c327d413f248719d0a47d3f981939658101",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/quality/language-profiles.mjs",
+      "sha256": "96d5522581b2ef4d988587624f3eb599a5635a0acdd992620f49babbde3438c8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/quality/quality-discovery.mjs",
+      "sha256": "cdee47647f44cd97472d20328df7dbb74dba1409e712984793b0edeb1f4436d4",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/quality/quality-evaluator.mjs",
+      "sha256": "7e467eb4b16853bc91f0c2ee7d3e9b7578389e7308393414d41d8897d6fd03ce",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/quality/quality-policy.mjs",
+      "sha256": "c116a19119cffda2df7c74ed74a2a75ff0b65c918fa3fffe99adda545f55207d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/quality/quality-protocol.mjs",
+      "sha256": "718e3ba07450f0a52b628dc317405a4b0e1e14e356d64cbec638823a1b1215aa",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/quality/quality-runtime.mjs",
+      "sha256": "d272225b3ff51b12b0d1df85aa2aac196c7f68a60f3bc551e57439737ee872e7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/quality/semantic-fault-catalog.mjs",
+      "sha256": "495d05dab84ba150159fce0dd73d83fad0270b6e9a0535ddfdb29e4e60415af7",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/reliability/bounded-retry.mjs",
-      "sha256": "f82798a5bcfb04b0fc3341046bb03a6af35ef93dd6471d84da5c732c25d52e40",
+      "sha256": "1005331b17de3a4e4b7834557898a2c2493dd8abafbf06816c77a1f2ce0ab6b6",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/version.mjs",
-      "sha256": "9f7a8915e227166e4d6c2f53357a5d253873786fbdbc788529b1dda4982bbc91",
+      "sha256": "3d7161fcd95e82c0dd661ad7ad9a8ae1125dd6e12a345e44ec7dc107ebce40ca",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/abandon-runtime.mjs",
-      "sha256": "9078e7189b9e7b92be096e835a8a40040d0d462e2cee1579630a1be0dc2c0600",
+      "sha256": "9ab95327104e65654f6d3c4168ad930994db573d282377ecc33297a4a0d63747",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/advance-runtime.mjs",
+      "sha256": "51803323e0b23f8bd8ed75f24e5a3d3387586790db227d5c16ed2745e825cd4b",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/agent-dispatch.mjs",
-      "sha256": "294773bf06a5f58dc126bf80435f1d1109da3f49d8c09ad04ca5589f88ba0850",
+      "sha256": "bb8696fc0eb4fad9668b80c7a1c40c88ddd767ade5adc36e880cfc895ebcf91d",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/agent-planning.mjs",
-      "sha256": "4cb35fe4f6b661367a3cbd101559bda6b46ac4760e130ff006cde6ab48f51da3",
+      "sha256": "5dbb1e8cb42ade9e8907097cea5d08c89d4253c283ddd51b8671a75325e3d98b",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/apply-recovery.mjs",
-      "sha256": "3643efbb1c02a03053573de82f66e477120fd8d15e10b140968c35b011bab3ac",
+      "sha256": "b676c989b6666e1ffc038baf8fe0df30957b35eb0da6af3ef66e048f5bf992c7",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/apply-runtime.mjs",
-      "sha256": "ddc19b4828a047d3cdde839f3e45ced1f2532bab88d34665680cdd39dc6664e3",
+      "sha256": "d2a121ed5d4c3c8bce04ed2bc97b0992f6b95e0bcec8e9a0d0df5a300fd6d01d",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/authority-runtime.mjs",
-      "sha256": "378b56dc0d10345231ff42efa4e940e3461cac956edc362803447f8885a08dcd",
+      "sha256": "0d10bd8c11d56fbe47a0eb96dff5506cb7b401087d8a09440d2218808a8fb10a",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/authority.mjs",
-      "sha256": "58ad069e56eaf9b11b0c19af71be5c7e89de2638147bf1bc2728846ca3210431",
+      "sha256": "972f6e50ed9d9fef1558b205e3d00c8d6ae02b6d949dfe593e31473c0f6cb6d5",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/budget-commands.mjs",
-      "sha256": "4eb4af0299e710209203940a83d411f0960396efe0cc325a057f2dd4231448b8",
+      "sha256": "f0b799b33cfdf0b159a1f6b2d2c4f25df01627d7284026f5134fe28128bbfc1f",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/budget.mjs",
-      "sha256": "4e080ab4af1791398391938922314e19ecea75929dcc6c2b96573017fafc3406",
-      "mode": 420
-    },
-    {
-      "path": ".claude/harness/runtime/workflow/change-artifacts.mjs",
-      "sha256": "b0356c4c8eeaf896fc76810531b72cae2df8819bb799f4b9d1ae99b01cbdda2e",
+      "sha256": "c16aff3f87caa40f62021542570da585a8c26d5f6f54e8138bbb7015afb86517",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/change-lifecycle.mjs",
-      "sha256": "d74dc9385c09b8860194a3d734417bfcf2cfd03e807b16e39f1688cc6edc9d2b",
+      "sha256": "77d43f93f270e8568a815e3d95366c0eb115610794ef24f1e743bf99129164e7",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/change-policy.mjs",
-      "sha256": "2de8f96a5ccec2dc1731638da30500d1b3d25fb439fbeccc590e6bd4d49c82a5",
+      "sha256": "ad1be1655d0b8607df0f06ec14d4787aa1850b359cd9e0293852c93da3e8db4b",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/change-validation.mjs",
-      "sha256": "948e3fcf6bbf959f1dcdfaa89dc221463addf451fc02d980909965beb8b64a04",
+      "sha256": "d19dd3a26339c536e4d517ee229b018616705a846840e0c3adac129b0f7ee0cd",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/handoff-runtime.mjs",
-      "sha256": "befabcc34d0bbaa20e9647998751cacb8f5d16bd205548d41e1e874a042f5ebc",
+      "sha256": "6ce468f98999c7aad6cc07c25b48c7638bf0214fecc8dcb3a18ab9e811b1437c",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/land-journal.mjs",
-      "sha256": "0a42c00aa9224a01be70a16fdfa8b63d3a5722dec305fec4b9336cba154315fa",
+      "sha256": "3dc560cdce8707bc78ab7f6d4bdda1dae1c49248ef6466cb228e36354608caa5",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/land-runtime.mjs",
-      "sha256": "f0beff274857006b69db714263dfc0a33ebb349c5503a0f1fc408afdb2e8ac0e",
+      "sha256": "2656ae51db1707c22713da351eb5c2ff17084e9153da6c5496d47daa338a78d5",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/lease-runtime.mjs",
-      "sha256": "3d22071ab5795bf6e1707ddde695a46729808b4a040b11fd15e1fdf4c02a91c6",
+      "sha256": "6e09f0779cd78d7d8eed2024ea99ebe72a25074e3374d63aa26d609ff0ed90fb",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/packet-runtime.mjs",
-      "sha256": "bab920b86696e7bdfb058485d5b99f71ed6d5fb22d73786cded66c9fc8fa7b3e",
+      "sha256": "87e61c5ba31b6164a3a922425d1182a974dcb794498e5163b7512896997c03ea",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/repository-delivery-saga.mjs",
+      "sha256": "120fe47381a5faf3c7a9a958e651cf2da679b1a5deec12226e38d895eaa29501",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/repository-snapshot.mjs",
-      "sha256": "2d031e62524266b64c0f0385ae20f78c7d602e60f214865caf07959e4d28702b",
+      "sha256": "07df2325da4d7a2a878c22a9264ac6292b878378f09e9efae29abf020e4b0900",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/repository-topology.mjs",
-      "sha256": "e6715f05b4f3559ca2277eeb2e7f30a1dfa3f1541afa94bd8a101a53dda17874",
+      "sha256": "a29374d8b3629dbcd2a42b561434d8f1b99e20778e6aa5d24cf7b08727f306e2",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/resume-packet.mjs",
+      "sha256": "ab9aaf400fb96fa90a2d1656ab713e49ff36b87cef175aa723fcf3d3d5b547cc",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/sandbox-cleanup.mjs",
-      "sha256": "40e431ddfe662a7daf30f8c6ee6cfe0f2636feac98fd15dccbc906ca872eb069",
+      "sha256": "fb519c5527cd6264e0c8d6da737ab5b5ef62375ca1dd9ba3e1bfe20bb6100541",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/sandbox-runtime.mjs",
-      "sha256": "e010be4b6752428efbbf0cdaa5139c4ac3b767a4eefc0e1d1dab857fcab8fe8a",
+      "sha256": "4966d7015181af3ee7c096dda41a085136991191e32e8617bc6faaef85064e37",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/security-policy.mjs",
-      "sha256": "9140b94eb1f02ab7ef9d0f52dc688ea73cb9945156ce91ea1791e90930aeac6c",
+      "sha256": "040ef6e42280a551c5b0b6b1df68d91c6be68294a4394a5bb4eaa4f3e6f2ebd3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/semantic-amendment.mjs",
+      "sha256": "63f78be3112c0aa6fc5149c789e2d5886a0de623ac822d2a4f47cc2edf1b0c44",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/semantic-draft.mjs",
+      "sha256": "2af3724feef52f0e6364046a1010f88581fe73e4ca3f2110e15acf4d2e33ed3c",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/spec-sync-verify.mjs",
-      "sha256": "8c5deeefe13264cc65c653cfc9c9557a8f4d62ce45fce7e3e73f7f7d291b3014",
+      "sha256": "e0c19ca54a63864dcfd677a020f39184202afe76f09b6ebfc0b46733926e5f04",
       "mode": 420
     },
     {
       "path": ".claude/harness/runtime/workflow/validation/spec-delta.mjs",
-      "sha256": "2bc0aceffe226722affb58a65148800150374144919cf2710aa46fec7c135d33",
+      "sha256": "1b4d551bf1725252fa9a604fdee422a136bec6978fdf69e166cd42bf9f1731b8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/runtime/workflow/verification-plan.mjs",
+      "sha256": "25f127f531e79fe6bc88951455edbc14f352005fdfc68a01fa21b7e487400ca0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/templates/quality/github-actions-nightly.yml",
+      "sha256": "8c891402deb4a4bb8feb7627fcd5047ca475790eb6751a0aaeab84c25c75dc07",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/templates/quality/github-actions-release.yml",
+      "sha256": "0dbae9bb47950e0258e1c782da8f7dd2e70edb6f960f526e13af1559c0496eda",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/templates/quality/github-actions.yml",
+      "sha256": "bfba7fdd4690c9052c44db7a44d95a1ad989aafada3d0097f45567d4c841a972",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/abandon-runtime.test.mjs",
+      "sha256": "d1c084de96611e8d922240d216289add7893dc929881ef4150e75b1baef6a5f7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/adapter-fingerprint.test.mjs",
+      "sha256": "01853183cc5747632318e717955f00ec0cd9f329c6d9fadb39ccfe70e0641b00",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/advance-runtime.test.mjs",
+      "sha256": "a357f40c867305f74fbb775338f61ce73c36c333a9edc98454a6121c272cbc64",
       "mode": 420
     },
     {
       "path": ".claude/harness/tests/agent-dispatch.test.mjs",
-      "sha256": "92bae9ba783f08924f079a47a3f0e281df9e2d29d65fe12f2b87e631c59ab3c0",
+      "sha256": "60b7d606eb241046eceda5be0559d0ba8e518acb07da3123da0b233bcd0c99fd",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/agent-plan-view.test.mjs",
+      "sha256": "668c3ed4f73fe918d87cfb8a69287dbbbea1268648545f3974086ec7bb5be784",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/agent-repository-conflicts.test.mjs",
+      "sha256": "f582959cd69bbbeded9f7b1aacc9078eee1f5f124e6529a92c20a8640623befc",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/apply-inputs.test.mjs",
+      "sha256": "1a7d96f2c5b6208144904514b6b3068716028e8f1d5e9d73abd3281635d8ee81",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/apply-runtime-archive.test.mjs",
+      "sha256": "e66bf368ef489783db0958355b711f13ea8dbc11972d9b4cbe95d48c23214cdd",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/apply-sandbox-operation.test.mjs",
+      "sha256": "f69b9c5d7a0ab8308e8b0d7d4f049b729fd6c2c97d1ff8754ba110a087528ea0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/artifact-store.test.mjs",
+      "sha256": "438cd8be91f5e338e2b2ab969c2da2c3c77c815c1fa00ba788e039665ff368ed",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/attestation-validity.test.mjs",
+      "sha256": "4d5bb843bc0240c6f7bdb7acdf1a3609942b9e88a80a94b62095e5b1debf72ca",
       "mode": 420
     },
     {
@@ -540,8 +800,128 @@
       "mode": 420
     },
     {
+      "path": ".claude/harness/tests/authority-preflight.test.mjs",
+      "sha256": "63c0d6962b72e45fdaca1cf7643fa15a384ddcadace47820d1f4b3a105bf23d9",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/authority-request-operation.test.mjs",
+      "sha256": "c03b030e61be3a9cf1a1145b2a4d2c0d77486ac0f89e3dee5a6a773489783f40",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/authority-response-validation.test.mjs",
+      "sha256": "1fb33744db769e3ed187100c7f20c7a48e6798ccf5bf9e4cd29b3a4c419382b7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/base-move-attempt-reset.test.mjs",
+      "sha256": "7f1340ea0d4b74f375ab31e2bdfbfafbcfaa4fc9383d862280070bd5319f8930",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/budget-continuation.test.mjs",
+      "sha256": "9fb1d447cf61d307b074c6667e6b48e3ce53fe8423916d60ac73086aeb92ea42",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/budget-runtime.test.mjs",
+      "sha256": "829037df1c4aa17b03ebc42a70d267e9e79046c980908fde58ad38de67d2de5f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/carried-unchanged.test.mjs",
+      "sha256": "fd2e962bb2dfa7a7c18e9df693583f859801eff39c45a7d6564804f9a5f44949",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/change-atomic-start.test.mjs",
+      "sha256": "c60b7540eb9bc08c9759463e3ed695b1cd3e56893442fbe0900c07d2d4d20531",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/change-creation.test.mjs",
+      "sha256": "15ad98a9577301ee4657e7567bcdd59f800c366caf622a76ee0ee60802b1e42a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/change-draft-loading.test.mjs",
+      "sha256": "7841f3417f26df18c67819daa9f357f80ad6bd70065fb64b5f4e4ad4bf18877d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/change-draft-materialization.test.mjs",
+      "sha256": "4554de1453851063e46c41aa09e5fbd6debab6af4630e2ef0d5d9f5f6fefa57e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/change-policy-surface.test.mjs",
+      "sha256": "55ead70f32487d137e23f21aaad3e1d2a9c1f064cad06a92eaeb7a130c7cc6fb",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/change-resolution.test.mjs",
+      "sha256": "1477a9f4f7bcc8f4bd07f99500192ab1da19955403c65af771ed5bb183917edd",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/change-validation-phases.test.mjs",
+      "sha256": "396afb9ee59ec6dbe53b5ef6dde2a5b7b0a63d64dacb8fe753521181565d129b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/claude-review-operation.test.mjs",
+      "sha256": "ae16092999b9d9477cdd4e413273af979fb08e381c88456fd121211a468200d7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/command-registry.test.mjs",
+      "sha256": "9de70838e8520a4bf4e56a2ec922717851c0948cf8abee33157c02b4f7ae1f37",
+      "mode": 420
+    },
+    {
       "path": ".claude/harness/tests/configured-reviewer.test.mjs",
-      "sha256": "64e053c063b97e3ccd5b488a0271101c92ed24dee88cf5d26af05461b6b285ce",
+      "sha256": "7969434602afbe880cfad53a17d406553227fac64cd1abb303f7de93e41754a7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/convergent-gate.test.mjs",
+      "sha256": "6586c1490aa1fcc29e89eeb5b0b32912e870ea7a22c0dcae87b97a3e02fd04a8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/delivery-convergence.test.mjs",
+      "sha256": "3fb1af5650195ed0ff9b2d1ee286bbd4f6d8debc926e56284ba6482140443332",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/diagnostics-changes.test.mjs",
+      "sha256": "2fb6a4b79d7d59f3fb668e74bf0883c64de33323c228f16a673cf601f25879cd",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/diagnostics-runtime.test.mjs",
+      "sha256": "ac5550f924e5df1d9c93ab926c3ddf02dfa5d77003ccb281be87a3bae72cb36a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/durable-decision-metadata.test.mjs",
+      "sha256": "a06ba9f388a01c53cf74fa56132cec96c35a625dbd4e55e25a784c6c0f712c20",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/environment-descriptor.test.mjs",
+      "sha256": "1b5eae019fbcc22242f7d96c8ed5fcbd5cb17716b88f1768cc7666fa9153321c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/evidence-bootstrap.test.mjs",
+      "sha256": "767f9e9b9865d82c42788b9ce0917e0024b738bdc1db4382027889386d34f0fd",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/evidence-contract-values.test.mjs",
+      "sha256": "e20cdf3837ce45aaa0c8638256872e4fce1ef6d49a48eecd6a5eb2a3e9198a2e",
       "mode": 420
     },
     {
@@ -550,18 +930,188 @@
       "mode": 420
     },
     {
+      "path": ".claude/harness/tests/evidence-results.test.mjs",
+      "sha256": "75bc25c140c11b7d8464830f6f41dc46280e9849fe3bfb9bdfceca9dac697344",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/evidence-upgrade.test.mjs",
+      "sha256": "afcd53d0865c562ae7cad1f61830140f9fed5371dd36f5c2db75bcd1ab4f25bf",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/exec-runtime.test.mjs",
+      "sha256": "a2f9c489e1aff017a1f9f8b390bbcaca663dea2ca805476e0c82c57108078571",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/execution-contract.test.mjs",
+      "sha256": "07f2637814e8d47c7f4896df11f4f3c92e0fad9b8fa54be0507834d20ab4d172",
+      "mode": 420
+    },
+    {
       "path": ".claude/harness/tests/execution-graph.test.mjs",
-      "sha256": "5b201e627b703aa20a8e7f1dcdfbb3126fe3e9822368e007b5b9d27dd551b9b0",
+      "sha256": "3755c811d68c509e51997d9a30c243b8201edd48580c50bbf6268ab34b175928",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/external-evidence-recovery.test.mjs",
+      "sha256": "fa82e8f860550367c248c01e6292767338e6e8c517fbeff9afe8dc6857ca3928",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/polyglot-multi-repo/api/go.mod",
+      "sha256": "88ce396350b4d6c91d9a7101dfb303b238bba5adfcfc7bb07a5440679864f27f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/polyglot-multi-repo/api/main.go",
+      "sha256": "55a60bb97151b2b4b680462447ce60ec34511b14fa10d77440c97b9777101566",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/polyglot-multi-repo/database/001_users.sql",
+      "sha256": "ac532b1d469583e55c613482d9912f578eaf01a257eaa69d2c7c76e977b925ad",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/polyglot-multi-repo/deploy/release.sh",
+      "sha256": "ce983233dc71b9df2ae31fea8156ab2dafa5efeec312672c26952f41886d7ab9",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/polyglot-multi-repo/frontend/package.json",
+      "sha256": "ed15b0fb80b3f07b40874e98fda6346dc9762627d4d26b9a31fc60f55e53a51a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/polyglot-multi-repo/frontend/src/app.ts",
+      "sha256": "4c9a2a851c102d1e1fe2ebb20defb6a0332b9b5c431a0fd644fe21712c412c6a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/polyglot-multi-repo/frontend/src/view.html",
+      "sha256": "8cfe0ca3ff4e5484ceecf30ed7886d04cc578be6d61fa1258d5be1199319fbfa",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/polyglot-multi-repo/frontend/src/view.scss",
+      "sha256": "c7c61dbe75735988818cc09f6e800c9a62746673d96dbf6d50a4eb7d526da6b6",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/protocol/crap-valid.json",
+      "sha256": "da3451543896dd7cb71efa750a7bc674a01b3b02586e0ed0ca04589e3543985c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/fixtures/quality/protocol/mutation-valid.json",
+      "sha256": "67c134cec6845871035066b033fc5016e250bed8c8dc43cff1b4becbd0e512a5",
       "mode": 420
     },
     {
       "path": ".claude/harness/tests/grounding-policy.test.mjs",
-      "sha256": "addfe6fa7ec17f8a94ace782c92778a701c910c553cfac172c8dd5b2116964a4",
+      "sha256": "22d5f6c8afe7dc465839af79c852bc367c9beb77291cdb07677c5ba38b5ce592",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/handoff-operation-normalization.test.mjs",
+      "sha256": "f86ab92a0e7eeb4b2b919cebc69f4e4fd406fe5c71f2c8419085a3eec1f3515f",
       "mode": 420
     },
     {
       "path": ".claude/harness/tests/handoff-policy.test.mjs",
       "sha256": "34db7fca77b9f5985b8f4a13df7d6466aebf1ea4cba7fadf89cf216939c48610",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/host-capability-matrix.test.mjs",
+      "sha256": "13b369589d33a11187a09b255bd1f9196220d551332815e9ec5b0bd994d009ee",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/host-execution-contract.test.mjs",
+      "sha256": "4dd2555daf9f4a21a69a9d797e0f98fb34b805ba5aca14f343f3db702c4fe44a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/host-security-scenarios.test.mjs",
+      "sha256": "a9a5f8a19608aa93b2fd26fba181004c711c2299698f50df2db5d96f201d4028",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/instruction-recorder.test.mjs",
+      "sha256": "9a8d3ade6f004d6a938d545600f76a347de9879944a59dadf4f36b740171f487",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/land-check-phases.test.mjs",
+      "sha256": "ba9b8d56947600b990cc6d891da249e6d3f019f19e5d77d9447ce7f68242f530",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/land-grant.test.mjs",
+      "sha256": "37bad4522f5ea0853b4e8d2a3e7b40aa7ac4a190d1e3ae337c6d6556b77f98aa",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/land-journal-apply-entry.test.mjs",
+      "sha256": "b5ac5eb9e91d750c28a688adc16fc240a26ab0c7a758afa24936642ef00aeb83",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/land-journal-recovery-helpers.test.mjs",
+      "sha256": "4d38b4039147e54dcd8fa8a46c9e13aab5f03b6bd84c51cd622984e56fde3dc7",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/land-repository-plan.test.mjs",
+      "sha256": "4b1ecbbfce8d024208961a7bed2546b8fa12b81e0e40be759be926fc222d967f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/land-root-pointers.test.mjs",
+      "sha256": "97d96e25ad9d4d0ea57fcdb2bdb0d8c65d0a18f745eab03e0390e5e5e3ba64fe",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/lease-acquisition-helpers.test.mjs",
+      "sha256": "df9e30d5ea1f229b34042d2c2acd0d0acffb0a4b92a7b599e7899308e706cd3e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/lifecycle-reducer.test.mjs",
+      "sha256": "7d6bfcf6ecff90ea2ecba051a246b22789a3d030bef0737d9c6e103590f3fde3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/model-for-task.test.mjs",
+      "sha256": "4bb41528f894fa2c72b0f96786e4db0285747b7ef67017bae7d488234b69fc81",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/npm-lockfile-auto-seam.test.mjs",
+      "sha256": "4934149fc21e494bce02fd73694edb3bda9587c830fe68c9acdacbeb202cc920",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/npm-lockfile-check.test.mjs",
+      "sha256": "e296978ea818f9d54db1207726b7c9181357fe4bd9ce37d20842bbd162af9b28",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/operation-profile.test.mjs",
+      "sha256": "5e8c72ad48009d1f3156f17874d9bf6d0969f181f648940bde311c9b27b1c47c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/packet-value.test.mjs",
+      "sha256": "b62129399c3e13e81f06876adc7f8ba56eb95abdeda8b3d2454752cf3a444f21",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/process-runtime.test.mjs",
+      "sha256": "b82ab462df4498bcb5c499d99249deafad9eac05df8eeed57370c6aef2a58d6e",
       "mode": 420
     },
     {
@@ -571,17 +1121,147 @@
     },
     {
       "path": ".claude/harness/tests/proof-advance.test.mjs",
-      "sha256": "56208b2ff567adc731bfebef1dbbd3114aca4fdb66e8717af7cf7dd7356ce06d",
+      "sha256": "fd25f2c02dd1183d50714c48c4bf9ace668d5866cb2de08d1e2578c03f1f8602",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/proof-audit.test.mjs",
+      "sha256": "4d30cebd12ad6194bda2b25f2c35fd7e8032a8636bfbc19a2fa8b68940412d26",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/proof-execution-boundaries.test.mjs",
+      "sha256": "0c437cf496b9369e053d050e80888d086d65aabd399f6e9903865c874d67d9b4",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/proof-finalize.test.mjs",
+      "sha256": "ba40e48a07db802518bc8c630324cc7bbfe5d6805ef9612b31ff3d507c129777",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/proof-preflight.test.mjs",
+      "sha256": "0254b296a3ae70903f24feb3dd62672640c80ed557782dc552d0f9e013bc687e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/proof-readiness-value.test.mjs",
+      "sha256": "e67db56ac085dbfb7b336bf6311dd2e6c1a95afe42bca6094f53c3450223640d",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/proof-request-summary.test.mjs",
+      "sha256": "fd01402beb013ec2d3fa112c7ffe81a3445c9eadb313b77f73c9e141028a76e3",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/proof-topology-issues.test.mjs",
+      "sha256": "117935c7cdf8924d7bee0eaf3f3cf8691888a9ddeb3094f8e8b58f8822d1f4a2",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/provider-claim-scope.test.mjs",
+      "sha256": "45e7c933b2d379892b41c8e767927d5a8d3252696e1d41e8f65082e50b7e31a2",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/provider-input-identity.test.mjs",
+      "sha256": "a6a2bcb96be8d17a9642784a012b0923b11c7be2f65153a1ca8c7440b4f12f46",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/provider-workspace-hash.test.mjs",
+      "sha256": "49b81d9c471fc15b45db884a7cb4685f1e5e468cae0716b03d301f98574e1cdf",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/public-command-golden.test.mjs",
+      "sha256": "11b6390c358d646eeb5125fd2207901bf5065c0f2f7950724c8b0ecac5798033",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/quality-adapters.test.mjs",
+      "sha256": "853a71624d21be3aa89c9acc5bdf01d6d6c5640c683aee0a769314aaf8f4b176",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/quality-runtime.test.mjs",
+      "sha256": "bf9f662738400bae537b89b0fbb9124e0a1eea49cae6c7e7ce4daf56471c5aa0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/receipt-validity.test.mjs",
+      "sha256": "9de498fbb848a9860efc25c6b3eb7495671bedde752a94716eda0ed55faa7ce1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/recover-pending-apply.test.mjs",
+      "sha256": "515ba7e55635d70bebf42575b7d1c47ec6c696633cc39c29169594d93b35584f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/relocated-sandbox-rebind.test.mjs",
+      "sha256": "84a5588c19685554170599b8949f00e0d38da26b9c8f523a94c8f899b0814f38",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/repository-delivery-saga.test.mjs",
+      "sha256": "d0868eb31987e24d7aa9e6b02ac86ff3800098ee1444bcf0aeaee3c1fd23934e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/repository-head.test.mjs",
+      "sha256": "950aba6742ebbf5dbb9a19cd38f6e066f78d8a15c62fda8db8bb8ec0f3f735c1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/repository-infrastructure-issues.test.mjs",
+      "sha256": "c93cf21bcee4455e899ede00f60f43d1be17327b6d7c9e154f90d48f2c2b679f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/repository-land-record.test.mjs",
+      "sha256": "aab30201cfd78b42062422d23b2a5689f4d2a632025069203152ceb35cec2233",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/repository-snapshot.test.mjs",
+      "sha256": "1ad64c61bf7f2ec580a786f7981e4382758091dcba792abfdccea3786b384922",
       "mode": 420
     },
     {
       "path": ".claude/harness/tests/repository-topology.test.mjs",
-      "sha256": "a46a14279f47c39173df1db4b4725d63afaa2c8cdbf4f21f4fefdf1cf81697d4",
+      "sha256": "8ad3bab6bf79d69413846422a01f9eaed705254e4ac338d2a485581cd07c9d6c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/required-providers.test.mjs",
+      "sha256": "0789bea8ed5cb30418db288892fc2e15a9d1a4f289779f198c4c0e0d4717290c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/review-closure-helpers.test.mjs",
+      "sha256": "fc0e1ec0a1baa43374f2979809d4cc2e1924d6f9e08e2919b3b05aafc7f63876",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/review-dispatch-helpers.test.mjs",
+      "sha256": "3b9f51de9be65862030d93f1d169099fd81feac57a5253104866094f96223637",
       "mode": 420
     },
     {
       "path": ".claude/harness/tests/review-guard-reconciliation.test.mjs",
-      "sha256": "46e8eea4b4165d640afd0d4cc09984ec2c5b0a30ee154f1856e1afcfb1833f15",
+      "sha256": "32bfd4bd931e4743b77955f5e0e86e04ecf5ba894ba1ce49f5d21d62af526366",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/review-policy.test.mjs",
+      "sha256": "8be79d4206422d73c50c6910021f318403167cdd6ce4f80095b879620943c29b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/review-repair-attempt.test.mjs",
+      "sha256": "66375455f972afde0a8f451953e19cf23edc4248667c60147fa5c7fe7d0a4698",
       "mode": 420
     },
     {
@@ -590,23 +1270,203 @@
       "mode": 420
     },
     {
+      "path": ".claude/harness/tests/reviewer-config.test.mjs",
+      "sha256": "aee2b84905dda0a6766329bfde8dfeb16eaf39302ed16f06ed0fe3b327c7875f",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/run-provider.test.mjs",
+      "sha256": "2c4f76e2efd44f12c7442a9eee177fe607da36db3fd27ac5a17448c80f9fb032",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/sandbox-cleanup.test.mjs",
+      "sha256": "279b5209df173ffe67a8cf017524bf33a3325c01ed8cd55b7870eb4fc2c697fe",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/sandbox-create-phases.test.mjs",
+      "sha256": "ab804f3e87bd7f5a7cc53065321d635d39d4bd6186185533375d211d43e9c3e1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/sandbox-diff-identity.test.mjs",
+      "sha256": "0094b329389c8296cdc8f67afa57c197fb61e995e308decbcea47741a4366400",
+      "mode": 420
+    },
+    {
       "path": ".claude/harness/tests/sandbox-grounding-portability.test.mjs",
-      "sha256": "816b2f1bf89e9352c418085b710e1daa5df7c11c7fe9e034d11ab41bd7d9506f",
+      "sha256": "bb277c0c67e600223eb31d4dc448627dcb144deb160c976fad9547224864ddac",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/sandbox-replay-preparation.test.mjs",
+      "sha256": "cbad4862dbd25e9ca9f706e900a36018bd35bfc5be6455c66a357702184b4c99",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/sandbox-runtime-sync.test.mjs",
+      "sha256": "d0e13eda05e82b21d2388e181a3c8b8acc00d60b141e429126984f22919ddb76",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/security-boundary.test.mjs",
+      "sha256": "254abf362996441739f4a9862ed2b924c227d13c617d4cba04263e84ae28b1bb",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/security-policy.test.mjs",
+      "sha256": "80cc26da0a72f77948f0fbd399fb9058d2fecc894d39addd12c23def2c05ce63",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/semantic-acceptance-portfolio.test.mjs",
+      "sha256": "ab5bf4f94cf3faf88e79f6f4e69555258ebeb9873c3db54c17672984cf805130",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/semantic-acceptance-seam.test.mjs",
+      "sha256": "a35c93e83c82fca9014c8db4a894758344596d1dc59da8a00f1c17cc20557de2",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/semantic-acceptance.test.mjs",
+      "sha256": "b7c240cf97861e151aeee2b818fd57f86bbd9b7fc8aa9fe5d4772511dae8aa06",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/semantic-draft.test.mjs",
+      "sha256": "ee42e180c0173b52c96c8ef2014da7175b20e09cb879b918623ad20a32dfe59b",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/semantic-invariant-issues.test.mjs",
+      "sha256": "8271077f904db34d3f33ec26e1838200bb43cd17c3ea886b93cd6140de2423a5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/signed-ci.test.mjs",
+      "sha256": "3ebf9ccf7d0afe77d6b6d2e9145cc34e8a1beb1d9fda3a26e9d97b8a42b358e8",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/state-projections.test.mjs",
+      "sha256": "e85158c714ac426d08dd3400d0bbffb8a3af15002f799e1706d2d28b89a459b0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/state-runtime-helpers.test.mjs",
+      "sha256": "485dc8d1952d6960ac9beb55589c9b6175ae894332d579bfae70cdca1c8216f6",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/subject-provenance.test.mjs",
+      "sha256": "d82c1ca3447af61a7e69f1810e840a6cb4197a923f6cdf33c8d16e9031dff5e2",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/task-node-proof.test.mjs",
+      "sha256": "3b8804503bae10df418d7c8db584cf6b23d4c7105f271603ac5da00735c1f925",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/telemetry-append.test.mjs",
+      "sha256": "98beab52fe1d5451135d64f8216ddf96e3d22dbb64a2a65bfffaed807e5b17fb",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/telemetry-import-sync.test.mjs",
+      "sha256": "91194f1897cf326ea637551c39c46b0303b9a1a3a2f32989b166d122c31438f1",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/telemetry-phase-context.test.mjs",
+      "sha256": "5eb7dba3017600cd0ebc6cea0902eedba6df2b54bc36e776b6b80cdc92942e1a",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/telemetry-record-event.test.mjs",
+      "sha256": "c769464798fef08af7af71f7f2d129a9e6fd61f29fee0a5f940f9d49cb41789e",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/telemetry-source-cursor.test.mjs",
+      "sha256": "fd8ba8893e96e0a3c4fd723cd6873cb6ec7791169cf242c9ab2d46d0e9ecac3c",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/tool-preparation.test.mjs",
+      "sha256": "13e927f14d92ea9bee059ff31829ea108739f79930cbf86f62a84dc26f244593",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/traceability.test.mjs",
+      "sha256": "aa109dcb1dc0e37a903bc2648456c08aa92dccf50c12ee6fe924edf3107afb78",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/verification-plan.test.mjs",
+      "sha256": "5bb92948177fbd2b692f1d4819586c35619dfbdb7042a85f75be54959bab01b0",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/verified-ci-recording.test.mjs",
+      "sha256": "3d3371ab4f0e5e2dd9fd6f134a410a6dd0e6285ede2623f14eb157bc156bb5f5",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/waive-gate.test.mjs",
+      "sha256": "daf493e570994de4e4599d3b7e4d37e2e0b6ad1afe3cc0db8493554d20740e3b",
       "mode": 420
     },
     {
       "path": ".claude/harness/tests/workflow-policy.test.mjs",
-      "sha256": "a8fa2f68178838e3ecc5c30be0ac697e07b48c8977435c206a11d0a3c95d70e2",
+      "sha256": "062d746311e9902f366fbb425dea2ad2f1b12b48a69217db9177181adbff1eec",
+      "mode": 420
+    },
+    {
+      "path": ".claude/harness/tests/workspace-inspection.test.mjs",
+      "sha256": "ff07197173b6e2677daf3c437c66a2a4b8e846421374cdbf1eb09f87f376c51b",
       "mode": 420
     },
     {
       "path": ".claude/hooks/README.md",
-      "sha256": "91e3bd493996d0ec6dd8ef4006f63d8dff063963e5fea7607edd948e95ec87ff",
+      "sha256": "eb34d5d0a1dccedef666298869745b46faaf52ce328afc2d26c465dd560ab3fd",
       "mode": 420
+    },
+    {
+      "path": ".claude/hooks/authoring-surface-guard.mjs",
+      "sha256": "036b65109f88af3eb770157b194c010fec6cf5e98ad3dbe741baa6234d700f7c",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/authoring-surface-guard.sh",
+      "sha256": "0a95aacf0940781a0bbc34b4349327d4e98e7808d5a4dcffe1f63d1858b20716",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/dev-terminal-guard.mjs",
+      "sha256": "7c3249e99301445d011fcd5ca1360bb5d364f84324e9b189460f79cb71a54b59",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/dev-terminal-guard.sh",
+      "sha256": "2344aad535c1132b72898b78b2a2c10cda581554ad1510fff8879b9a58421e92",
+      "mode": 493
     },
     {
       "path": ".claude/hooks/lint.sh",
       "sha256": "6b8d059d8a937f0e948a363b8a359773353ce7a34759c7806dc41572de196ef7",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/no-detached-authority.mjs",
+      "sha256": "c6233b44d6a0a266accfba95828060ce05804a01ebf14805797f0b44a0ccba13",
+      "mode": 493
+    },
+    {
+      "path": ".claude/hooks/no-detached-authority.sh",
+      "sha256": "99f17ae66fb1467d8e53901ba0bcf97f50f756c02c20d2bd80d795ba886d7456",
       "mode": 493
     },
     {
@@ -615,28 +1475,38 @@
       "mode": 493
     },
     {
+      "path": ".claude/hooks/phase-guard-policy.mjs",
+      "sha256": "6e63a218781f144b8de36cf0d90660d2fd8a89371b968267f7282d96462592bc",
+      "mode": 420
+    },
+    {
       "path": ".claude/hooks/phase-mutation-guard.md",
-      "sha256": "b597dcc76123b45f03a1891033fe8951ffc42faeaf927167dbaf239ce50fd2ce",
+      "sha256": "42f41a9ace628f3768dba659a7b2604549dc5f180a9c585eedc2f6fad3a021df",
       "mode": 420
     },
     {
       "path": ".claude/hooks/phase-mutation-guard.mjs",
-      "sha256": "3c7ee8fe0014490e0bb531eafe4b4619d31ef56f79b792a9405d03827a6cd0ea",
+      "sha256": "21a0938453a1849375c492dc7015c42348e42d1e41eeb005814a493d4c72fd36",
       "mode": 493
     },
     {
       "path": ".claude/hooks/phase-mutation-guard.sh",
-      "sha256": "53a24c8ba871f45c6a8c3cfa59a34488c4c58b457dd4f7dd972578ac19701fbd",
+      "sha256": "aa12583368589eca4b095e978290441d838fe29e85b9cd3888aba362c7870756",
       "mode": 493
     },
     {
+      "path": ".claude/hooks/phase-state.mjs",
+      "sha256": "2016452df653fb68c233c9e1af2e11db1c3bcd72d5a389814bf1a693fe7c7d61",
+      "mode": 420
+    },
+    {
       "path": ".claude/hooks/protect-secrets.sh",
-      "sha256": "ed80324f1ecddec6ae99a9dccc674c7fc323dd0aa920312efc00e0a64cc4e7d3",
+      "sha256": "544377fa7697bfb94c05190140300d5c6aab3a38cc3911be87877dce72a29c07",
       "mode": 493
     },
     {
       "path": ".claude/hooks/session-context.mjs",
-      "sha256": "324338ecba10ba6e82d188980b39ba9e7b880d4c17a9124b6e3a8debefb33989",
+      "sha256": "fa0ebcc20b9a7d77439200436765e1189a66b794d10db40e81c623a443c5e4d9",
       "mode": 493
     },
     {
@@ -646,17 +1516,17 @@
     },
     {
       "path": ".claude/orchestrator.md",
-      "sha256": "e0077ad3c66be75c5079f7cae8be5b9489c32f6e3890cf501f0470cb31ed1229",
+      "sha256": "7829d2cc3b959ae8fdcbe1e15a5a8ad0c12095acd395746e190237662c3c2d58",
       "mode": 420
     },
     {
       "path": ".claude/rules/fundamentals.md",
-      "sha256": "179ce69b63e7f19e0fdcd2cefd62fe717eea50a1f24f0484f20e29a3578bcc3b",
+      "sha256": "9144054a44cb3f01ed58890a75cbadc08fcb586aee2596884434ae00398d9398",
       "mode": 420
     },
     {
       "path": ".claude/settings.json",
-      "sha256": "7d7e0b7a8b7e8f0aa88cacbfceb28e0a803489ee212608c0e418c5b905ec6929",
+      "sha256": "b8c94e280c3504164f263d39b20d4d5930d46d9c87959cf46f81390f9db3c1d1",
       "mode": 420
     },
     {
@@ -686,7 +1556,7 @@
     },
     {
       "path": ".claude/skills/architecture-fundamentals/SKILL.md",
-      "sha256": "5dbe5bde611180fd318dbbd9be7970a7b724d80b22c3a7fe3b3fbcf1b9dfeb15",
+      "sha256": "a182f744eaf17c99d94cc4961f837edafe1dc30304e389c6859758ddef0f8543",
       "mode": 420
     },
     {
@@ -711,22 +1581,22 @@
     },
     {
       "path": ".claude/skills/brainstorming/SKILL.md",
-      "sha256": "5b97e301654b7f5e99bcb9204a58720f549d4f00dbcddc85b62195d26c7b0a32",
+      "sha256": "5d64a6f9f8c27ff4bf75900240490c9675d5635a5e358f96c2b6696e6625cb70",
       "mode": 420
     },
     {
       "path": ".claude/skills/build/SKILL.md",
-      "sha256": "19a74adf9a713f240803f86d7957f35743a9d155cae27a966815b4aeed37f117",
+      "sha256": "d7fc72dbc0d5aebe531e9528f57329acfa7872f94f7888daa1db22ab7674a7c9",
       "mode": 420
     },
     {
       "path": ".claude/skills/change/SKILL.md",
-      "sha256": "c3f7e1769890a1d1d631f1ed5e5e758329fbfbcac7e9e8d61ec10dd7d700595d",
+      "sha256": "30f82c305ccca5f864de97080e247c76d3cb8aa0adc695472b7455d054033da9",
       "mode": 420
     },
     {
       "path": ".claude/skills/change/references/workflow.md",
-      "sha256": "ce8ae71a88677831f0142d5e1ffe7c1a96b980f2d4d16e36e74da2ef6c69bcc1",
+      "sha256": "0651d3473afc780b05d038778a33565f5e143e0c46f2ff64afdda47d1072ab10",
       "mode": 420
     },
     {
@@ -866,7 +1736,7 @@
     },
     {
       "path": ".claude/skills/feature/references/workflow.md",
-      "sha256": "87fe39ae9b78eef566472d9209ea2bcfa1de69235ed43075e18266da01486317",
+      "sha256": "b3bd350b63151586413a83ef29f6274ff82bba1cb9d0e1f5cc5cb75f3b958f60",
       "mode": 420
     },
     {
@@ -951,12 +1821,12 @@
     },
     {
       "path": ".claude/skills/harness-html-report/SKILL.md",
-      "sha256": "f9559de8ec507af37968a20d404a6f61252703ed727598e675e5713c36b4c856",
+      "sha256": "d6e00886106197937e2e1b58beab6bc0e297a421713a84539fa33dca4d54244d",
       "mode": 420
     },
     {
       "path": ".claude/skills/harness-html-report/references/report.md",
-      "sha256": "1cfa407980c7248ab84962d71febe9d983b2cf57dec99ccdfaf37ee159eabb50",
+      "sha256": "6f5da72b50753c930c2db4cd1cf65607fc77b3d2b4f01e9b5844563a633762e0",
       "mode": 420
     },
     {
@@ -1006,12 +1876,12 @@
     },
     {
       "path": ".claude/skills/investigate/SKILL.md",
-      "sha256": "0ee50f90ff3da3545ffda4556685feb6de59bd1df54522a90516bf0d4d096df0",
+      "sha256": "57477c7355fe02d6d88cf268d307c9fb0432f0b0c8d509e6222bda4a38632831",
       "mode": 420
     },
     {
       "path": ".claude/skills/land/SKILL.md",
-      "sha256": "70216c406fa7a377b241459d536374359e9f3f48feb901a251d0081766b4cbbf",
+      "sha256": "9930e0bda9dc94a6056fdee76e5bc83831d8b4cefb65367e0fa1da4aeef7a942",
       "mode": 420
     },
     {
@@ -1066,12 +1936,12 @@
     },
     {
       "path": ".claude/skills/prove/SKILL.md",
-      "sha256": "f4a5cf2819d150fd300f716b2e781027082cb9d5016089410d0f9bd246cabfc5",
+      "sha256": "d59d845a13d4bf383e6f83bf93dbcfe4eccfd04b97d070be4f86ced8555c004f",
       "mode": 420
     },
     {
       "path": ".claude/skills/prove/references/workflow.md",
-      "sha256": "74457c51c2d99bb0cefbd6c9019e7fcf181e7219945d6450518fedec7766e492",
+      "sha256": "b14eb18198e7ea17018e8607cbed167b5663341da7bbee84ca98bf822e0a8da0",
       "mode": 420
     },
     {
@@ -1506,32 +2376,32 @@
     },
     {
       "path": "VERSION",
-      "sha256": "ef2a79c2f7dc37800a73fd9930b307824ce20af920cbc7159323456418e77e6b",
+      "sha256": "f56d86161b599a03c202bf1b538845677773cea7b2f4dd521f33310f47158d4b",
       "mode": 420
     },
     {
       "path": "WORKFLOW.md",
-      "sha256": "cc7689831700985d401931b1f8c73608ea239dea54a8e6fe173b4fc02a03a458",
+      "sha256": "8de3423b9eba204c2b53095d3514551d5de939d65e1a69c7afcec34fd5c475ee",
       "mode": 420
     },
     {
       "path": "cli.sh",
-      "sha256": "508ae8e07502a4a938ef7111975f3e2fc7f9f7c6da49dcc4585a1b95a25243de",
+      "sha256": "2625ec2cebcb80323187a2be8107ce20bba1311bbe61accb0ba99bfc6f59732b",
       "mode": 493
     },
     {
       "path": "foundation.json",
-      "sha256": "0c73c4f7882e8b1910c073bd0ed8acd1bbb71766a29b6a398e6f3f7236b4ca99",
+      "sha256": "022990d4dd2849238d85f22d83449581389406fc6ad5d0a350ff66aa9eac86ad",
       "mode": 420
     },
     {
       "path": "install-opencode.sh",
-      "sha256": "c602bf2227fd025fa0f17f667d210d173be8bb202e9224aa0be5ea060d703e1d",
+      "sha256": "67b216d86c8d6dfc1e6ae10a16141eb646665ff3b0b3878e20d27d3bd558acb0",
       "mode": 493
     },
     {
       "path": "install.sh",
-      "sha256": "0ef805f442dec7ee1367d8b0dff530532b00a1b2a5d890d8671060d97d8e0978",
+      "sha256": "bf8adb8a8a52545c362db1b770e19d966d0bff598726b8362806d8e555f6082f",
       "mode": 493
     },
     {
@@ -1546,7 +2416,7 @@
     },
     {
       "path": "openspec/schemas/foundation-rapid/schema.yaml",
-      "sha256": "5bcd4a6ff676051884e51bdb6a293c8b9518704a090bd2e4a9360ad42d99faae",
+      "sha256": "56cb11f642231e48858937f936c4588f30e1b3ffed47c3881c9d70360681b995",
       "mode": 420
     },
     {
@@ -1571,7 +2441,7 @@
     },
     {
       "path": "openspec/schemas/foundation-rapid/templates/proposal.md",
-      "sha256": "0dc1bf0271f35bb72840e5a2f959b86df333f3389e8d9bb0cde9107dcc9f0060",
+      "sha256": "15320bad7e7d3ec95b0a00df1be7e7e4999ba11f7ce33041d40832513692f0bf",
       "mode": 420
     },
     {
@@ -1581,17 +2451,17 @@
     },
     {
       "path": "openspec/schemas/foundation-rapid/templates/tasks.md",
-      "sha256": "34e5ac3eedc711fa2ec86d2f4bcea5c59d5a60d2e91d2a0662072017ce4dc882",
+      "sha256": "90235242a21a6571d9880af31b70a26e30e5cc8db461c463333e082a6f2de8b6",
       "mode": 420
     },
     {
       "path": "openspec/schemas/foundation-standard/schema.yaml",
-      "sha256": "9eb85b89f7a2e5f874ef8e17513181f22c7b9c9fbff1d53a597162bc1671e6cb",
+      "sha256": "1708ce82ed9a39914f1d5c956942a6b2daba905d1084b042e9949b5bbb9981b0",
       "mode": 420
     },
     {
       "path": "openspec/schemas/foundation-standard/templates/design.md",
-      "sha256": "0f70d700f5d970788552cf53588e8784f22f04b62e23141c7629dc02fbeae907",
+      "sha256": "9376b02cce7be695a103b900b65fc3c0725e281127bf86b7c842ddf064883d85",
       "mode": 420
     },
     {
@@ -1606,7 +2476,7 @@
     },
     {
       "path": "openspec/schemas/foundation-standard/templates/grounding.yaml",
-      "sha256": "02df8cd12b8cae0c99c40f95d157098ee7dfb135abcad31f6f338f3f3de679c7",
+      "sha256": "26518ca88823ae4a2e13b4bb2533e7aca89c9c2ba0413aadfbf37fb627c01381",
       "mode": 420
     },
     {
@@ -1616,7 +2486,7 @@
     },
     {
       "path": "openspec/schemas/foundation-standard/templates/proposal.md",
-      "sha256": "2f344def01fb142cf5a87f9070721c009b6f6e40878343b258c1963a8b2b5667",
+      "sha256": "85b85eed5f47727600e2223fc772050fa5a0bd11d2499907b47a12504a2142a3",
       "mode": 420
     },
     {
@@ -1626,12 +2496,12 @@
     },
     {
       "path": "openspec/schemas/foundation-standard/templates/spec.md",
-      "sha256": "f760aa03b044b0f317e9e4622b0f6ab57c47619850ab1334507a2826ef985bd5",
+      "sha256": "d72b3e94197262a2e6de351a82cb6f54615cbea46112dddeb7dbf4baf08929a4",
       "mode": 420
     },
     {
       "path": "openspec/schemas/foundation-standard/templates/tasks.md",
-      "sha256": "8bf7cf1ad256ef40bcc929524530b46cd22eff68db1ed101a953a8046e8f4eda",
+      "sha256": "c1b07436178afa0329b6018669c468d77c094ac4e8ce46050f1808e258fd8566",
       "mode": 420
     }
   ]

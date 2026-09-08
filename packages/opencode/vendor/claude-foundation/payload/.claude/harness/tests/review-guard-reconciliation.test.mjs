@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  mkdirSync, mkdtempSync, readFileSync, writeFileSync
+  mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { createReviewAttemptStore } from "../runtime/evidence/review-attempt-store.mjs";
+import {
+  createReviewAttemptStore,
+  reviewHistoryAttemptValid,
+  reviewHistoryChainValidOperation
+} from "../runtime/evidence/review-attempt-store.mjs";
 import { createReviewProtocol } from "../runtime/evidence/review-protocol.mjs";
 import { createAuthorityRuntime } from "../runtime/workflow/authority-runtime.mjs";
 
@@ -26,6 +30,58 @@ const writeJson = (path, value) => {
 };
 const fail = (message) => { throw new Error(message); };
 const now = () => "2026-08-16T12:00:00.000Z";
+
+function chainValid(attempts, history, id = "change-a") {
+  return reviewHistoryChainValidOperation({
+    reviewAttemptByDigest: (_changeId, digest) => attempts.get(digest) || null
+  }, id, history);
+}
+
+{
+  assert.equal(reviewHistoryAttemptValid(null, "change-a", 1), false);
+  assert.equal(reviewHistoryAttemptValid({
+    attempt: 1, changeId: "change-a"
+  }, "change-a", 1), true);
+  assert.equal(reviewHistoryAttemptValid({
+    attempt: 2, changeId: "change-a"
+  }, "change-a", 1), false);
+  assert.equal(reviewHistoryAttemptValid({
+    attempt: 1, changeId: "change-b"
+  }, "change-a", 1), false);
+  assert.equal(chainValid(new Map(), { chainHead: null, totalAttempts: 0 }), true);
+  const valid = new Map([
+    ["second", { attempt: 2, changeId: "change-a", priorChainHead: "first" }],
+    ["first", { attempt: 1, changeId: "change-a", priorChainHead: null }]
+  ]);
+  assert.equal(chainValid(valid, { chainHead: "second", totalAttempts: 2 }), true);
+  assert.equal(chainValid(new Map(), { chainHead: "missing", totalAttempts: 1 }), false);
+  assert.equal(chainValid(new Map([["wrong", {
+    attempt: 2, changeId: "change-a", priorChainHead: null
+  }]]), { chainHead: "wrong", totalAttempts: 1 }), false);
+  assert.equal(chainValid(new Map([["foreign", {
+    attempt: 1, changeId: "change-b", priorChainHead: null
+  }]]), { chainHead: "foreign", totalAttempts: 1 }), false);
+  assert.equal(chainValid(new Map([["cycle", {
+    attempt: 1, changeId: "change-a", priorChainHead: "cycle"
+  }]]), { chainHead: "cycle", totalAttempts: 1 }), false);
+  assert.equal(chainValid(new Map([["migrated", {
+    attempt: 3, changeId: "change-a", priorChainHead: null, migrated: true
+  }]]), { chainHead: "migrated", totalAttempts: 3 }), true);
+  assert.equal(chainValid(new Map([["gap", {
+    attempt: 3, changeId: "change-a", priorChainHead: null
+  }]]), { chainHead: "gap", totalAttempts: 3 }), false);
+  const oversized = new Map();
+  for (let attempt = 1; attempt <= 1002; attempt += 1) {
+    oversized.set(`attempt-${attempt}`, {
+      attempt,
+      changeId: "change-a",
+      priorChainHead: attempt === 1 ? null : `attempt-${attempt - 1}`
+    });
+  }
+  assert.equal(chainValid(oversized, {
+    chainHead: "attempt-1002", totalAttempts: 1002
+  }), false, "review history traversal is bounded even for a valid-shaped chain");
+}
 
 function fixture(id) {
   const root = mkdtempSync(join(tmpdir(), "foundation-guard-reconcile-"));
@@ -71,6 +127,71 @@ function fixture(id) {
       id, state.reviewHistory, "review"),
     history: () => state.reviewHistory
   };
+}
+
+{
+  const id = "case-legacy-migration";
+  const root = mkdtempSync(join(tmpdir(), "foundation-review-migration-"));
+  const receiptsRoot = join(root, "receipts");
+  const evidenceVault = join(root, "evidence");
+  let state = { id, status: "proving", reviewHistory: null };
+  const protocol = createReviewProtocol({ stableHash, fail });
+  const legacyReceipt = {
+    version: 6,
+    changeId: id,
+    provider: "review",
+    status: "pass",
+    workspaceHash: "workspace-legacy",
+    review: { round: 3, reviewer: { type: "human" } }
+  };
+  writeJson(join(receiptsRoot, id, "review.json"), legacyReceipt);
+  writeJson(join(receiptsRoot, id, "proof.json"), {
+    review: { round: 99, reviewer: { type: "ai" } }
+  });
+  writeFileSync(join(receiptsRoot, id, "ignored.txt"), "not a receipt\n");
+  mkdirSync(join(receiptsRoot, id, "nested.json"));
+  const store = createReviewAttemptStore({
+    receiptsRoot, evidenceVault, readJson, writeJson,
+    loadRuntime: () => state,
+    saveRuntime: (next) => { state = next; },
+    stableHash,
+    reviewReceiptBinding: protocol.receiptBinding,
+    now,
+    blockWithDecision: (_changeId, kind) => fail(kind),
+    fail
+  });
+  const history = store.reviewHistoryState(id);
+  assert.equal(history.totalAttempts, 3);
+  assert.equal(history.aiAttempts, 2);
+  assert.equal(history.migratedFromReceiptDigest, stableHash(legacyReceipt));
+  assert.match(history.chainHead, /^[a-f0-9]{64}$/);
+  const attempt = store.reviewAttemptByDigest(id, history.chainHead);
+  assert.equal(attempt.migrated, true);
+  assert.equal(attempt.attempt, 3);
+  assert.equal(attempt.reviewerType, "human");
+  assert.equal(attempt.workspaceHash, "workspace-legacy");
+  assert.equal(attempt.status, "pass");
+  assert.equal(attempt.migratedFromReceiptDigest, stableHash(legacyReceipt));
+  assert.strictEqual(store.reviewHistoryState(id), history,
+    "a migrated current history is reused without another artifact");
+
+  const sparseId = "case-sparse-legacy-migration";
+  state = { id: sparseId, status: "proving", reviewHistory: null };
+  const sparseReceipt = {
+    version: 5, changeId: sparseId, provider: "review", review: {}
+  };
+  writeJson(join(receiptsRoot, sparseId, "review.json"), sparseReceipt);
+  const sparseHistory = store.reviewHistoryState(sparseId);
+  assert.equal(sparseHistory.totalAttempts, 0);
+  assert.equal(sparseHistory.aiAttempts, 0);
+  assert.match(sparseHistory.chainHead, /^[a-f0-9]{64}$/);
+  const sparseAttempt = store.reviewAttemptByDigest(sparseId, sparseHistory.chainHead);
+  assert.equal(sparseAttempt.attempt, 1);
+  assert.equal(sparseAttempt.reviewerType, "unknown");
+  assert.equal(sparseAttempt.workspaceHash, null);
+  assert.equal(sparseAttempt.status, null);
+  assert.equal(sparseAttempt.migratedFromReceiptDigest, stableHash(sparseReceipt));
+  rmSync(root, { recursive: true, force: true });
 }
 
 // Case 1 — receipt overwrite: a recorded delta receipt replaces the full

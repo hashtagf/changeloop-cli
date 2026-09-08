@@ -6,5 +6,7 @@ alwaysApply: true
 For Foundation work, match the user's language and lead with the outcome. State
 work done, verification, remaining risk, and the next action. Run safe routine
 recovery within current authority; never hand the user commands the agent can
-run. Keep protocol JSON, hashes, receipts, provider codes, and task IDs internal
-unless the user asks for diagnostics. Ask only for a consequential decision.
+run. Treat runtime command and resume fields as agent-only control data. Keep
+protocol JSON, hashes, receipts, provider codes, and task IDs internal unless
+the user asks for diagnostics. `ASK_USER` asks only for a consequential
+decision; `WAIT` reports its owner and condition without a user command.

@@ -25,12 +25,16 @@ Use the lightest path that resolves the decision.
    structured question tool (AskUserQuestion) when the session provides one,
    one question per decision; otherwise ask in plain text.
    Ask only what materially changes behavior, compatibility, security,
-   persistence, or scope; recompute the round from the answers and stop only
+   persistence, scope, or a measurable/observable non-functional target;
+   recompute the round from the answers and stop only
    when every material decision has been asked and answered.
 6. End with a compact agreement: outcome, in/out, observable scenarios, chosen
    approach, remaining risk, and each asked question with its chosen answer.
    Include canonical project terms with meanings and avoided aliases plus any
-   qualifying durable tradeoffs.
+   qualifying durable tradeoffs. For runtime-shipping work, also state which of
+   performance, capacity, availability, security/privacy, accessibility,
+   operability, compatibility, and recoverability are applicable; source `N/A`
+   decisions and never invent a target.
    Carry the agreement into feature or change intake. Reuse its settled answers
    without asking them again, and record them in the existing change packet so
    no answer lives only in chat.

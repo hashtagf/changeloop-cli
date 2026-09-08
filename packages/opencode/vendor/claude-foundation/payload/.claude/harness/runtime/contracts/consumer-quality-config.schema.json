@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "foundation-consumer-quality-config-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "policy", "repositories", "exceptions"],
+  "properties": {
+    "version": { "const": 1 },
+    "policy": { "type": "object" },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "profiles", "include", "exclude", "providers"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "profiles": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "include": { "type": "array", "items": { "type": "string" } },
+          "exclude": { "type": "array", "items": { "type": "string" } },
+          "providers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["kind"],
+              "properties": {
+                "kind": { "enum": ["command", "builtin"] },
+                "adapter": { "type": "string", "minLength": 1 },
+                "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+                "protocol": { "type": "string" },
+                "output": { "type": "string" },
+                "language": { "type": "string", "minLength": 1 },
+                "coverageClass": { "enum": ["unit", "integration", "critical-journey"] },
+                "tool": { "type": "object" },
+                "inputs": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+                "required": { "type": "boolean" },
+                "isolation": { "enum": ["read-only", "tool", "harness-sandbox"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "repository", "target", "metric", "reason", "risk", "compensatingEvidence", "owner", "approvedBy", "expires", "trackingIssue"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "repository": { "type": "string", "minLength": 1 },
+          "target": { "type": "string", "minLength": 1 },
+          "metric": { "enum": ["coverage", "complexity", "crap", "mutation"] },
+          "reason": { "type": "string", "minLength": 1 },
+          "risk": { "type": "string", "minLength": 1 },
+          "compensatingEvidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+          "owner": { "type": "string", "minLength": 1 },
+          "approvedBy": { "type": "string", "minLength": 1 },
+          "expires": { "type": "string", "format": "date" },
+          "trackingIssue": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

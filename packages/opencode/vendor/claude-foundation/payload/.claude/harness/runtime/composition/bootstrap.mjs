@@ -15,7 +15,8 @@ function findRoot({ start, pinned, fail, warn }) {
     if (existsSync(join(cursor, "openspec", "config.yaml")) &&
         existsSync(join(cursor, ".claude", "harness", "foundation.mjs"))) {
       if (pinned || !insideSandboxCopy(cursor)) return cursor;
-      warn(`claude-foundation: ignoring sandbox copy at ${cursor}; resolving the project root`);
+      warn(`claude-foundation: control-plane state resolves at the project root; ` +
+        `provider commands still execute in the registered change sandbox (found sandbox copy at ${cursor})`);
     }
     const parent = dirname(cursor);
     if (parent === cursor) fail("not inside a Foundation project");

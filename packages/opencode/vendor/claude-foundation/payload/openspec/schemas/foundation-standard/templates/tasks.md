@@ -1,8 +1,9 @@
 # Tasks
 
-> This is the sole implementation ledger. Check an item only when its verify
-> condition passes. Group by coherent behavior, not workflow phase. Add
-> `[claims:<claim-id>]` after each stable task ID once evidence claims exist.
+> This is the sole implementation ledger. Semantic draft v3 generates stable
+> IDs and claim links from task keys and `covers`; do not copy them across files
+> by hand. Check an item only when its verify condition passes. Group by coherent
+> behavior, not workflow phase.
 >
 > Annotations the planner reads, all optional for a single-repository change:
 > `[repo:<id>]` (default `root`), `[kind:<kind>]` (default `implementation`),

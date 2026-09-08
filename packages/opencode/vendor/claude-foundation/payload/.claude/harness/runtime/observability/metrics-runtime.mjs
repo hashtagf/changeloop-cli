@@ -1,6 +1,227 @@
-import { existsSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
+import { measuredNumber } from "../core/measured-number.mjs";
 import { createModelDriftInspector } from "./host-execution-contract.mjs";
+import { commandProfile, operationPhaseRows } from "./operation-profile.mjs";
+
+export function runtimeSourceDigest(directory) {
+  const digest = createHash("sha256");
+  const visit = (absolute, relative = "") => {
+    for (const entry of readdirSync(absolute, { withFileTypes: true })
+      .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)) {
+      const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
+      const childAbsolute = join(absolute, entry.name);
+      if (entry.isDirectory()) {
+        digest.update(`directory\0${childRelative}\0`);
+        visit(childAbsolute, childRelative);
+      } else if (entry.isSymbolicLink()) {
+        digest.update(`symlink\0${childRelative}\0${readlinkSync(childAbsolute)}\0`);
+      } else if (entry.isFile()) {
+        digest.update(`file\0${childRelative}\0`);
+        digest.update(readFileSync(childAbsolute));
+        digest.update("\0");
+      }
+    }
+  };
+  visit(directory);
+  return `sha256:${digest.digest("hex")}`;
+}
+
+export function createSourceCohortProvider({
+  runtimeVersion,
+  protocolBundle,
+  directory,
+  scope = ".claude/harness",
+  digest = runtimeSourceDigest
+}) {
+  let cached;
+  return () => {
+    if (cached) return cached;
+    try {
+      cached = Object.freeze({
+        version: 1, runtimeVersion, protocolBundle,
+        contentDigest: digest(directory), scope,
+        basis: "sorted-relative-path-and-file-bytes",
+        availability: "available", reason: null
+      });
+    } catch {
+      cached = Object.freeze({
+        version: 1, runtimeVersion, protocolBundle,
+        contentDigest: null, scope,
+        basis: "sorted-relative-path-and-file-bytes",
+        availability: "unavailable", reason: "source-read-failed"
+      });
+    }
+    return cached;
+  };
+}
+
+export function evidenceObservationGroups(providers = {}) {
+  const groups = new Map();
+  for (const [provider, row] of Object.entries(providers)) {
+    if (!row.commandExecutionId) continue;
+    const current = groups.get(row.commandExecutionId) || [];
+    current.push(provider);
+    groups.set(row.commandExecutionId, current);
+  }
+  return [...groups].map(([commandExecutionId, names]) => ({
+    commandExecutionId,
+    providers: names.sort(),
+    independent: names.length === 1
+  })).sort((left, right) =>
+    left.commandExecutionId.localeCompare(right.commandExecutionId));
+}
+
+export function lifecycleStageMetrics(operations = []) {
+  const result = {};
+  for (const span of operations.flatMap((row) => Array.isArray(row.stageSpans)
+    ? row.stageSpans : [])) {
+    if (!span?.stage || !Number.isFinite(Number(span.durationMs))) continue;
+    const current = result[span.stage] ||= { calls: 0, durationMs: 0, failures: 0 };
+    current.calls += 1;
+    current.durationMs += Number(span.durationMs);
+    if (span.status === "failed") current.failures += 1;
+  }
+  return result;
+}
+
+export function lifecycleSchedulerMetrics(operations = []) {
+  const result = {};
+  for (const event of operations.flatMap((row) => Array.isArray(row.schedulerEvents)
+    ? row.schedulerEvents : [])) {
+    if (!event?.scheduler) continue;
+    const current = result[event.scheduler] ||= {
+      waves: 0, readyNodes: 0, executedNodes: 0, reusedNodes: null,
+      queueingMs: null, peakConcurrency: 0
+    };
+    current.waves += 1;
+    for (const field of ["readyNodes", "executedNodes"])
+      if (Number.isFinite(Number(event[field]))) current[field] += Number(event[field]);
+    for (const field of ["reusedNodes", "queueingMs"])
+      if (event[field] !== null && event[field] !== undefined &&
+          Number.isFinite(Number(event[field])))
+        current[field] = Number(current[field] || 0) + Number(event[field]);
+    if (Number.isFinite(Number(event.peakConcurrency)))
+      current.peakConcurrency = Math.max(current.peakConcurrency,
+        Number(event.peakConcurrency));
+  }
+  return result;
+}
+
+export function eventUsageRecoveryActions(classification, correlatedHosts, changeId) {
+  const recoveryActions = [];
+  if (["correlation-missing", "partial-measurement"].includes(classification)) {
+    if (correlatedHosts.includes("codex")) recoveryActions.push({
+      type: "import-codex-events",
+      command: `claude-foundation telemetry import ${changeId} <events.jsonl> --format codex`
+    });
+    if (correlatedHosts.includes("claude-code")) recoveryActions.push({
+      type: "sync-claude-transcript",
+      command: `claude-foundation telemetry sync ${changeId} [transcript.jsonl]`
+    });
+    if (correlatedHosts.includes("generic-host")) recoveryActions.push({
+      type: "import-generic-events",
+      command: `claude-foundation telemetry import ${changeId} <events.jsonl> --format generic`
+    });
+  }
+  if (classification === "partial-measurement" &&
+      correlatedHosts.includes("claude-code")) recoveryActions.push({
+    type: "import-host-execution",
+    command: `claude-foundation telemetry host-import ${changeId} <claude-result.json>`
+  });
+  if (classification === "source-unsupported") recoveryActions.push({
+    type: "import-generic-events",
+    command: `claude-foundation telemetry import ${changeId} <events.jsonl> --format generic`
+  });
+  return recoveryActions;
+}
+
+export function normalizedTelemetryHost(event = {}) {
+  const source = String(event.source || "").toLowerCase();
+  if (source === "codex") return "codex";
+  if (source === "claude" || source === "claude-transcript") return "claude-code";
+  if (["generic", "otel", "cursor"].includes(source)) return "generic-host";
+  if (!["host-execution", "host-execution-contract"].includes(source)) return null;
+  const host = String(event.agentId || event.host || "").toLowerCase();
+  if (host.includes("codex")) return "codex";
+  if (host.includes("claude")) return "claude-code";
+  return host ? "generic-host" : null;
+}
+
+export function usageAvailability(events = [], phaseContextRows = [], changeId = "<change>") {
+  if (events.length) {
+    const correlatedHosts = [...new Set(events.map(normalizedTelemetryHost)
+      .filter(Boolean))].sort();
+    const usageFields = [
+      "inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens",
+      "cacheTokens", "cost"
+    ];
+    const finite = (value) => measuredNumber(value) !== null;
+    const observedValues = events.flatMap((event) => usageFields
+      .map((field) => event[field]).filter(finite));
+    const completeEvents = events.filter((event) =>
+      finite(event.inputTokens) && finite(event.outputTokens));
+    const allUsageZero = completeEvents.length === events.length &&
+      completeEvents.every((event) =>
+        measuredNumber(event.inputTokens) === 0 && measuredNumber(event.outputTokens) === 0 &&
+        usageFields.filter((field) => !["inputTokens", "outputTokens"].includes(field))
+          .filter((field) => finite(event[field]))
+          .every((field) => measuredNumber(event[field]) === 0));
+    const claudeCostMissing = correlatedHosts.includes("claude-code") &&
+      !allUsageZero && !events.some((event) => finite(event.cost));
+    const measuredDimensions = {
+      tokens: completeEvents.length === events.length,
+      cost: events.every((event) => finite(event.cost)),
+      model: events.every((event) => Boolean(String(event.modelId || "").trim()))
+    };
+    const classification = !correlatedHosts.length ? "source-unsupported"
+      : !observedValues.length ? "correlation-missing"
+        : completeEvents.length !== events.length || claudeCostMissing ? "partial-measurement"
+          : allUsageZero ? "no-usage"
+            : "measured";
+    const recoveryActions = eventUsageRecoveryActions(
+      classification, correlatedHosts, changeId);
+    return {
+      status: "measured",
+      classification,
+      reason: classification === "measured" || classification === "no-usage"
+        ? null : classification,
+      correlatedHosts,
+      measuredDimensions,
+      recoveryActions
+    };
+  }
+  const correlatedHosts = [...new Set(phaseContextRows
+    .filter((row) => row.sessionId)
+    .map((row) => row.telemetryHost || "unknown"))].sort();
+  const recoveryActions = [];
+  if (correlatedHosts.includes("codex")) recoveryActions.push({
+    type: "import-codex-events",
+    command: `claude-foundation telemetry import ${changeId} <events.jsonl> --format codex`
+  });
+  if (correlatedHosts.includes("claude-code")) recoveryActions.push({
+    type: "sync-claude-transcript",
+    command: `claude-foundation telemetry sync ${changeId} [transcript.jsonl]`
+  });
+  recoveryActions.push({
+    type: "import-host-execution",
+    command: `claude-foundation telemetry host-import ${changeId} <result.json>`
+  });
+  if (!correlatedHosts.includes("codex")) recoveryActions.push({
+    type: "import-generic-events",
+    command: `claude-foundation telemetry import ${changeId} <events.jsonl> --format generic`
+  });
+  return {
+    status: "unavailable",
+    classification: "not-ingested",
+    reason: correlatedHosts.length
+      ? "correlation-without-usage-events" : "host-telemetry-not-ingested",
+    correlatedHosts,
+    measuredDimensions: { tokens: false, cost: false, model: false },
+    recoveryActions
+  };
+}
 
 export function createMetricsRuntime({
   logs,
@@ -11,11 +232,14 @@ export function createMetricsRuntime({
   loadRuntime,
   ensureBudgetState,
   budgetDecision,
+  calibrationForState = null,
   instructionManifests = null,
   activeChangePath = null,
   policy = null,
   taskBlocks = null,
   taskMetadata = null,
+  metricsSchemaVersion = 6,
+  sourceCohort = null,
   output = console.log
 }) {
   // Absent join inputs report as unknown drift rather than suppressing the
@@ -30,7 +254,7 @@ export function createMetricsRuntime({
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
         const row = readJson(join(dir, entry.name), {});
-        if (row.kind && Number.isFinite(Number(row.bytes))) rows.push(row);
+        if (row.kind && measuredNumber(row.bytes) !== null) rows.push(row);
       }
     const rollup = readJson(join(logs, id, "context-rollup.json"), {
       count: 0, totalBytes: 0, byKind: {}
@@ -39,9 +263,9 @@ export function createMetricsRuntime({
   }
 
   function sumKnown(rows, field) {
-    const values = rows.map((row) => row[field]).filter((value) =>
-      value !== null && value !== undefined && Number.isFinite(Number(value)));
-    return values.length ? values.reduce((sum, value) => sum + Number(value), 0) : null;
+    const values = rows.map((row) => measuredNumber(row[field]))
+      .filter((value) => value !== null);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
   }
 
   function groupUsage(events, field) {
@@ -54,10 +278,10 @@ export function createMetricsRuntime({
       };
       const row = result[key];
       row.requests += 1;
-      for (const metric of ["inputTokens", "outputTokens", "cacheTokens", "cost"])
-        if (event[metric] !== null && event[metric] !== undefined &&
-            Number.isFinite(Number(event[metric])))
-          row[metric] = Number(row[metric] || 0) + Number(event[metric]);
+      for (const metric of ["inputTokens", "outputTokens", "cacheTokens", "cost"]) {
+        const value = measuredNumber(event[metric]);
+        if (value !== null) row[metric] = Number(row[metric] || 0) + value;
+      }
     }
     return result;
   }
@@ -65,8 +289,10 @@ export function createMetricsRuntime({
   function contextSummary(contextRows, contextRollup) {
     const contextByKind = {};
     for (const row of contextRows) {
+      const bytes = measuredNumber(row.bytes);
+      if (!row.kind || bytes === null) continue;
       contextByKind[row.kind] ||= [];
-      contextByKind[row.kind].push(Number(row.bytes || 0));
+      contextByKind[row.kind].push(bytes);
     }
     const context = Object.fromEntries(Object.entries(contextByKind)
       .map(([kind, values]) => {
@@ -83,72 +309,88 @@ export function createMetricsRuntime({
         }];
       }));
     for (const [kind, archived] of Object.entries(contextRollup.byKind || {})) {
+      const archivedCount = measuredNumber(archived.count);
+      const archivedTotalBytes = measuredNumber(archived.totalBytes);
+      const archivedMaxBytes = measuredNumber(archived.maxBytes);
+      // A rollup row is one aggregate measurement. If any component is junk,
+      // skip the row instead of mixing a trustworthy count with invented bytes.
+      if ([archivedCount, archivedTotalBytes, archivedMaxBytes]
+        .some((value) => value === null)) continue;
       const summary = context[kind] ||= {
         count: 0, totalBytes: 0, medianBytes: null, p95Bytes: null, maxBytes: 0
       };
-      summary.count += Number(archived.count || 0);
-      summary.totalBytes += Number(archived.totalBytes || 0);
-      summary.maxBytes = Math.max(summary.maxBytes || 0, Number(archived.maxBytes || 0));
-      summary.archivedCount = Number(archived.count || 0);
+      summary.count += archivedCount;
+      summary.totalBytes += archivedTotalBytes;
+      summary.maxBytes = Math.max(summary.maxBytes || 0, archivedMaxBytes);
+      summary.archivedCount = archivedCount;
     }
     return context;
   }
 
-  function showMetrics(id) {
-    const state = loadRuntime(id);
-    const budget = ensureBudgetState(state);
-    const operations = readJsonLines(join(logs, id, "operations.jsonl"));
-    const events = readJsonLines(join(logs, id, "events.jsonl"));
-    const userTransitions = readJsonLines(join(logs, id, "user-transitions.jsonl"));
-    const { rows: contextRows, rollup: contextRollup } = contextMetricState(id);
-    const phaseContextRows = readJsonLines(join(logs, id, "phase-context.jsonl"));
-    const reuseRows = readJsonLines(join(logs, id, "reuse.jsonl"));
-    const phases = {};
-    const phaseEntry = (name) => (phases[name] ||= {
+  function phaseEntry(phases, name) {
+    return (phases[name] ||= {
       operations: 0, durationMs: 0, failed: 0, blocked: 0, requests: 0,
       inputTokens: null, outputTokens: null,
-      cacheCreationTokens: null, cacheReadTokens: null, spendTokens: null,
+      cacheCreationTokens: null, cacheReadTokens: null, cacheWriteTokens: null,
+      spendTokens: null,
       contextMode: null, contextCarryInTokens: null, contextCarryCostTokens: null,
       loggedContextMode: undefined
     });
+  }
+
+  function addOperationPhases(phases, operations) {
     for (const operation of operations) {
-      // `operation.phase` is now written for every lifecycle command, whether
-      // the call arrived through the public CLI wrapper or straight into the
-      // runtime, so the fallback only catches rows from an older revision.
-      const name = operation.phase || operation.operation || "unknown";
-      const phase = phaseEntry(name);
-      phase.operations += 1;
-      phase.durationMs += Number(operation.durationMs || 0);
-      // A typed stop and a failure have to read differently — the same
-      // distinction `rework` draws below, and the one `model-drift` documents.
-      // Collapsing them here reported six blocked lifecycle stops as six
-      // failures on a change that had none.
-      if (operation.status === "blocked") phase.blocked += 1;
-      else if (operation.status !== "completed") phase.failed += 1;
+      const seen = new Set();
+      for (const span of operationPhaseRows(operation)) {
+        const name = span.phase || operation.operation || "unknown";
+        const phase = phaseEntry(phases, name);
+        if (!seen.has(name)) phase.operations += 1;
+        seen.add(name);
+        phase.durationMs += Number(span.durationMs || 0);
+        if (span.status === "blocked") phase.blocked += 1;
+        else if (span.status !== "completed") phase.failed += 1;
+      }
     }
+  }
+
+  function addEventUsage(phase, event) {
+    for (const field of
+      ["inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens"]) {
+      const value = measuredNumber(event[field]);
+      if (value !== null) phase[field] = Number(phase[field] || 0) + value;
+    }
+    const cacheTotal = measuredNumber(event.cacheTokens);
+    const cacheRead = measuredNumber(event.cacheReadTokens);
+    const derivedCacheWrite = cacheTotal !== null && cacheRead !== null
+      ? measuredNumber(cacheTotal - cacheRead) : null;
+    const cacheWrite = measuredNumber(event.cacheCreationTokens) ?? derivedCacheWrite;
+    if (cacheWrite !== null)
+      phase.cacheWriteTokens = Number(phase.cacheWriteTokens || 0) + cacheWrite;
+    const carryIn = measuredNumber(event.cacheReadTokens);
+    if (phase.contextCarryInTokens === null && carryIn !== null)
+      phase.contextCarryInTokens = carryIn;
+  }
+
+  function addEventPhases(phases, events) {
     const phaseFirstEvent = new Map();
     for (const event of events) {
       const name = event.operationId || "unknown";
-      const phase = phaseEntry(name);
+      const phase = phaseEntry(phases, name);
       phase.requests += 1;
-      for (const field of
-        ["inputTokens", "outputTokens", "cacheCreationTokens", "cacheReadTokens"])
-        if (event[field] !== null && event[field] !== undefined &&
-            Number.isFinite(Number(event[field])))
-          phase[field] = Number(phase[field] || 0) + Number(event[field]);
-      // `Number(null)` is 0 and 0 is finite, so an unknown cache read latched
-      // this to a measured zero — and the `=== null` guard then stopped any
-      // real value from ever correcting it.
-      if (phase.contextCarryInTokens === null &&
-          event.cacheReadTokens !== null && event.cacheReadTokens !== undefined &&
-          Number.isFinite(Number(event.cacheReadTokens)))
-        phase.contextCarryInTokens = Number(event.cacheReadTokens);
+      addEventUsage(phase, event);
       if (!phaseFirstEvent.has(name))
         phaseFirstEvent.set(name, { at: Date.parse(event.timestamp), session: event.sessionId });
     }
+    return phaseFirstEvent;
+  }
+
+  function addLoggedContextModes(phases, phaseContextRows) {
     for (const row of phaseContextRows)
       if (row.phase && phases[row.phase] && phases[row.phase].loggedContextMode === undefined)
         phases[row.phase].loggedContextMode = row.contextMode || "unknown";
+  }
+
+  function classifyPhaseContext(phases, phaseFirstEvent) {
     const seenSessions = new Set();
     for (const [name, entry] of [...phaseFirstEvent.entries()]
       .sort((left, right) => (left[1].at || 0) - (right[1].at || 0))) {
@@ -156,23 +398,35 @@ export function createMetricsRuntime({
       if (entry.session) seenSessions.add(entry.session);
       phases[name].contextMode = retained ? "retained" : "initial";
     }
+  }
+
+  function finalizePhaseMetrics(phases) {
     for (const phase of Object.values(phases)) {
       phase.contextCarryCostTokens = phase.contextCarryInTokens === null
         ? null : phase.contextCarryInTokens * phase.requests;
-      // The budget measures spend as input + output + cache-write and excludes
-      // cache reads. Without that sum per phase the numbers here could not be
-      // compared against the budget window at all, which is why "what did build
-      // cost against prove" had no answer.
-      const spend = [phase.inputTokens, phase.outputTokens, phase.cacheCreationTokens]
-        .filter((value) => value !== null && Number.isFinite(Number(value)));
+      const spend = [phase.inputTokens, phase.outputTokens, phase.cacheWriteTokens]
+        .filter((value) => measuredNumber(value) !== null);
       phase.spendTokens = spend.length
         ? spend.reduce((sum, value) => sum + Number(value), 0) : null;
     }
-    const retainedCarryTokens = Object.values(phases)
+    return Object.values(phases)
       .filter((phase) => phase.contextMode === "retained")
       .map((phase) => phase.contextCarryCostTokens)
       .filter((value) => value !== null)
       .reduce((sum, value) => sum + value, 0);
+  }
+
+  function phaseMetrics(operations, events, phaseContextRows) {
+    const phases = {};
+    addOperationPhases(phases, operations);
+    const phaseFirstEvent = addEventPhases(phases, events);
+    addLoggedContextModes(phases, phaseContextRows);
+    classifyPhaseContext(phases, phaseFirstEvent);
+    const retainedCarryTokens = finalizePhaseMetrics(phases);
+    return { phases, retainedCarryTokens };
+  }
+
+  function providerMetrics(id) {
     const providers = {};
     const executions = new Map();
     const receiptDir = join(receipts, id);
@@ -189,30 +443,48 @@ export function createMetricsRuntime({
           commandExecutionId: receipt.commandExecutionId || receipt.executionId || null
         };
         const commandExecutionId = receipt.commandExecutionId || receipt.executionId;
-        if (commandExecutionId && Number.isFinite(Number(receipt.durationMs)))
+        const durationMs = measuredNumber(receipt.durationMs);
+        if (commandExecutionId && durationMs !== null)
           executions.set(commandExecutionId,
-            Math.max(executions.get(commandExecutionId) || 0, Number(receipt.durationMs)));
+            Math.max(executions.get(commandExecutionId) || 0, durationMs));
       }
-    const tokenTotal = ["inputTokens", "outputTokens", "cacheTokens"]
-      .map((field) => sumKnown(events, field))
+    return { providers, executions };
+  }
+
+  function usageTotals(events) {
+    const tokenFields = ["inputTokens", "outputTokens", "cacheTokens"];
+    const tokenTotal = tokenFields.map((field) => sumKnown(events, field))
       .filter((value) => value !== null)
       .reduce((sum, value) => sum + value, 0);
     const orchestratorEvents = events.filter((event) =>
       event.agentId === "orchestrator" || event.operationId === "orchestrator");
-    const orchestratorTokens = ["inputTokens", "outputTokens", "cacheTokens"]
+    const orchestratorTokens = tokenFields
       .map((field) => sumKnown(orchestratorEvents, field))
       .filter((value) => value !== null)
       .reduce((sum, value) => sum + value, 0);
-    const totalCost = sumKnown(events, "cost");
-    const orchestratorCost = sumKnown(orchestratorEvents, "cost");
+    return {
+      tokenTotal, orchestratorEvents, orchestratorTokens,
+      totalCost: sumKnown(events, "cost"),
+      orchestratorCost: sumKnown(orchestratorEvents, "cost")
+    };
+  }
+
+  function aggregateContextMetrics(contextRows, contextRollup) {
     const context = contextSummary(contextRows, contextRollup);
-    const currentContextBytes = contextRows.reduce(
-      (sum, row) => sum + Number(row.bytes || 0), 0);
-    const contextBytes = contextRows.length || Number(contextRollup.count || 0)
-      ? currentContextBytes + Number(contextRollup.totalBytes || 0) : null;
-    // `exec` rows time an external command (a build, an install), not a
-    // harness operation, so they get their own bucket instead of inflating
-    // operation time. They still count toward wall time below.
+    const currentContextValues = contextRows.map((row) => measuredNumber(row.bytes))
+      .filter((value) => value !== null);
+    const currentContextBytes = currentContextValues.reduce((sum, value) => sum + value, 0);
+    const archivedContextCount = measuredNumber(contextRollup.count);
+    const archivedContextBytes = measuredNumber(contextRollup.totalBytes);
+    const hasArchivedContext = archivedContextCount !== null && archivedContextCount > 0;
+    const contextBytes = hasArchivedContext && archivedContextBytes === null
+      ? null
+      : currentContextValues.length || hasArchivedContext
+        ? currentContextBytes + (archivedContextBytes || 0) : null;
+    return { context, currentContextValues, archivedContextCount, contextBytes };
+  }
+
+  function activeTimingMetrics(operations, executions) {
     const externalRows = operations.filter((row) => row.operation === "exec");
     const harnessRows = operations.filter((row) => row.operation !== "exec");
     const operationActiveTimeMs = harnessRows.length
@@ -229,13 +501,11 @@ export function createMetricsRuntime({
     const wallTimeMs = operations.length
       ? Math.max(...operations.map((row) => Date.parse(row.finishedAt))) -
         Math.min(...operations.map((row) => Date.parse(row.startedAt))) : null;
-    // `authority-request` and `authority-record` are separate timestamped
-    // operations bracketing a decision only a person can make. That is the
-    // host/user transition signal this report used to declare missing — it was
-    // on disk the whole time, just never read. Each request pairs with the next
-    // record after it, so a request nobody answered contributes nothing rather
-    // than swallowing the remainder of the run.
-    const candidateHumanWaitSpans = [];
+    return { wallTimeMs, activeTimeMs, externalExecutionTimeMs, evidenceExecutionTimeMs };
+  }
+
+  function authorityWaitSpans(operations) {
+    const spans = [];
     for (let index = 0; index < operations.length; index += 1) {
       if (operations[index].operation !== "authority-request") continue;
       const answered = operations.slice(index + 1)
@@ -244,17 +514,20 @@ export function createMetricsRuntime({
       const from = Date.parse(operations[index].finishedAt);
       const to = Date.parse(answered.startedAt);
       if (Number.isFinite(from) && Number.isFinite(to) && to > from)
-        candidateHumanWaitSpans.push({
+        spans.push({
           from: operations[index].finishedAt, to: answered.startedAt,
           ms: to - from, sources: ["authority"]
         });
     }
-    // The transcript already contains the other explicit host/user transition:
-    // an orchestrator answer followed by the user's next message. Only the
-    // timestamp-only projection is retained; prompt content never reaches the
-    // logs. Subagent answers are excluded because they do not hand control to
-    // the user.
+    return spans;
+  }
+
+  function transcriptWaitSpans(events, userTransitions) {
+    const spans = [];
     for (const transition of userTransitions) {
+      // v1 transitions did not distinguish real user input from Claude tool
+      // results, so they cannot support a truthful human-wait measurement.
+      if (transition.kind !== "human-message") continue;
       const to = Date.parse(transition.timestamp);
       const preceding = events
         .filter((event) => event.agentId === "orchestrator" &&
@@ -263,16 +536,16 @@ export function createMetricsRuntime({
         .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp))[0];
       if (!preceding || !Number.isFinite(to)) continue;
       const from = Date.parse(preceding.timestamp);
-      candidateHumanWaitSpans.push({
+      spans.push({
         from: preceding.timestamp, to: transition.timestamp,
         ms: to - from, sources: ["transcript"]
       });
     }
-    // Multiple authority requests can wait concurrently, and an authority wait
-    // may cover the same interval as a transcript handoff. Report elapsed human
-    // wait, not the sum of overlapping observations of that wait.
-    const humanWaitSpans = candidateHumanWaitSpans
-      .sort((left, right) => Date.parse(left.from) - Date.parse(right.from))
+    return spans;
+  }
+
+  function mergeWaitSpans(spans) {
+    return spans.sort((left, right) => Date.parse(left.from) - Date.parse(right.from))
       .reduce((merged, span) => {
         const previous = merged.at(-1);
         const spanFrom = Date.parse(span.from);
@@ -286,8 +559,41 @@ export function createMetricsRuntime({
         previous.sources = [...new Set([...previous.sources, ...span.sources])];
         return merged;
       }, []);
+  }
+
+  function timingMetrics(operations, events, userTransitions, executions) {
+    const active = activeTimingMetrics(operations, executions);
+    const humanWaitSpans = mergeWaitSpans([
+      ...authorityWaitSpans(operations), ...transcriptWaitSpans(events, userTransitions)
+    ]);
     const humanWaitMs = humanWaitSpans.length
       ? humanWaitSpans.reduce((sum, span) => sum + span.ms, 0) : null;
+    return { ...active, humanWaitSpans, humanWaitMs };
+  }
+
+  function metricsValue(id) {
+    const state = loadRuntime(id);
+    const budget = ensureBudgetState(state);
+    const operations = readJsonLines(join(logs, id, "operations.jsonl"));
+    const inspections = readJsonLines(join(logs, id, "inspections.jsonl"));
+    const events = readJsonLines(join(logs, id, "events.jsonl"));
+    const userTransitions = readJsonLines(join(logs, id, "user-transitions.jsonl"));
+    const { rows: contextRows, rollup: contextRollup } = contextMetricState(id);
+    const phaseContextRows = readJsonLines(join(logs, id, "phase-context.jsonl"));
+    const reuseRows = readJsonLines(join(logs, id, "reuse.jsonl"));
+    const { phases, retainedCarryTokens } = phaseMetrics(
+      operations, events, phaseContextRows);
+    const { providers, executions } = providerMetrics(id);
+    const {
+      tokenTotal, orchestratorTokens, totalCost, orchestratorCost
+    } = usageTotals(events);
+    const {
+      context, currentContextValues, archivedContextCount, contextBytes
+    } = aggregateContextMetrics(contextRows, contextRollup);
+    const {
+      wallTimeMs, activeTimeMs, externalExecutionTimeMs, evidenceExecutionTimeMs,
+      humanWaitSpans, humanWaitMs
+    } = timingMetrics(operations, events, userTransitions, executions);
     const contextModes = {};
     for (const row of phaseContextRows)
       contextModes[row.contextMode || "unknown"] =
@@ -298,8 +604,11 @@ export function createMetricsRuntime({
       result[status] = Number(result[status] || 0) + 1;
       return result;
     }, {});
-    output(JSON.stringify({
-      version: 5, changeId: id,
+    const producingSourceCohort = typeof sourceCohort === "function"
+      ? sourceCohort() : sourceCohort;
+    const value = {
+      version: metricsSchemaVersion, changeId: id,
+      sourceCohort: producingSourceCohort,
       wallTimeMs,
       activeTimeMs,
       unattributedWaitMs: wallTimeMs === null || activeTimeMs === null
@@ -307,17 +616,21 @@ export function createMetricsRuntime({
       humanWaitMs,
       humanWaitSpans,
       humanWaitBasis: "authority-request to authority-record intervals, plus " +
-        "orchestrator-answer to next-user-message intervals from the host " +
+        "orchestrator-answer to next verified human-message intervals from the host " +
         "transcript; overlapping spans are merged, so this is elapsed wait " +
         "rather than the sum of observations. Waits in a session whose " +
         "transcript was never ingested remain inside unattributedWaitMs",
       phases, providers,
+      stages: lifecycleStageMetrics(operations),
+      schedulers: lifecycleSchedulerMetrics(operations),
+      evidenceObservationGroups: evidenceObservationGroups(providers),
       evidenceExecutionTimeMs,
       externalExecutionTimeMs,
       // No host events means no request observation. Lifecycle operations are
       // known, but they cannot establish how many model requests occurred.
       requests: events.length ? events.length : null,
       usageMeasurement: events.length ? "host-events" : "unavailable",
+      usageAvailability: usageAvailability(events, phaseContextRows, id),
       inputTokens: sumKnown(events, "inputTokens"),
       outputTokens: sumKnown(events, "outputTokens"),
       cacheCreationTokens: sumKnown(events, "cacheCreationTokens"),
@@ -338,7 +651,8 @@ export function createMetricsRuntime({
       budget: {
         lifetime: budget.lifetime,
         window: budget.window,
-        decision: budgetDecision(state)
+        decision: budgetDecision(state),
+        calibration: calibrationForState ? calibrationForState(state) : null
       },
       context: {
         totalBytes: contextBytes,
@@ -350,8 +664,8 @@ export function createMetricsRuntime({
           "tool-results", "conversation-history"
         ],
         byKind: context,
-        retainedEvents: contextRows.length,
-        archivedEvents: Number(contextRollup.count || 0),
+        retainedEvents: currentContextValues.length,
+        archivedEvents: archivedContextCount,
         phaseTransitions: phaseContextRows,
         modes: contextModes,
         carryover: {
@@ -367,7 +681,15 @@ export function createMetricsRuntime({
           const reason = row.reason || "unknown";
           result[reason] = Number(result[reason] || 0) + 1;
           return result;
-        }, {})
+        }, {}),
+        recent: reuseRows.slice(-20).map((row) => ({
+          timestamp: row.timestamp || null,
+          provider: row.provider || null,
+          reason: row.reason || "unknown",
+          fromWorkspaceHash: row.fromWorkspaceHash || null,
+          toWorkspaceHash: row.toWorkspaceHash || null,
+          inputFingerprint: row.inputFingerprint || null
+        }))
       },
       rework: {
         expectedStops: operations.filter((row) => row.status === "blocked").length,
@@ -375,14 +697,22 @@ export function createMetricsRuntime({
         failedOperations: operations.filter((row) => row.status === "failed").length,
         providerRebindings: reuseRows.length
       },
+      commandProfile: commandProfile(operations, inspections),
       orchestratorTokenShare: tokenTotal > 0 ? orchestratorTokens / tokenTotal : null,
       orchestratorCostShare: totalCost > 0 && orchestratorCost !== null
         ? orchestratorCost / totalCost : null,
       measurement: events.length
         ? (operations.length ? "operations-and-host-events" : "host-events-only")
         : (operations.length ? "operations-only" : "receipts-only")
-    }, null, 2));
+    };
+    return value;
   }
 
-  return { showMetrics };
+  function showMetrics(id) {
+    const value = metricsValue(id);
+    output(JSON.stringify(value, null, 2));
+    return value;
+  }
+
+  return { metricsValue, showMetrics };
 }

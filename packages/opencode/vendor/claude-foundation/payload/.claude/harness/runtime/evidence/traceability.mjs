@@ -2,18 +2,16 @@ export function normalizedTraceLabel(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-export function auditTraceability({
-  id, state, contract, tasks, scenarios = [], configuredCapabilities = []
-}) {
-  const findings = [];
-  const capabilitySet = new Set(configuredCapabilities);
-  const claimById = new Map(contract.claims.map((claim) => [claim.id, claim]));
-  const tasksByClaim = new Map(contract.claims.map((claim) => [claim.id, []]));
-
+export function tasksIndexedByClaim(claims, tasks) {
+  const indexed = new Map(claims.map((claim) => [claim.id, []]));
   for (const task of tasks)
     for (const claim of task.claims)
-      if (tasksByClaim.has(claim)) tasksByClaim.get(claim).push(task.id);
+      if (indexed.has(claim)) indexed.get(claim).push(task.id);
+  return indexed;
+}
 
+export function taskTraceFindings(tasks, claimById) {
+  const findings = [];
   for (const task of tasks) {
     if (!task.claims.length)
       findings.push({
@@ -27,8 +25,12 @@ export function auditTraceability({
           claimId: claim, message: `task '${task.id}' references unknown claim '${claim}'`
         });
   }
+  return findings;
+}
 
-  for (const claim of contract.claims) {
+export function claimTraceFindings(claims, tasksByClaim, capabilitySet) {
+  const findings = [];
+  for (const claim of claims) {
     if (!(tasksByClaim.get(claim.id) || []).length)
       findings.push({
         level: "warning", code: "claim-without-task", claimId: claim.id,
@@ -41,44 +43,61 @@ export function auditTraceability({
           capability, message: `claim '${claim.id}' has no configured '${capability}' provider`
         });
   }
+  return findings;
+}
 
-  if (scenarios.length) {
-    const claimLabels = contract.claims.map((claim) => ({
-      id: claim.id,
-      labels: new Set([normalizedTraceLabel(claim.id), normalizedTraceLabel(claim.scenario)])
+export function scenarioTraceFindings(claims, scenarios) {
+  if (!scenarios.length) return [];
+  const claimLabels = claims.map((claim) => ({
+    id: claim.id,
+    labels: new Set([normalizedTraceLabel(claim.id), normalizedTraceLabel(claim.scenario)])
+  }));
+  return scenarios.filter((scenario) =>
+    !claimLabels.some((claim) => claim.labels.has(scenario.key)))
+    .map((scenario) => ({
+      level: "warning", code: "scenario-without-claim",
+      scenario: scenario.name, path: scenario.path,
+      normalized: scenario.key,
+      rule: "a scenario matches when its name, lowercased with runs of " +
+        "non-alphanumerics collapsed to single spaces, equals a claim id " +
+        "or that claim's full scenario sentence",
+      message: `scenario '${scenario.name}' has no exact claim mapping; ` +
+        `it normalizes to '${scenario.key}', which equals no claim id or ` +
+        "claim scenario"
     }));
-    for (const scenario of scenarios)
-      if (!claimLabels.some((claim) => claim.labels.has(scenario.key)))
-        findings.push({
-          level: "warning", code: "scenario-without-claim",
-          scenario: scenario.name, path: scenario.path,
-          normalized: scenario.key,
-          rule: "a scenario matches when its name, lowercased with runs of " +
-            "non-alphanumerics collapsed to single spaces, equals a claim id " +
-            "or that claim's full scenario sentence",
-          // Naming the normalized form and the rule is the difference between
-          // a warning someone can act on and one they learn to scroll past.
-          message: `scenario '${scenario.name}' has no exact claim mapping; ` +
-            `it normalizes to '${scenario.key}', which equals no claim id or ` +
-            "claim scenario"
-        });
-  }
+}
 
-  if ((state.securityTriggers || []).length > 0 && !contract.claims.some((claim) =>
+export function semanticTraceFindings(state, claims) {
+  const findings = [];
+  if ((state.securityTriggers || []).length > 0 && !claims.some((claim) =>
     /(?:cannot|denied|reject|unauthor|forbid|invalid|another user|cross.user)/i
       .test(`${claim.id} ${claim.scenario}`)))
     findings.push({
       level: "warning", code: "security-negative-path-missing",
       message: "security-sensitive change has no explicit negative-path claim"
     });
-
-  if (contract.claims.some((claim) => claim.capabilities.includes("data-migration")) &&
-      !contract.claims.some((claim) => /rollback|integrity|backward|recover/i
+  if (claims.some((claim) => claim.capabilities.includes("data-migration")) &&
+      !claims.some((claim) => /rollback|integrity|backward|recover/i
         .test(`${claim.id} ${claim.scenario}`)))
     findings.push({
       level: "warning", code: "migration-recovery-claim-missing",
       message: "migration change has no explicit rollback, recovery, or integrity claim"
     });
+  return findings;
+}
+
+export function auditTraceability({
+  id, state, contract, tasks, scenarios = [], configuredCapabilities = []
+}) {
+  const capabilitySet = new Set(configuredCapabilities);
+  const claimById = new Map(contract.claims.map((claim) => [claim.id, claim]));
+  const tasksByClaim = tasksIndexedByClaim(contract.claims, tasks);
+  const findings = [
+    ...taskTraceFindings(tasks, claimById),
+    ...claimTraceFindings(contract.claims, tasksByClaim, capabilitySet),
+    ...scenarioTraceFindings(contract.claims, scenarios),
+    ...semanticTraceFindings(state, contract.claims)
+  ];
 
   const errors = findings.filter((finding) => finding.level === "error").length;
   const warnings = findings.filter((finding) => finding.level === "warning").length;

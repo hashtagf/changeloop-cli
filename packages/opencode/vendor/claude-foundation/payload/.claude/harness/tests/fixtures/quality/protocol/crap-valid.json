@@ -1,0 +1,27 @@
+{
+  "protocol": "foundation-crap-v1",
+  "repository": "frontend",
+  "repositoryCommit": "fixture",
+  "workspaceDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "language": "typescript",
+  "tool": {
+    "name": "fixture",
+    "version": "1",
+    "adapterVersion": "1",
+    "configDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "functions": [
+    {
+      "id": "ready",
+      "path": "src/app.ts",
+      "line": 1,
+      "endLine": 1,
+      "complexity": 1,
+      "coverageKind": "branch",
+      "coverageClass": "unit",
+      "coveragePercent": 100,
+      "crap": 1,
+      "mapping": "exact"
+    }
+  ]
+}

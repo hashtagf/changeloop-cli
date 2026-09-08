@@ -267,7 +267,7 @@ describe("Foundation workflow hooks", () => {
     await hooks["experimental.chat.system.transform"]!({} as never, system)
 
     expect(environment.env.PATH?.split(path.delimiter)[0]).toEndWith("/bin")
-    expect(system.system[0]).toContain("# Foundation agent contract")
+    expect(system.system[0]).toContain("# Change Loop agent contract")
   }, 30_000)
 
   test("PATH, disabled, and fully user-owned command surfaces receive no bundled environment", async () => {

@@ -92,6 +92,9 @@ config.json → opencode.json → opencode.jsonc → changeloop.json → changel
 
 ## Foundation workflow commands (`foundation_workflow`)
 
+วิธีอัปเดตตัวโปรแกรมและ harness ในแต่ละโปรเจกต์ รวมถึงขั้นตอน sync bundle
+สำหรับผู้ดูแล repo: [คู่มืออัปเดต Foundation](FOUNDATION_UPDATE.md)
+
 changeloop ฝัง change-loop commands ของ claude-foundation มาในตัว —
 `/investigate /change /build /prove /land /changes /feature /dev` — โผล่ทุก
 project โดยไม่ต้องตั้งอะไร ตัว builtin เป็น thin dispatcher ซึ่งอ่านคำสั่ง
