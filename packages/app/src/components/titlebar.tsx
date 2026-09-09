@@ -215,6 +215,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
+              if (route.type === "changes") return tabsStore.find((item) => item.type === "changes" && item.server === route.server && item.directory === route.directory)
               if (route.type === "draft") {
                 return tabsStore.find((item) => item.type === "draft" && item.draftID === route.draftID)
               }

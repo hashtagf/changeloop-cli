@@ -2390,6 +2390,16 @@
       "mode": 493
     },
     {
+      "path": "dashboard/client.sh",
+      "sha256": "ed5cad8c7db716dc4d55d9e135c4f785ba1145aa8e531fba1485921d3ad74660",
+      "mode": 493
+    },
+    {
+      "path": "dashboard/snapshot.mjs",
+      "sha256": "9ca8590e97c0676fa5a97e1f86b497f9f3bd3c80789e7183770e1200f42226fd",
+      "mode": 420
+    },
+    {
       "path": "foundation.json",
       "sha256": "022990d4dd2849238d85f22d83449581389406fc6ad5d0a350ff66aa9eac86ad",
       "mode": 420

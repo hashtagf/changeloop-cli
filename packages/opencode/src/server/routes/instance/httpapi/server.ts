@@ -22,6 +22,9 @@ import { McpAuth } from "@/mcp/auth"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
+import { FoundationReader } from "@/plugin/foundation-reader"
+import { FoundationDocumentReader } from "@/plugin/foundation-documents"
+import { FoundationCommand } from "@/plugin/foundation-command"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
@@ -177,6 +180,9 @@ const instanceRoutes = instanceApiRoutes.pipe(
 const serverRoutes = HttpApiBuilder.layer(Api).pipe(
   Layer.provide(handlers),
   Layer.provide(PluginPtyEnvironment.layer),
+  Layer.provide(FoundationReader.layer),
+  Layer.provide(FoundationDocumentReader.layer),
+  Layer.provide(FoundationCommand.layer),
   Layer.provide([serverHttpApiAuthLayer, v2SchemaErrorLayer]),
 )
 

@@ -101,6 +101,30 @@ export type ProjectCopyError = {
 export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
 
+export type FoundationDocumentInvalidError = {
+  readonly name: "FoundationError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationDocumentInvalidError = (value: unknown): value is FoundationDocumentInvalidError =>
+  typeof value === "object" && value !== null && "name" in value && value["name"] === "FoundationError"
+
 export type HealthGetOutput = { readonly healthy: true }
 
 export type LocationGetInput = {
@@ -458,6 +482,206 @@ export type SessionsPromptInput = {
 }
 
 export type SessionsPromptOutput = {
+  readonly data: {
+    readonly admittedSeq: number
+    readonly id: string
+    readonly sessionID: string
+    readonly prompt: {
+      readonly text: string
+      readonly files?: ReadonlyArray<{
+        readonly uri: string
+        readonly mime: string
+        readonly name?: string
+        readonly description?: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+      readonly agents?: ReadonlyArray<{
+        readonly name: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    }
+    readonly delivery: "steer" | "queue"
+    readonly timeCreated: number
+    readonly promotedSeq?: number
+  }
+}["data"]
+
+export type SessionsCommandInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly id?: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }> | null
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["id"]
+  readonly command: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }> | null
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["command"]
+  readonly arguments?: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }> | null
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["arguments"]
+  readonly agent?: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }> | null
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["agent"]
+  readonly model?: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }> | null
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["model"]
+  readonly files?: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }> | null
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["files"]
+  readonly agents?: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }> | null
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["agents"]
+  readonly delivery?: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }> | null
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["delivery"]
+  readonly resume?: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }> | null
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["resume"]
+}
+
+export type SessionsCommandOutput = {
   readonly data: {
     readonly admittedSeq: number
     readonly id: string
@@ -2805,3 +3029,342 @@ export type ProjectCopiesRefreshInput = {
 }
 
 export type ProjectCopiesRefreshOutput = void
+
+export type FoundationInvestigationsInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["location"]
+  readonly search?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["search"]
+  readonly offset?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["offset"]
+  readonly limit?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["limit"]
+}
+
+export type FoundationInvestigationsOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly items: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly sourcePath: string
+      readonly modifiedAt: string
+      readonly readAt: string
+      readonly size: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+    readonly total: number | "Infinity" | "-Infinity" | "NaN"
+    readonly nextOffset: number | "Infinity" | "-Infinity" | "NaN" | null
+    readonly readAt: string
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+
+export type FoundationInvestigationInput = {
+  readonly investigationID: { readonly investigationID: string }["investigationID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type FoundationInvestigationOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly title: string
+    readonly sourcePath: string
+    readonly modifiedAt: string
+    readonly readAt: string
+    readonly size: number | "Infinity" | "-Infinity" | "NaN"
+    readonly sha256: string
+    readonly text: string
+    readonly sections: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly line: number | "Infinity" | "-Infinity" | "NaN"
+      readonly level: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+    readonly references: ReadonlyArray<{ readonly changeID: string; readonly sourcePath: string }>
+    readonly tasks: ReadonlyArray<{
+      readonly text: string
+      readonly checked: boolean
+      readonly line: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+    readonly claims: ReadonlyArray<{ readonly id: string; readonly text: string }>
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+
+export type FoundationDocumentsInput = {
+  readonly changeID: { readonly changeID: string }["changeID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["location"]
+  readonly search?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["search"]
+  readonly offset?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["offset"]
+  readonly limit?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["limit"]
+}
+
+export type FoundationDocumentsOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly items: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly sourcePath: string
+      readonly modifiedAt: string
+      readonly readAt: string
+      readonly size: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+    readonly total: number | "Infinity" | "-Infinity" | "NaN"
+    readonly nextOffset: number | "Infinity" | "-Infinity" | "NaN" | null
+    readonly readAt: string
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+
+export type FoundationDocumentInput = {
+  readonly changeID: { readonly changeID: string; readonly documentID: string }["changeID"]
+  readonly documentID: { readonly changeID: string; readonly documentID: string }["documentID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type FoundationDocumentOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly title: string
+    readonly sourcePath: string
+    readonly modifiedAt: string
+    readonly readAt: string
+    readonly size: number | "Infinity" | "-Infinity" | "NaN"
+    readonly sha256: string
+    readonly text: string
+    readonly sections: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly line: number | "Infinity" | "-Infinity" | "NaN"
+      readonly level: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+    readonly references: ReadonlyArray<{ readonly changeID: string; readonly sourcePath: string }>
+    readonly tasks: ReadonlyArray<{
+      readonly text: string
+      readonly checked: boolean
+      readonly line: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+    readonly claims: ReadonlyArray<{ readonly id: string; readonly text: string }>
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+
+export type FoundationCapabilityInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type FoundationCapabilityOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly available: boolean
+    readonly code: string | null
+    readonly runtime: { readonly mode: "bundled" | "path"; readonly version: string } | null
+    readonly snapshot?: boolean | null
+    readonly investigations?: boolean | null
+    readonly documents?: boolean | null
+  }
+}
+
+export type FoundationListInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly scope?: string | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["location"]
+  readonly scope?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly scope?: string | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["scope"]
+  readonly search?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly scope?: string | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["search"]
+  readonly offset?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly scope?: string | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["offset"]
+  readonly limit?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+    readonly scope?: string | undefined
+    readonly search?: string | undefined
+    readonly offset?: string | undefined
+    readonly limit?: string | undefined
+  }["limit"]
+}
+
+export type FoundationListOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly generatedAt: string
+    readonly items: ReadonlyArray<{
+      readonly id: string
+      readonly title?: string | null
+      readonly status: string
+      readonly phase: string
+      readonly updatedAt: string | null
+      readonly evidenceStatus?: string | null
+      readonly evidence: {
+        readonly status: string
+        readonly recordedStatus: string | null
+        readonly freshness: string
+        readonly providers: ReadonlyArray<{ readonly provider: string; readonly status: string }>
+      } | null
+      readonly budget: {
+        readonly lifetime: {
+          readonly usedRequests: number | "Infinity" | "-Infinity" | "NaN" | null
+          readonly usedTokens: number | "Infinity" | "-Infinity" | "NaN" | null
+        }
+        readonly window: {
+          readonly id: string | null
+          readonly usedRequests: number | "Infinity" | "-Infinity" | "NaN" | null
+          readonly usedTokens: number | "Infinity" | "-Infinity" | "NaN" | null
+          readonly targetRequests: number | "Infinity" | "-Infinity" | "NaN" | null
+          readonly targetTokens: number | "Infinity" | "-Infinity" | "NaN" | null
+        }
+      } | null
+      readonly run: {
+        readonly branch?: string | null | null
+        readonly operationMs?: {
+          readonly change?: number | "Infinity" | "-Infinity" | "NaN" | null
+          readonly build?: number | "Infinity" | "-Infinity" | "NaN" | null
+          readonly prove?: number | "Infinity" | "-Infinity" | "NaN" | null
+          readonly land?: number | "Infinity" | "-Infinity" | "NaN" | null
+        } | null
+      } | null
+    }>
+    readonly total: number | "Infinity" | "-Infinity" | "NaN"
+    readonly nextOffset: number | "Infinity" | "-Infinity" | "NaN" | null
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+
+export type FoundationGetInput = {
+  readonly changeID: { readonly changeID: string }["changeID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type FoundationGetOutput = {
+  readonly location: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly project: { readonly id: string; readonly directory: string }
+  }
+  readonly data: {
+    readonly id: string
+    readonly title?: string | null
+    readonly status: string
+    readonly phase: string
+    readonly updatedAt: string | null
+    readonly evidenceStatus?: string | null
+    readonly evidence: {
+      readonly status: string
+      readonly recordedStatus: string | null
+      readonly freshness: string
+      readonly providers: ReadonlyArray<{ readonly provider: string; readonly status: string }>
+    } | null
+    readonly budget: {
+      readonly lifetime: {
+        readonly usedRequests: number | "Infinity" | "-Infinity" | "NaN" | null
+        readonly usedTokens: number | "Infinity" | "-Infinity" | "NaN" | null
+      }
+      readonly window: {
+        readonly id: string | null
+        readonly usedRequests: number | "Infinity" | "-Infinity" | "NaN" | null
+        readonly usedTokens: number | "Infinity" | "-Infinity" | "NaN" | null
+        readonly targetRequests: number | "Infinity" | "-Infinity" | "NaN" | null
+        readonly targetTokens: number | "Infinity" | "-Infinity" | "NaN" | null
+      }
+    } | null
+    readonly run: {
+      readonly branch?: string | null | null
+      readonly operationMs?: {
+        readonly change?: number | "Infinity" | "-Infinity" | "NaN" | null
+        readonly build?: number | "Infinity" | "-Infinity" | "NaN" | null
+        readonly prove?: number | "Infinity" | "-Infinity" | "NaN" | null
+        readonly land?: number | "Infinity" | "-Infinity" | "NaN" | null
+      } | null
+    } | null
+  }
+}

@@ -10,6 +10,7 @@ export interface DialogProps extends ParentProps {
   containerClass?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   fit?: boolean
+  onCloseAutoFocus?: ComponentProps<typeof Kobalte.Content>["onCloseAutoFocus"]
 }
 
 export interface DialogHeaderProps extends ParentProps {
@@ -82,7 +83,16 @@ export function DialogHeader(props: DialogHeaderProps) {
 }
 
 export function Dialog(props: DialogProps) {
-  const [local] = splitProps(props, ["size", "variant", "class", "containerClass", "classList", "fit", "children"])
+  const [local] = splitProps(props, [
+    "size",
+    "variant",
+    "class",
+    "containerClass",
+    "classList",
+    "fit",
+    "children",
+    "onCloseAutoFocus",
+  ])
 
   return (
     <div
@@ -93,6 +103,7 @@ export function Dialog(props: DialogProps) {
     >
       <div data-slot="dialog-container" class={local.containerClass}>
         <Kobalte.Content
+          onCloseAutoFocus={local.onCloseAutoFocus}
           data-slot="dialog-content"
           classList={{
             ...local.classList,

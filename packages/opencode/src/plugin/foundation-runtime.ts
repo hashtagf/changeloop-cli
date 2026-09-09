@@ -142,8 +142,9 @@ export async function materialize(options: MaterializeOptions = {}) {
   const cacheInfo = await lstat(cache)
   if (cacheInfo.isSymbolicLink() || !cacheInfo.isDirectory()) throw new Error(`Bundled Foundation cache is unsafe: ${cache}`)
   const cacheRoot = await realpath(cache)
-  const target = path.join(cacheRoot, `${bundle.manifest.release}-${bundle.manifest.commit.slice(0, 12)}`)
-  const marker = `${hash(await bundle.read("manifest.json"))}\n`
+  const digest = hash(await bundle.read("manifest.json"))
+  const target = path.join(cacheRoot, `${bundle.manifest.release}-${bundle.manifest.commit.slice(0, 12)}-${digest.slice(0, 12)}`)
+  const marker = `${digest}\n`
   if (await validMaterialization(cacheRoot, target, marker, bundle)) return target
   if (await lstat(target).then(
     () => true,

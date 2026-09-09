@@ -142,7 +142,9 @@ import type {
   ProjectListResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
+  PromptAgentAttachment,
   PromptInput,
+  PromptInputFileAttachment,
   ProviderAuthErrors,
   ProviderAuthResponses,
   ProviderListErrors,
@@ -175,6 +177,20 @@ import type {
   QuestionReplyErrors,
   QuestionReplyResponses,
   QuestionV2Reply,
+  ServerFoundationFoundationCapabilityErrors,
+  ServerFoundationFoundationCapabilityResponses,
+  ServerFoundationFoundationDocumentErrors,
+  ServerFoundationFoundationDocumentResponses,
+  ServerFoundationFoundationDocumentsErrors,
+  ServerFoundationFoundationDocumentsResponses,
+  ServerFoundationFoundationGetErrors,
+  ServerFoundationFoundationGetResponses,
+  ServerFoundationFoundationInvestigationErrors,
+  ServerFoundationFoundationInvestigationResponses,
+  ServerFoundationFoundationInvestigationsErrors,
+  ServerFoundationFoundationInvestigationsResponses,
+  ServerFoundationFoundationListErrors,
+  ServerFoundationFoundationListResponses,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -335,6 +351,8 @@ import type {
   V2ReferenceListResponses,
   V2SessionActiveErrors,
   V2SessionActiveResponses,
+  V2SessionCommandErrors,
+  V2SessionCommandResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
   V2SessionContextErrors,
@@ -5656,6 +5674,57 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * Submit a project command
+   *
+   * Prepare a discovered command at the Session location, then durably admit its prompt. Navigation alone never invokes this endpoint.
+   */
+  public command<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      id?: string
+      command?: string
+      arguments?: string
+      agent?: string
+      model?: ModelRef
+      files?: Array<PromptInputFileAttachment>
+      agents?: Array<PromptAgentAttachment>
+      delivery?: "steer" | "queue"
+      resume?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "id" },
+            { in: "body", key: "command" },
+            { in: "body", key: "arguments" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
+            { in: "body", key: "files" },
+            { in: "body", key: "agents" },
+            { in: "body", key: "delivery" },
+            { in: "body", key: "resume" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionCommandResponses, V2SessionCommandErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/command",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Compact session
    *
    * Compact a session conversation.
@@ -7074,6 +7143,253 @@ export class V2 extends HeyApiClient {
   }
 }
 
+export class Foundation extends HeyApiClient {
+  public investigations<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      search?: string
+      offset?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "query", key: "search" },
+            { in: "query", key: "offset" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ServerFoundationFoundationInvestigationsResponses,
+      ServerFoundationFoundationInvestigationsErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/foundation/investigations",
+      ...options,
+      ...params,
+    })
+  }
+
+  public investigation<ThrowOnError extends boolean = false>(
+    parameters: {
+      investigationID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "investigationID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ServerFoundationFoundationInvestigationResponses,
+      ServerFoundationFoundationInvestigationErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/foundation/investigations/{investigationID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  public documents<ThrowOnError extends boolean = false>(
+    parameters: {
+      changeID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      search?: string
+      offset?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "changeID" },
+            { in: "query", key: "location" },
+            { in: "query", key: "search" },
+            { in: "query", key: "offset" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ServerFoundationFoundationDocumentsResponses,
+      ServerFoundationFoundationDocumentsErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/foundation/changes/{changeID}/documents",
+      ...options,
+      ...params,
+    })
+  }
+
+  public document<ThrowOnError extends boolean = false>(
+    parameters: {
+      changeID: string
+      documentID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "changeID" },
+            { in: "path", key: "documentID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ServerFoundationFoundationDocumentResponses,
+      ServerFoundationFoundationDocumentErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/foundation/changes/{changeID}/documents/{documentID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  public capability<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<
+      ServerFoundationFoundationCapabilityResponses,
+      ServerFoundationFoundationCapabilityErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/foundation/capability",
+      ...options,
+      ...params,
+    })
+  }
+
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      scope?: string
+      search?: string
+      offset?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "location" },
+            { in: "query", key: "scope" },
+            { in: "query", key: "search" },
+            { in: "query", key: "offset" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ServerFoundationFoundationListResponses,
+      ServerFoundationFoundationListErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/foundation/changes",
+      ...options,
+      ...params,
+    })
+  }
+
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      changeID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "changeID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ServerFoundationFoundationGetResponses,
+      ServerFoundationFoundationGetErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/foundation/changes/{changeID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Foundation2 extends HeyApiClient {
+  private _foundation?: Foundation
+  get foundation(): Foundation {
+    return (this._foundation ??= new Foundation({ client: this.client }))
+  }
+}
+
+export class Server extends HeyApiClient {
+  private _foundation?: Foundation2
+  get foundation(): Foundation2 {
+    return (this._foundation ??= new Foundation2({ client: this.client }))
+  }
+}
+
 export class OpencodeClient extends HeyApiClient {
   public static readonly __registry = new HeyApiRegistry<OpencodeClient>()
 
@@ -7215,5 +7531,10 @@ export class OpencodeClient extends HeyApiClient {
   private _v2?: V2
   get v2(): V2 {
     return (this._v2 ??= new V2({ client: this.client }))
+  }
+
+  private _server?: Server
+  get server(): Server {
+    return (this._server ??= new Server({ client: this.client }))
   }
 }

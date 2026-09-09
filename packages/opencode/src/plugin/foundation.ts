@@ -244,18 +244,23 @@ async function runFoundationHost(
   input: { directory: string } & FoundationProcessOptions,
   argv: string[],
 ): Promise<FoundationHostResult> {
+  const command = input.executable ?? (await FoundationRuntime.command(input.runtimeMode, input.runtimeOptions))
+  const executable = input.runtimeMode === "path" && !input.executable
+    ? Bun.which(command[0], { PATH: process.env.PATH ?? "" })
+    : command[0]
+  if (!executable) return { ok: false, code: "foundation_cli_missing" }
   const signal = AbortSignal.timeout(input.timeoutMs ?? timeoutMs)
-  const process = Bun.spawn({
-    cmd: [...(input.executable ?? (await FoundationRuntime.command(input.runtimeMode, input.runtimeOptions))), ...argv],
+  const child = Bun.spawn({
+    cmd: [executable, ...command.slice(1), ...argv],
     cwd: input.directory,
     stdout: "pipe",
     stderr: "pipe",
     signal,
   })
   const [stdout, stderr, exitCode] = await Promise.all([
-    readLimited(process.stdout, input.maxOutputBytes ?? maxOutputBytes),
-    readLimited(process.stderr, input.maxOutputBytes ?? maxOutputBytes),
-    process.exited,
+    readLimited(child.stdout, input.maxOutputBytes ?? maxOutputBytes),
+    readLimited(child.stderr, input.maxOutputBytes ?? maxOutputBytes),
+    child.exited,
   ])
   if (signal.aborted) return { ok: false, code: "foundation_cli_timeout" }
   if (exitCode !== 0) return { ok: false, code: endpointFailureCode(stderr) }
@@ -309,7 +314,7 @@ function failureAction(code: FoundationFailureCode, endpoint: string) {
   return `Upgrade or reinstall claude-foundation with ${endpoint} protocol 1 support.`
 }
 
-function bootstrapInstruction(instruction: string) {
+export function bootstrapInstruction(instruction: string) {
   return [
     "Foundation is not initialized in this project.",
     "Ask the user for explicit approval before changing repository files.",

@@ -141,3 +141,11 @@ release, then run `foundation upgrade --yes` using the new binary.
 Follow the repository's release process and existing user authority for delivery.
 Users need the new Changeloop binary and a per-project harness upgrade. Installing
 a newer standalone `claude-foundation` does not change the bundled runtime.
+
+The Web UI snapshot closure for v3.5.14 additionally includes the upstream
+`dashboard/client.sh` dispatch guard and dependency-free `dashboard/snapshot.mjs`.
+Regenerating from clean tagged commit `334e3b94a0624553f8807287e91971fcf8eae203`
+produces 501 payload files. Preserve these bytes and include
+`test/plugin/foundation-webui.test.ts` in focused checks. The materialization
+cache key includes the manifest digest so a same-release closure update gets
+a distinct immutable directory while existing caches remain untouched.

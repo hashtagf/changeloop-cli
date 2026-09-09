@@ -202,7 +202,12 @@ export function detectDesktopNativeLocale(languages: readonly string[]): Desktop
     if (["no", "nb", "nn"].includes(source.language)) return "no"
     const match = DESKTOP_NATIVE_LOCALES.find((candidate) => {
       const target = locale(DESKTOP_NATIVE_LOCALE_TAGS[candidate])
-      return target?.language === source.language && target.script === source.script
+      // Newer ICU data selects Nastaliq (Aran) for Punjabi in Pakistan.
+      // The bundled Arabic-script translation serves that presentation too.
+      return (
+        target?.language === source.language &&
+        (target.script === source.script || (target.script === "Arab" && source.script === "Aran"))
+      )
     })
     if (match) return match
   }

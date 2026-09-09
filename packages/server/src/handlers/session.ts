@@ -1,10 +1,15 @@
 import { SessionV2 } from "@opencode-ai/core/session"
+import { CommandV2 } from "@opencode-ai/core/command"
+import { CommandPreparation } from "@opencode-ai/core/command-preparation"
+import { Location } from "@opencode-ai/core/location"
+import { Agent } from "@opencode-ai/schema/agent"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,
+  InvalidRequestError,
   InvalidCursorError,
   MessageNotFoundError,
   ServiceUnavailableError,
@@ -167,6 +172,39 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 ),
               ),
           }
+        }),
+      )
+      .handle(
+        "session.command",
+        Effect.fn(function* (ctx) {
+          const location = yield* Location.Service
+          const commands = yield* CommandV2.Service
+          const preparation = yield* CommandPreparation.Service
+          const command = yield* preparation.prepare({
+            directory: location.directory,
+            name: ctx.payload.command,
+            arguments: ctx.payload.arguments ?? "",
+            command: yield* commands.get(ctx.payload.command),
+          }).pipe(Effect.mapError((error) => error.code === "command_not_found"
+            ? new InvalidRequestError({ message: error.message })
+            : new ServiceUnavailableError({ message: error.message, service: "session.command" })))
+          const admission = Effect.gen(function* () {
+            const agent = ctx.payload.agent ?? (command.agent ? Agent.ID.make(command.agent) : undefined)
+            const model = ctx.payload.model ?? command.model
+            if (agent) yield* session.switchAgent({ sessionID: ctx.params.sessionID, agent })
+            if (model) yield* session.switchModel({ sessionID: ctx.params.sessionID, model })
+            return yield* session.prompt({
+              sessionID: ctx.params.sessionID,
+              id: ctx.payload.id,
+              prompt: { text: command.template, files: ctx.payload.files, agents: ctx.payload.agents },
+              delivery: ctx.payload.delivery,
+              resume: ctx.payload.resume,
+            })
+          })
+          return { data: yield* admission.pipe(
+            Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(new SessionNotFoundError({ sessionID: error.sessionID, message: "Session not found" }))),
+            Effect.catchTag("Session.PromptConflictError", (error) => Effect.fail(new ConflictError({ message: "Command message ID conflicts with an existing prompt", resource: error.messageID }))),
+          ) }
         }),
       )
       .handle(

@@ -28,7 +28,22 @@ export type DraftTab = {
   worktree?: string
 }
 
-export type Tab = SessionTab | DraftTab
+export type ChangesTab = {
+  type: "changes"
+  server: ServerConnection.Key
+  directory: string
+  scope: "investigations" | "active" | "archive"
+  search?: string
+  changeID?: string
+  section?: string
+  investigationID?: string
+  documentID?: string
+  anchor?: string
+  offset?: number
+  documentOffset?: number
+}
+
+export type Tab = SessionTab | DraftTab | ChangesTab
 
 export type TabInfo = {
   title?: string
@@ -41,10 +56,35 @@ type RecentTab = {
 
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
-export const tabHref = (tab: Tab) =>
-  tab.type === "draft" ? draftHref(tab.draftID) : sessionHref(tab.server, tab.sessionId)
+export const changesHref = (tab: Omit<ChangesTab, "type">) =>
+  "/changes?" +
+  new URLSearchParams({
+    server: tab.server,
+    directory: tab.directory,
+    scope: tab.scope,
+    ...(tab.search ? { search: tab.search } : {}),
+    ...(tab.changeID ? { change: tab.changeID } : {}),
+    ...(tab.section ? { section: tab.section } : {}),
+    ...(tab.investigationID ? { investigation: tab.investigationID } : {}),
+    ...(tab.documentID ? { document: tab.documentID } : {}),
+    ...(tab.anchor ? { anchor: tab.anchor } : {}),
+    ...(tab.offset ? { offset: String(tab.offset) } : {}),
+    ...(tab.documentOffset ? { documentOffset: String(tab.documentOffset) } : {}),
+  })
 
-export const tabKey = (tab: Tab) => (tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${tabHref(tab)}`)
+export const tabHref = (tab: Tab) =>
+  tab.type === "changes"
+    ? changesHref(tab)
+    : tab.type === "draft"
+      ? draftHref(tab.draftID)
+      : sessionHref(tab.server, tab.sessionId)
+
+export const tabKey = (tab: Tab) =>
+  tab.type === "changes"
+    ? `changes:${tab.server}\n${tab.directory}`
+    : tab.type === "draft"
+      ? `draft:${tab.draftID}`
+      : `${tab.server}\n${tabHref(tab)}`
 
 export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: Session) {
   return tabs.some((tab) => tab.type === "session" && tab.server === server && tab.sessionId === session.id)
@@ -177,6 +217,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     }
 
     const actions = {
+      changes(input: Omit<ChangesTab, "type">) {
+        const next = { type: "changes" as const, ...input }
+        const index = store.findIndex((tab) => tabKey(tab) === tabKey(next))
+        if (index === -1) setStore((tabs) => [...tabs, next])
+        else setStore(index, next)
+        return next
+      },
       addSessionTab: (tab: Omit<SessionTab, "type">) => {
         const next = { type: "session" as const, ...tab }
         const existing = store.find((item) => tabKey(item) === tabKey(next))
@@ -253,7 +300,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       closeTab(index: number) {
         const tab = store[index]
         if (!tab) return
-        if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index))
+        if (tab.type !== "draft") updateClosed((stack) => pushClosedTab(stack, tab, index))
         removeTab(index)
       },
       reopenClosedTab() {

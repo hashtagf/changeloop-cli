@@ -1931,6 +1931,17 @@ export type Config = {
   enabled_providers?: Array<string>
   model?: string
   small_model?: string
+  router?: {
+    tiers?: {
+      [key: string]: Array<string>
+    }
+    agents?: {
+      [key: string]: string
+    }
+    small_model?: string
+  }
+  foundation_workflow?: boolean
+  foundation_runtime?: "bundled" | "path"
   default_agent?: string
   subagent_depth?: number
   username?: string
@@ -2954,6 +2965,204 @@ export type ProjectCopyError = {
   data: {
     message: string
     forceRequired?: boolean
+  }
+}
+
+export type FoundationInputError = {
+  name: "FoundationError"
+  data: {
+    code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    message: string
+  }
+}
+
+export type FoundationMissingError = {
+  name: "FoundationError"
+  data: {
+    code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    message: string
+  }
+}
+
+export type FoundationUninitializedError = {
+  name: "FoundationError"
+  data: {
+    code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    message: string
+  }
+}
+
+export type FoundationResponseError = {
+  name: "FoundationError"
+  data: {
+    code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    message: string
+  }
+}
+
+export type FoundationUnavailableError = {
+  name: "FoundationError"
+  data: {
+    code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    message: string
+  }
+}
+
+export type FoundationTimeoutError = {
+  name: "FoundationError"
+  data: {
+    code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    message: string
+  }
+}
+
+export type FoundationDeniedError = {
+  name: "FoundationError"
+  data: {
+    code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    message: string
+  }
+}
+
+export type FoundationDocumentSizeError = {
+  name: "FoundationError"
+  data: {
+    code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    message: string
+  }
+}
+
+export type FoundationDocumentInvalidError = {
+  name: "FoundationError"
+  data: {
+    code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    message: string
   }
 }
 
@@ -11596,6 +11805,61 @@ export type V2SessionPromptResponses = {
 
 export type V2SessionPromptResponse = V2SessionPromptResponses[keyof V2SessionPromptResponses]
 
+export type V2SessionCommandData = {
+  body: {
+    id?: string
+    command: string
+    arguments?: string
+    agent?: string
+    model?: ModelRef
+    files?: Array<PromptInputFileAttachment>
+    agents?: Array<PromptAgentAttachment>
+    delivery?: "steer" | "queue"
+    resume?: boolean
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/command"
+}
+
+export type V2SessionCommandErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
+}
+
+export type V2SessionCommandError = V2SessionCommandErrors[keyof V2SessionCommandErrors]
+
+export type V2SessionCommandResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: SessionInputAdmitted
+  }
+}
+
+export type V2SessionCommandResponse = V2SessionCommandResponses[keyof V2SessionCommandResponses]
+
 export type V2SessionCompactData = {
   body?: never
   path: {
@@ -13584,6 +13848,670 @@ export type V2ProjectCopyRefreshResponses = {
 }
 
 export type V2ProjectCopyRefreshResponse = V2ProjectCopyRefreshResponses[keyof V2ProjectCopyRefreshResponses]
+
+export type ServerFoundationFoundationInvestigationsData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+    search?: string
+    offset?: string
+    limit?: string
+  }
+  url: "/experimental/foundation/investigations"
+}
+
+export type ServerFoundationFoundationInvestigationsErrors = {
+  /**
+   * FoundationInputError | InvalidRequestError
+   */
+  400: FoundationInputError | InvalidRequestError
+  /**
+   * FoundationDeniedError
+   */
+  403: FoundationDeniedError
+  /**
+   * FoundationMissingError
+   */
+  404: FoundationMissingError
+  /**
+   * FoundationUninitializedError
+   */
+  409: FoundationUninitializedError
+  /**
+   * FoundationDocumentSizeError
+   */
+  413: FoundationDocumentSizeError
+  /**
+   * FoundationDocumentInvalidError
+   */
+  422: FoundationDocumentInvalidError
+  /**
+   * FoundationResponseError
+   */
+  502: FoundationResponseError
+  /**
+   * FoundationUnavailableError
+   */
+  503: FoundationUnavailableError
+  /**
+   * FoundationTimeoutError
+   */
+  504: FoundationTimeoutError
+}
+
+export type ServerFoundationFoundationInvestigationsError =
+  ServerFoundationFoundationInvestigationsErrors[keyof ServerFoundationFoundationInvestigationsErrors]
+
+export type ServerFoundationFoundationInvestigationsResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: {
+      items: Array<{
+        id: string
+        title: string
+        sourcePath: string
+        modifiedAt: string
+        readAt: string
+        size: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }>
+      total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      nextOffset: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      readAt: string
+      diagnostics: Array<string>
+    }
+  }
+}
+
+export type ServerFoundationFoundationInvestigationsResponse =
+  ServerFoundationFoundationInvestigationsResponses[keyof ServerFoundationFoundationInvestigationsResponses]
+
+export type ServerFoundationFoundationInvestigationData = {
+  body?: never
+  path: {
+    investigationID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/experimental/foundation/investigations/{investigationID}"
+}
+
+export type ServerFoundationFoundationInvestigationErrors = {
+  /**
+   * FoundationInputError | InvalidRequestError
+   */
+  400: FoundationInputError | InvalidRequestError
+  /**
+   * FoundationDeniedError
+   */
+  403: FoundationDeniedError
+  /**
+   * FoundationMissingError
+   */
+  404: FoundationMissingError
+  /**
+   * FoundationUninitializedError
+   */
+  409: FoundationUninitializedError
+  /**
+   * FoundationDocumentSizeError
+   */
+  413: FoundationDocumentSizeError
+  /**
+   * FoundationDocumentInvalidError
+   */
+  422: FoundationDocumentInvalidError
+  /**
+   * FoundationResponseError
+   */
+  502: FoundationResponseError
+  /**
+   * FoundationUnavailableError
+   */
+  503: FoundationUnavailableError
+  /**
+   * FoundationTimeoutError
+   */
+  504: FoundationTimeoutError
+}
+
+export type ServerFoundationFoundationInvestigationError =
+  ServerFoundationFoundationInvestigationErrors[keyof ServerFoundationFoundationInvestigationErrors]
+
+export type ServerFoundationFoundationInvestigationResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: {
+      id: string
+      title: string
+      sourcePath: string
+      modifiedAt: string
+      readAt: string
+      size: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sha256: string
+      text: string
+      sections: Array<{
+        id: string
+        title: string
+        line: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        level: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }>
+      references: Array<{
+        changeID: string
+        sourcePath: string
+      }>
+      tasks: Array<{
+        text: string
+        checked: boolean
+        line: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }>
+      claims: Array<{
+        id: string
+        text: string
+      }>
+      diagnostics: Array<string>
+    }
+  }
+}
+
+export type ServerFoundationFoundationInvestigationResponse =
+  ServerFoundationFoundationInvestigationResponses[keyof ServerFoundationFoundationInvestigationResponses]
+
+export type ServerFoundationFoundationDocumentsData = {
+  body?: never
+  path: {
+    changeID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+    search?: string
+    offset?: string
+    limit?: string
+  }
+  url: "/experimental/foundation/changes/{changeID}/documents"
+}
+
+export type ServerFoundationFoundationDocumentsErrors = {
+  /**
+   * FoundationInputError | InvalidRequestError
+   */
+  400: FoundationInputError | InvalidRequestError
+  /**
+   * FoundationDeniedError
+   */
+  403: FoundationDeniedError
+  /**
+   * FoundationMissingError
+   */
+  404: FoundationMissingError
+  /**
+   * FoundationUninitializedError
+   */
+  409: FoundationUninitializedError
+  /**
+   * FoundationDocumentSizeError
+   */
+  413: FoundationDocumentSizeError
+  /**
+   * FoundationDocumentInvalidError
+   */
+  422: FoundationDocumentInvalidError
+  /**
+   * FoundationResponseError
+   */
+  502: FoundationResponseError
+  /**
+   * FoundationUnavailableError
+   */
+  503: FoundationUnavailableError
+  /**
+   * FoundationTimeoutError
+   */
+  504: FoundationTimeoutError
+}
+
+export type ServerFoundationFoundationDocumentsError =
+  ServerFoundationFoundationDocumentsErrors[keyof ServerFoundationFoundationDocumentsErrors]
+
+export type ServerFoundationFoundationDocumentsResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: {
+      items: Array<{
+        id: string
+        title: string
+        sourcePath: string
+        modifiedAt: string
+        readAt: string
+        size: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }>
+      total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      nextOffset: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      readAt: string
+      diagnostics: Array<string>
+    }
+  }
+}
+
+export type ServerFoundationFoundationDocumentsResponse =
+  ServerFoundationFoundationDocumentsResponses[keyof ServerFoundationFoundationDocumentsResponses]
+
+export type ServerFoundationFoundationDocumentData = {
+  body?: never
+  path: {
+    changeID: string
+    documentID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/experimental/foundation/changes/{changeID}/documents/{documentID}"
+}
+
+export type ServerFoundationFoundationDocumentErrors = {
+  /**
+   * FoundationInputError | InvalidRequestError
+   */
+  400: FoundationInputError | InvalidRequestError
+  /**
+   * FoundationDeniedError
+   */
+  403: FoundationDeniedError
+  /**
+   * FoundationMissingError
+   */
+  404: FoundationMissingError
+  /**
+   * FoundationUninitializedError
+   */
+  409: FoundationUninitializedError
+  /**
+   * FoundationDocumentSizeError
+   */
+  413: FoundationDocumentSizeError
+  /**
+   * FoundationDocumentInvalidError
+   */
+  422: FoundationDocumentInvalidError
+  /**
+   * FoundationResponseError
+   */
+  502: FoundationResponseError
+  /**
+   * FoundationUnavailableError
+   */
+  503: FoundationUnavailableError
+  /**
+   * FoundationTimeoutError
+   */
+  504: FoundationTimeoutError
+}
+
+export type ServerFoundationFoundationDocumentError =
+  ServerFoundationFoundationDocumentErrors[keyof ServerFoundationFoundationDocumentErrors]
+
+export type ServerFoundationFoundationDocumentResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: {
+      id: string
+      title: string
+      sourcePath: string
+      modifiedAt: string
+      readAt: string
+      size: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sha256: string
+      text: string
+      sections: Array<{
+        id: string
+        title: string
+        line: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        level: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }>
+      references: Array<{
+        changeID: string
+        sourcePath: string
+      }>
+      tasks: Array<{
+        text: string
+        checked: boolean
+        line: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }>
+      claims: Array<{
+        id: string
+        text: string
+      }>
+      diagnostics: Array<string>
+    }
+  }
+}
+
+export type ServerFoundationFoundationDocumentResponse =
+  ServerFoundationFoundationDocumentResponses[keyof ServerFoundationFoundationDocumentResponses]
+
+export type ServerFoundationFoundationCapabilityData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/experimental/foundation/capability"
+}
+
+export type ServerFoundationFoundationCapabilityErrors = {
+  /**
+   * FoundationInputError | InvalidRequestError
+   */
+  400: FoundationInputError | InvalidRequestError
+  /**
+   * FoundationDeniedError
+   */
+  403: FoundationDeniedError
+  /**
+   * FoundationMissingError
+   */
+  404: FoundationMissingError
+  /**
+   * FoundationUninitializedError
+   */
+  409: FoundationUninitializedError
+  /**
+   * FoundationDocumentSizeError
+   */
+  413: FoundationDocumentSizeError
+  /**
+   * FoundationDocumentInvalidError
+   */
+  422: FoundationDocumentInvalidError
+  /**
+   * FoundationResponseError
+   */
+  502: FoundationResponseError
+  /**
+   * FoundationUnavailableError
+   */
+  503: FoundationUnavailableError
+  /**
+   * FoundationTimeoutError
+   */
+  504: FoundationTimeoutError
+}
+
+export type ServerFoundationFoundationCapabilityError =
+  ServerFoundationFoundationCapabilityErrors[keyof ServerFoundationFoundationCapabilityErrors]
+
+export type ServerFoundationFoundationCapabilityResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: {
+      available: boolean
+      code: string
+      runtime: {
+        mode: "bundled" | "path"
+        version: string
+      }
+      snapshot?: boolean
+      investigations?: boolean
+      documents?: boolean
+    }
+  }
+}
+
+export type ServerFoundationFoundationCapabilityResponse =
+  ServerFoundationFoundationCapabilityResponses[keyof ServerFoundationFoundationCapabilityResponses]
+
+export type ServerFoundationFoundationListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+    scope?: string
+    search?: string
+    offset?: string
+    limit?: string
+  }
+  url: "/experimental/foundation/changes"
+}
+
+export type ServerFoundationFoundationListErrors = {
+  /**
+   * FoundationInputError | InvalidRequestError
+   */
+  400: FoundationInputError | InvalidRequestError
+  /**
+   * FoundationDeniedError
+   */
+  403: FoundationDeniedError
+  /**
+   * FoundationMissingError
+   */
+  404: FoundationMissingError
+  /**
+   * FoundationUninitializedError
+   */
+  409: FoundationUninitializedError
+  /**
+   * FoundationDocumentSizeError
+   */
+  413: FoundationDocumentSizeError
+  /**
+   * FoundationDocumentInvalidError
+   */
+  422: FoundationDocumentInvalidError
+  /**
+   * FoundationResponseError
+   */
+  502: FoundationResponseError
+  /**
+   * FoundationUnavailableError
+   */
+  503: FoundationUnavailableError
+  /**
+   * FoundationTimeoutError
+   */
+  504: FoundationTimeoutError
+}
+
+export type ServerFoundationFoundationListError =
+  ServerFoundationFoundationListErrors[keyof ServerFoundationFoundationListErrors]
+
+export type ServerFoundationFoundationListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: {
+      generatedAt: string
+      items: Array<{
+        id: string
+        title?: string
+        status: string
+        phase: string
+        updatedAt: string
+        evidenceStatus?: string
+        evidence: {
+          status: string
+          recordedStatus: string
+          freshness: string
+          providers: Array<{
+            provider: string
+            status: string
+          }>
+        }
+        budget: {
+          lifetime: {
+            usedRequests: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            usedTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+          window: {
+            id: string
+            usedRequests: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            usedTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            targetRequests: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            targetTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        }
+        run: {
+          branch?: string
+          operationMs?: {
+            change?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            build?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            prove?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            land?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        }
+      }>
+      total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      nextOffset: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      diagnostics: Array<string>
+    }
+  }
+}
+
+export type ServerFoundationFoundationListResponse =
+  ServerFoundationFoundationListResponses[keyof ServerFoundationFoundationListResponses]
+
+export type ServerFoundationFoundationGetData = {
+  body?: never
+  path: {
+    changeID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/experimental/foundation/changes/{changeID}"
+}
+
+export type ServerFoundationFoundationGetErrors = {
+  /**
+   * FoundationInputError | InvalidRequestError
+   */
+  400: FoundationInputError | InvalidRequestError
+  /**
+   * FoundationDeniedError
+   */
+  403: FoundationDeniedError
+  /**
+   * FoundationMissingError
+   */
+  404: FoundationMissingError
+  /**
+   * FoundationUninitializedError
+   */
+  409: FoundationUninitializedError
+  /**
+   * FoundationDocumentSizeError
+   */
+  413: FoundationDocumentSizeError
+  /**
+   * FoundationDocumentInvalidError
+   */
+  422: FoundationDocumentInvalidError
+  /**
+   * FoundationResponseError
+   */
+  502: FoundationResponseError
+  /**
+   * FoundationUnavailableError
+   */
+  503: FoundationUnavailableError
+  /**
+   * FoundationTimeoutError
+   */
+  504: FoundationTimeoutError
+}
+
+export type ServerFoundationFoundationGetError =
+  ServerFoundationFoundationGetErrors[keyof ServerFoundationFoundationGetErrors]
+
+export type ServerFoundationFoundationGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: {
+      id: string
+      title?: string
+      status: string
+      phase: string
+      updatedAt: string
+      evidenceStatus?: string
+      evidence: {
+        status: string
+        recordedStatus: string
+        freshness: string
+        providers: Array<{
+          provider: string
+          status: string
+        }>
+      }
+      budget: {
+        lifetime: {
+          usedRequests: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          usedTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+        window: {
+          id: string
+          usedRequests: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          usedTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          targetRequests: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          targetTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+      run: {
+        branch?: string
+        operationMs?: {
+          change?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          build?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          prove?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          land?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }
+    }
+  }
+}
+
+export type ServerFoundationFoundationGetResponse =
+  ServerFoundationFoundationGetResponses[keyof ServerFoundationFoundationGetResponses]
 
 export type PtyConnectData = {
   body?: never

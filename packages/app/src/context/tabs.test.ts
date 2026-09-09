@@ -72,8 +72,8 @@ describe("closed tab stack", () => {
     )
 
     expect(stack).toHaveLength(25)
-    expect(stack[0]?.tab.sessionId).toBe("s5")
-    expect(stack.at(-1)?.tab.sessionId).toBe("s29")
+    expect(stack[0]?.tab).toMatchObject({ type: "session", sessionId: "s5" })
+    expect(stack.at(-1)?.tab).toMatchObject({ type: "session", sessionId: "s29" })
   })
 
   test("pops the most recently closed tab", () => {
@@ -83,7 +83,7 @@ describe("closed tab stack", () => {
     ]
     const result = takeClosedTab(stack, [])
 
-    expect(result.entry?.tab.sessionId).toBe("b")
+    expect(result.entry?.tab).toMatchObject({ type: "session", sessionId: "b" })
     expect(result.stack).toEqual([{ tab: sessionTab("a"), index: 0 }])
   })
 
@@ -94,7 +94,7 @@ describe("closed tab stack", () => {
     ]
     const result = takeClosedTab(stack, [sessionTab("b")])
 
-    expect(result.entry?.tab.sessionId).toBe("a")
+    expect(result.entry?.tab).toMatchObject({ type: "session", sessionId: "a" })
     expect(result.stack).toEqual([])
   })
 

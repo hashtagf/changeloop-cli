@@ -34,6 +34,8 @@ const roots = [
   "install.sh",
   "install-opencode.sh",
   "cli.sh",
+  "dashboard/client.sh",
+  "dashboard/snapshot.mjs",
   "VERSION",
   "foundation.json",
   "WORKFLOW.md",

@@ -1,3 +1,6 @@
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { useTabs } from "@/context/tabs"
+import { ServerConnection } from "@/context/server"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { createHomeController } from "./home/home-controller"
 import { createHomeProjectsController } from "./home/home-projects-controller"
@@ -10,6 +13,7 @@ import { HomeSessions } from "./home/home-sessions"
 
 export function NewHome() {
   const home = createHomeController()
+  const tabs = useTabs()
   const projects = createHomeProjectsController(home)
   const sessions = createHomeSessionsController(home)
   const search = createHomeSessionSearchController(home, sessions)
@@ -36,7 +40,35 @@ export function NewHome() {
           `}
         >
           <HomeProjects projects={projects} scroll={scroll} />
-          <HomeSessions sessions={sessions} search={search} scroll={scroll} />
+          <div class="min-w-0">
+            <div class="flex justify-end pt-4">
+              <ButtonV2
+                variant="ghost"
+                disabled={!home.project.newSession()}
+                onClick={() => {
+                  const conn = home.server.focused()
+                  const project = home.project.newSession()
+                  if (conn && project)
+                    tabs.select(
+                      tabs.store.find(
+                        (tab) =>
+                          tab.type === "changes" &&
+                          tab.server === ServerConnection.key(conn) &&
+                          tab.directory === project.worktree,
+                      ) ??
+                        tabs.changes({
+                          server: ServerConnection.key(conn),
+                          directory: project.worktree,
+                          scope: "investigations",
+                        }),
+                    )
+                }}
+              >
+                Changes
+              </ButtonV2>
+            </div>
+            <HomeSessions sessions={sessions} search={search} scroll={scroll} />
+          </div>
           <HomeUtilityNav
             class="flex lg:hidden"
             onOpenSettings={projects.utility.settings}

@@ -91,6 +91,7 @@ export type ReviewPanelSource = "context-button" | "other"
 
 export type LayoutRoute =
   | { type: "home" }
+  | { type: "changes"; directory: string; server?: ServerConnection.Key }
   | { type: "draft"; draftID: string; server?: ServerConnection.Key }
   | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
   | { type: "session"; sessionId: string; server?: ServerConnection.Key }
@@ -130,6 +131,14 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
 export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
   if (parts.length === 0) return { type: "home" }
+
+  if (parts[0] === "changes") {
+    const query = new URLSearchParams(search)
+    const directory = query.get("directory")
+    const server = query.get("server")
+    if (directory && server) return { type: "changes", directory, server: ServerConnection.Key.make(server) }
+    return { type: "home" }
+  }
 
   if (parts[0] === "new-session") {
     const draftID = new URLSearchParams(search).get("draftId")

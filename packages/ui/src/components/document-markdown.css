@@ -1,0 +1,49 @@
+[data-component="document-markdown"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+  & :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: 600;
+    margin-block: 1.4em 0.6em;
+    scroll-margin-top: 1rem;
+  }
+  & h1 {
+    font-size: 1.4em;
+  }
+  & h2 {
+    font-size: 1.2em;
+  }
+  & :is(p, ul, ol, pre, table, blockquote) {
+    margin-block: 0.8em;
+  }
+  & :is(ul, ol) {
+    padding-inline-start: 1.5em;
+  }
+  & ul {
+    list-style: disc;
+  }
+  & ol {
+    list-style: decimal;
+  }
+  & a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  & :is(pre, table) {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  & pre {
+    padding: 0.8em;
+    background: var(--v2-background-bg-layer-01);
+  }
+  & :is(th, td) {
+    border: 1px solid var(--v2-border-border-base);
+    padding: 0.5em 0.8em;
+  }
+  & blockquote {
+    border-inline-start: 2px solid var(--v2-border-border-base);
+    padding-inline-start: 1em;
+  }
+}

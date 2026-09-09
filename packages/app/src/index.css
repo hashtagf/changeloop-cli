@@ -3,6 +3,13 @@
 @import "@opencode-ai/ui/v2/styles/tailwind.css";
 @import "tw-animate-css";
 
+/* Bundled agent fixtures contain bracket syntax that is not a UI utility. */
+@source not "../../opencode/vendor";
+/* Test documents contain OpenSpec path annotations, not production classes. */
+@source not "../../**/test";
+@source not "../../**/e2e";
+@source not "../../**/*.test.{ts,tsx}";
+
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
   src: url("/assets/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
