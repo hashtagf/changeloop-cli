@@ -1131,10 +1131,9 @@ export function changeDiffCandidates(root, state) {
   if (!state.repositories || Object.keys(state.repositories).length === 0)
     return [{ repository: "root", record: state.workspace, targetPath: root }];
   return Object.entries(state.repositories)
-    .filter(([, record]) => record.mode === "worktree")
     .map(([repository, record]) => ({
       repository, record,
-      targetPath: record.targetPath || (repository === "root" ? root : null)
+      targetPath: record?.targetPath || (repository === "root" ? root : null)
     }));
 }
 
@@ -1152,15 +1151,23 @@ export function normalizedDiffDigest(buffer) {
 
 export function changeDiffCandidatePlan(context, id, state, candidate) {
   const { repository, record } = candidate;
-  if (!record || record.mode !== "worktree" || record.access === "read")
+  if (record?.access === "read")
     return { status: "skip" };
-  if (!record.baseHead || !record.path || !context.pathExists(record.path))
+  if (!record || !["worktree", "copy"].includes(record.mode) ||
+      !record.path || !context.pathExists(record.path))
     return { status: "invalid" };
   const nested = repository === "root"
     ? context.selectedRepositories(id, state)
       .filter((entry) => entry.type === "submodule")
       .map((entry) => entry.relativePath)
     : [];
+  if (record.mode === "copy") {
+    if (!record.baseline || typeof record.baseline !== "object" ||
+        Array.isArray(record.baseline))
+      return { status: "invalid" };
+    return { status: "ready", repository, record, id, nested };
+  }
+  if (!record.baseHead) return { status: "invalid" };
   const indexFile = `${record.path}.diff-identity-index.${context.pid}`;
   return {
     status: "ready", repository, record,
@@ -1170,8 +1177,37 @@ export function changeDiffCandidatePlan(context, id, state, candidate) {
   };
 }
 
+// Copy baselines already carry the exact entry identities used by Apply.
+// Hash only the contribution: forwarding an untouched target path advances
+// both manifests equally. Whole-file before/after identities deliberately
+// expire after same-file reconciliation, even if a smaller hunk looks equal.
+export function copyDiffIdentity(baseline, current, nested = []) {
+  const manifest = (value) => value && typeof value === "object" && !Array.isArray(value);
+  if (!manifest(baseline) || !manifest(current)) return null;
+  const rows = [];
+  const validEntry = (value) => typeof value === "string" &&
+    (/^(?:file:(?:regular|executable):)?[a-f0-9]{64}$/.test(value) ||
+      value.startsWith("symlink:"));
+  for (const path of [...new Set([...Object.keys(baseline), ...Object.keys(current)])].sort()) {
+    if (nested.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) continue;
+    if (!path || isAbsolute(path) || path.split(/[\\/]/).includes("..")) return null;
+    const before = baseline[path] ?? null;
+    const after = current[path] ?? null;
+    if ((before !== null && !validEntry(before)) || (after !== null && !validEntry(after)))
+      return null;
+    if (before !== after) rows.push([path, before, after]);
+  }
+  return createHash("sha256").update("foundation-copy-diff:1\0")
+    .update(JSON.stringify(rows)).digest("hex");
+}
+
 export function changeDiffCandidateRow(context, plan) {
   const { repository, record, pathspec, indexFile, env } = plan;
+  if (record.mode === "copy") {
+    const identity = copyDiffIdentity(record.baseline,
+      context.workspaceManifest(record.path, plan.id, true), plan.nested);
+    return identity ? `${repository}\0copy:1:${identity}` : null;
+  }
   try {
     // Keep the scratch index beside the worktree so it can never stage itself.
     context.remove(indexFile, { force: true });
@@ -1518,11 +1554,9 @@ export function createSandboxRuntime({
   // coordinates removed, the identity survives a clean replay onto a moved
   // base and changes exactly when the diff's content changes — which is when
   // a review verdict genuinely needs renewing.
-  // Worktree sandboxes only: a copy sandbox reconciles by manifest, not by
-  // git, and the Land head-moved guard this identity exists to soften applies
-  // only to worktree mode. Read-only repositories contribute no diff and are
-  // guarded separately by baseHead equality at Land. Null means "no identity"
-  // and every caller treats it as not-rebindable.
+  // Copy sandboxes use their Apply manifests instead of a Git patch.
+  // Read-only repositories contribute no diff and retain their independent
+  // freshness/Land guards. Null means unavailable, never an empty contribution.
   //
   // One canonical representation, staged into a throwaway index. Splitting
   // "tracked changes as patch text" from "untracked files as raw digests"
@@ -1545,7 +1579,8 @@ export function createSandboxRuntime({
   const changeDiffIdentityRow = changeDiffCandidateRow.bind(null, {
     remove: rmSync,
     spawn: spawnSync,
-    diffDigest: normalizedDiffDigest
+    diffDigest: normalizedDiffDigest,
+    workspaceManifest
   });
   const changeDiffIdentityForState = changeDiffIdentityOperation.bind(null, {
     candidates: replayCandidates,
@@ -1761,16 +1796,17 @@ export function createSandboxRuntime({
     return { forwarded, conflicts };
   }
 
-  function updateSandboxSyncState(id, state, source, fingerprints) {
+  function updateSandboxSyncState(id, state, source, fingerprints, invalidated) {
     state.workspace.changeSourceHash = directoryHash(source);
     delete state.workspace.recovery;
-    transitionLifecycleState(state, "building", "sandbox-contract-synchronized");
+    if (invalidated)
+      transitionLifecycleState(state, "building", "sandbox-contract-synchronized");
     state.revision = Number(state.revision || 0) + 1;
     if (fingerprints.priorContract !== fingerprints.nextContract)
       state.contractRevision = Number(state.contractRevision || 0) + 1;
     if (fingerprints.priorExecution !== fingerprints.nextExecution)
       state.executionRevision = Number(state.executionRevision || 0) + 1;
-    if (existsSync(proofPath(id))) rmSync(proofPath(id));
+    if (invalidated && existsSync(proofPath(id))) rmSync(proofPath(id));
   }
 
   function sync(id, flags = {}) {
@@ -1782,6 +1818,10 @@ export function createSandboxRuntime({
     assertSandboxPacketPreserved(id, workspace, source, destination);
     assertSandboxRepositoryScope(source, destination);
     const fingerprints = sandboxSyncInputs(id, source, destination);
+    clearSnapshotCache(id);
+    // Without an aggregate proof there is nothing to preserve. Avoid two
+    // extra full snapshots on the common pre-proof sync path.
+    const priorHash = existsSync(proofPath(id)) ? relevantHash(id) : null;
     // Before the packet is written, because a successful replay rebuilds the
     // worktree the packet is written into. Everything above reads the outgoing
     // sandbox and has already been captured.
@@ -1789,7 +1829,9 @@ export function createSandboxRuntime({
     // The pre-replay diff identity is captured here for the same reason:
     // whether the sync itself altered the change's diff is what base-move
     // review accounting asks, and it is only observable across this boundary.
-    const preDiffIdentity = workspace.applied ? null : changeDiffIdentity(id, state);
+    const capturesBaseMove = !workspace.applied && replayCandidates(state)
+      .some(({ record }) => record?.mode === "worktree");
+    const preDiffIdentity = capturesBaseMove ? changeDiffIdentity(id, state) : null;
     const movement = workspace.applied ? null : rebaseWorktree(id, state);
     replaceSandboxPacket(id, state, source, destination, fingerprints.mergedTasks);
     // An isolated copy is a snapshot; the target keeps moving while it builds
@@ -1800,7 +1842,13 @@ export function createSandboxRuntime({
     // way out: it declares the sandbox copy already carries the merged result,
     // so the baseline may advance without the harness guessing.
     const { forwarded, conflicts } = reconcileCopyWorkspace(id, state, flags);
-    updateSandboxSyncState(id, state, source, fingerprints);
+    clearSnapshotCache(id);
+    const invalidated = !priorHash || priorHash !== relevantHash(id) ||
+      fingerprints.priorContract !== fingerprints.nextContract ||
+      fingerprints.priorExecution !== fingerprints.nextExecution ||
+      conflicts.length > 0 || (movement && !movement.rebased) ||
+      Boolean(movement?.conflicts?.length);
+    updateSandboxSyncState(id, state, source, fingerprints, invalidated);
     // The durable record of what this replay did to the change's own diff.
     // Identical identities mean the moved base never touched the change's
     // content — the fact that lets a review verdict rebind instead of

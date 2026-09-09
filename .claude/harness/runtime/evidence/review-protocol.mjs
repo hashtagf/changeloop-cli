@@ -114,6 +114,13 @@ export function createReviewProtocol({ stableHash, fail }) {
   function receiptBinding(receipt) {
     const canonical = JSON.parse(JSON.stringify(receipt));
     if (canonical.review) delete canonical.review.attemptDigest;
+    // Rebinding leaves the reviewed receipt intact and adds only these
+    // runtime-owned coordinates. Version-1 attempts hash the whole original
+    // receipt, so compare that original view rather than expiring its verdict
+    // merely because proof advance persisted a valid rebind.
+    if (canonical.rebind?.mode === "diff")
+      for (const key of ["boundWorkspaceHash", "boundSnapshotId", "boundAt", "reboundFrom"])
+        delete canonical.rebind[key];
     return stableHash(canonical);
   }
 

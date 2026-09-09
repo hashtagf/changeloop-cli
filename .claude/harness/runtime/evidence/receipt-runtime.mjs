@@ -41,10 +41,18 @@ export function groundedRepairBinding(grounding, finding) {
     ? { claimIds, verificationCaseIds, source: "grounding-v2-path" } : null;
 }
 
-export function receiptBindingNote(context, id, provider, validity) {
+export function receiptBindingNote(context, id, provider, validity, invalidation = null) {
   if (["missing", "valid"].includes(validity)) return null;
   const config = context.providerConfig(id, provider);
   const capability = context.providerCapability(provider, config);
+  const subject = capability === "acceptance" ? "acceptance" : "review";
+  const reasons = {
+    "review-identity-unavailable": `${subject} reuse identity is unavailable; the prior verdict cannot be rebound` +
+      (capability === "acceptance" ? "; acceptance rebind requires a worktree" : ""),
+    "review-packet-changed": `the ${subject} agreement changed; the prior verdict cannot be rebound`,
+    "review-contribution-changed": "the change's contribution changed; the prior verdict cannot be rebound"
+  };
+  if (reasons[invalidation?.reason]) return reasons[invalidation.reason];
   if (["review", "acceptance"].includes(capability))
     return `${capability} is bound to the change's diff and packet; ` +
       "a clean replay onto a moved base rebinds it without a new verdict";
@@ -63,7 +71,7 @@ export function proofPlanOperation(context, id) {
     rows.push(context.receiptValidity(id, provider, hash));
   context.log(`PROOF PLAN ${id}\n  workspace: ${hash}`);
   for (const row of rows) {
-    const note = receiptBindingNote(context, id, row.provider, row.validity);
+    const note = receiptBindingNote(context, id, row.provider, row.validity, row.invalidation);
     context.log(`  ${row.provider}: ${row.validity}${note ? ` (${note})` : ""}`);
   }
   // A capability the policy inferred from the diff but nothing wired is not
@@ -121,8 +129,7 @@ export function rebindDiffBoundReceiptOperation(context, id, row, snapshot, proo
         workspaceHash: prior.rebind?.boundWorkspaceHash || prior.workspaceHash,
         proofRunId: prior.proofRunId || null
       }
-    },
-    proofRunId
+    }
   };
   context.writeJson(context.receiptPath(id, row.provider), rebound);
   const logPath = join(context.LOGS, id, "reuse.jsonl");
@@ -132,6 +139,7 @@ export function rebindDiffBoundReceiptOperation(context, id, row, snapshot, proo
     changeId: id,
     provider: row.provider,
     reason: "diff-identity-unchanged",
+    proofRunId,
     fromWorkspaceHash: prior.rebind?.boundWorkspaceHash || prior.workspaceHash,
     toWorkspaceHash: row.expectedWorkspaceHash,
     diffIdentity: prior.rebind?.diffIdentity || null,
@@ -626,6 +634,13 @@ export function createReceiptRuntime({
 
   function receiptRebind(id, context) {
     if (!["review", "acceptance"].includes(context.capability)) return undefined;
+    // Copy-mode review reuse must not silently broaden human consent.
+    // Keep acceptance's existing worktree-only rebind boundary.
+    const repositories = Object.values(context.state?.repositories || {});
+    const workspaces = repositories.length ? repositories : [context.state?.workspace];
+    if (context.capability === "acceptance" &&
+        workspaces.some((record) => record?.mode === "copy" && record.access !== "read"))
+      return undefined;
     return {
       mode: "diff", diffIdentity: changeDiffIdentity(id, context.state),
       packetReviewHash: relevantSnapshot(id)?.packetReviewHash || null

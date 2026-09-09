@@ -643,6 +643,24 @@ expiry would exhaust the AI review wave cap, `authority reset-base-move
 <change> --decision-ref <ref>` releases exactly the expired passing attempt
 from the count under a recorded user decision.
 
+Copy sandboxes also supply a review contribution identity, computed from
+the baseline and current Apply manifests. Forwarded untouched files disappear
+from that difference; edits, deletions, executable modes, and symlink targets
+remain bound. Same-file reconciliation conservatively expires the review.
+Every writable repository participates; missing identities never match.
+Rebinding retains the original proof-run and verdict fields; runtime-added
+rebind coordinates do not invalidate a legacy full-receipt attempt binding.
+Changes to the original verdict, contribution identity, or packet still do.
+Human acceptance keeps its existing worktree-only rebind boundary, and signed
+semantic acceptance retains its own exact binding. Diff reuse is not a
+dependency-impact analysis: executable providers still validate the new inputs.
+
+A sync that leaves evidence-bound content and contract inputs unchanged keeps
+the existing proof and lifecycle progress. Conflicts or changed inputs still
+invalidate the aggregate proof, while valid provider receipts remain reusable.
+`proof plan` explains whether review reuse is unavailable because its identity
+is missing, the contribution changed, or the review agreement changed.
+
 Use metrics to inspect the actual cost of a run:
 
 ```bash

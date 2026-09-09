@@ -162,6 +162,24 @@ export function createReceiptValidity({
       Boolean(value.rebind?.boundWorkspaceHash) &&
       value.rebind.boundWorkspaceHash === expectedWorkspaceHash;
     if (value.workspaceHash !== expectedWorkspaceHash && !reboundCurrent) {
+      let reviewInvalidation = null;
+      let currentDiff = null;
+      let currentPacket = null;
+      if (["review", "acceptance"].includes(capability)) {
+        if (value.rebind?.mode === "diff" && value.rebind.diffIdentity &&
+            value.rebind.packetReviewHash) {
+          currentDiff = changeDiffIdentity(id);
+          currentPacket = relevantSnapshot(id)?.packetReviewHash;
+        }
+        reviewInvalidation = value.rebind?.mode !== "diff" ||
+          !value.rebind?.diffIdentity || !currentDiff ||
+          !value.rebind?.packetReviewHash || !currentPacket
+          ? "review-identity-unavailable"
+          : value.rebind.packetReviewHash !== currentPacket
+            ? "review-packet-changed"
+            : value.rebind.diffIdentity !== currentDiff
+              ? "review-contribution-changed" : null;
+      }
       if (expectedInputs.mode === "declared" &&
           value.inputIdentity?.mode === "declared" &&
           value.inputIdentity.fingerprint === expectedInputs.fingerprint)
@@ -174,14 +192,14 @@ export function createReceiptValidity({
       else if (["review", "acceptance"].includes(capability) &&
           value.rebind?.mode === "diff" &&
           value.rebind.diffIdentity &&
-          value.rebind.diffIdentity === changeDiffIdentity(id) &&
+          value.rebind.diffIdentity === currentDiff &&
           value.rebind.packetReviewHash &&
-          value.rebind.packetReviewHash === relevantSnapshot(id)?.packetReviewHash)
+          value.rebind.packetReviewHash === currentPacket)
         reusableDiff = true;
       else return { result: {
           provider, validity: "stale", status: value.status,
           invalidation: {
-            reason: "workspace-content-changed",
+            reason: reviewInvalidation || "workspace-content-changed",
             fromWorkspaceHash: value.workspaceHash || null,
             toWorkspaceHash: expectedWorkspaceHash,
             inputMode: expectedInputs.mode,

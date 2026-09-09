@@ -1,6 +1,6 @@
 # Change Loop agent contract
 
-Before work, verify Change Loop 3.5.14/runtime API `33`; run doctors. Harness repairs setup
+Before work, verify Change Loop 3.5.15/runtime API `34`; run doctors. Harness repairs setup
 and host integration. Surface only product decisions or external owners.
 `single-model` review retains distinct identity.
 

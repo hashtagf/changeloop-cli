@@ -26,7 +26,7 @@ function capture(fn) {
   try { return { value: fn(), rows }; } finally { console.log = prior; }
 }
 
-function syncFixture(id = "sync-copy") {
+function syncFixture(id = "sync-copy", { unchanged = false, hashChanged = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "sandbox-sync-source-"));
   const sandbox = join(root, ".foundation", "sandboxes", id);
   const source = join(root, "openspec", "changes", id);
@@ -63,14 +63,24 @@ function syncFixture(id = "sync-copy") {
       }
     }
   };
+  if (unchanged) {
+    for (const manifest of [targetManifest, sandboxManifest, state.workspace.baseline])
+      for (const path of Object.keys(manifest)) delete manifest[path];
+    state.status = "proven";
+  }
+  let hashReads = 0;
   let repositoryScope = { source: [], destination: [] };
   let saves = 0;
+  const manifestReads = [];
   const runtime = createSandboxRuntime({
     root,
     policy: () => ({ sandbox: {} }),
     loadRuntime: () => state,
     saveRuntime: () => { saves += 1; },
-    workspaceManifest: (path) => path === root ? targetManifest : sandboxManifest,
+    workspaceManifest: (path) => {
+      manifestReads.push(path);
+      return path === root ? targetManifest : sandboxManifest;
+    },
     directoryHash: () => "source-hash",
     fileDigest: digest,
     changePath: () => source,
@@ -79,19 +89,19 @@ function syncFixture(id = "sync-copy") {
     validate: () => {},
     repositorySelectionIdsAt: (path) => path === source
       ? repositoryScope.source : repositoryScope.destination,
-    contractFingerprint: (_changeId, path) => path === source
+    contractFingerprint: (_changeId, path) => unchanged ? "same-contract" : path === source
       ? "contract-next" : "contract-prior",
-    executionFingerprint: (_changeId, path) => path === source
+    executionFingerprint: (_changeId, path) => unchanged ? "same-execution" : path === source
       ? "execution-next" : "execution-prior",
     taskBlocks: (text) => text.includes("[x]")
       ? [{ id: "T001", text: "T001 keep progress", done: true }] : [],
     proofPath: () => proof,
-    relevantHash: () => "relevant-hash",
+    relevantHash: () => hashChanged && hashReads++ > 0 ? "changed-hash" : "relevant-hash",
     now: () => "2026-08-26T00:00:00.000Z",
     fail
   });
   return {
-    root, sandbox, source, destination, state, runtime,
+    root, sandbox, source, destination, state, runtime, manifestReads,
     setRepositoryScope(value) { repositoryScope = value; },
     saves: () => saves
   };
@@ -120,7 +130,32 @@ test("copy sync reconciles target movement and preserves task progress", () => {
   assert.equal(existsSync(join(fixture.root, ".foundation", "proof", "sync-copy.json")),
     false);
   assert.equal(fixture.saves(), 1);
+  assert.deepEqual(fixture.manifestReads, [fixture.root, fixture.sandbox],
+    "copy-only sync must not walk a third manifest for an unused base-move identity");
   rmSync(fixture.root, { recursive: true, force: true });
+});
+
+test("repeated no-op sync preserves proof bytes and proven state", () => {
+  const fixture = syncFixture("no-op", { unchanged: true });
+  try {
+    const proof = join(fixture.root, ".foundation", "proof", "no-op.json");
+    const original = readFileSync(proof, "utf8");
+    capture(() => fixture.runtime.sync("no-op"));
+    capture(() => fixture.runtime.sync("no-op"));
+    assert.equal(readFileSync(proof, "utf8"), original);
+    assert.equal(fixture.state.status, "proven");
+    assert.equal(fixture.state.contractRevision, 0);
+    assert.equal(fixture.state.executionRevision, 0);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test("sync invalidates proof for content movement even when the contract is unchanged", () => {
+  const fixture = syncFixture("content-change", { unchanged: true, hashChanged: true });
+  try {
+    capture(() => fixture.runtime.sync("content-change"));
+    assert.equal(existsSync(join(fixture.root, ".foundation", "proof", "content-change.json")), false);
+    assert.equal(fixture.state.status, "building");
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
 test("sync rejects a resolve path that is not a conflict", () => {

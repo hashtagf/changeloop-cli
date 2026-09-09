@@ -5,6 +5,7 @@ import {
   changeDiffCandidateRow,
   changeDiffCandidates,
   changeDiffIdentityOperation,
+  copyDiffIdentity,
   combinedDiffIdentity,
   normalizedDiffDigest
 } from "../runtime/workflow/sandbox-runtime.mjs";
@@ -28,7 +29,8 @@ test("diff candidates preserve single-root fallback and worktree repository targ
   }).map(({ repository, targetPath }) => ({ repository, targetPath })), [
     { repository: "root", targetPath: "/root" },
     { repository: "api", targetPath: "/api" },
-    { repository: "worker", targetPath: null }
+    { repository: "worker", targetPath: null },
+    { repository: "docs", targetPath: null }
   ]);
 });
 
@@ -47,19 +49,66 @@ function planContext(overrides = {}) {
 }
 
 test("diff candidate planning skips ineligible records and rejects incomplete worktrees", () => {
-  for (const record of [null, { ...writable, mode: "copy" },
-    { ...writable, access: "read" }]) {
+  for (const record of [{ ...writable, access: "read" }]) {
     assert.equal(changeDiffCandidatePlan(planContext(), "c", {}, {
       repository: "api", record
     }).status, "skip");
   }
-  for (const record of [{ ...writable, baseHead: "" }, { ...writable, path: "" }]) {
+  for (const record of [null, { ...writable, mode: "copy" },
+    { ...writable, mode: "unknown" },
+    { ...writable, baseHead: "" }, { ...writable, path: "" }]) {
     assert.equal(changeDiffCandidatePlan(planContext(), "c", {}, {
       repository: "api", record
     }).status, "invalid");
   }
   assert.equal(changeDiffCandidatePlan(planContext({ pathExists: () => false }),
     "c", {}, { repository: "api", record: writable }).status, "invalid");
+});
+
+test("copy contributions survive forwarding but expire on content, mode, link or baseline changes", () => {
+  const file = (digit, mode = "regular") => `file:${mode}:${digit.repeat(64)}`;
+  const baseline = { "own": file("a"), "other": file("b"), "deleted": file("c") };
+  const current = { "own": file("d"), "other": file("b"), "new": "symlink:own" };
+  const before = structuredClone({ baseline, current });
+  const identity = copyDiffIdentity(baseline, current);
+  assert.ok(identity);
+  assert.equal(copyDiffIdentity(
+    { ...baseline, other: file("e"), incoming: file("f") },
+    { ...current, other: file("e"), incoming: file("f") }), identity);
+  for (const changed of [
+    { ...current, own: file("e") },
+    { ...current, own: file("d", "executable") },
+    { ...current, new: "symlink:other" },
+    { ...current, deleted: file("c") }
+  ]) assert.notEqual(copyDiffIdentity(baseline, changed), identity);
+  assert.notEqual(copyDiffIdentity({ ...baseline, own: file("f") }, current), identity);
+  assert.deepEqual({ baseline, current }, before);
+  for (const value of [null, [], { bad: "unsupported:123" }, { "../escape": file("a") }])
+    assert.equal(copyDiffIdentity(value, current), null);
+  assert.equal(copyDiffIdentity({ "vendor/api/file": file("a") }, {}, ["vendor/api"]),
+    copyDiffIdentity({}, {}));
+});
+
+test("mixed-mode identity includes copy contributions and rejects a missing copy baseline", () => {
+  const baseline = { own: "a".repeat(64) };
+  const state = { repositories: {
+    root: writable, api: { mode: "copy", path: "/copy", baseline },
+    docs: { mode: "worktree", access: "read" }
+  } };
+  let current = { own: "b".repeat(64) };
+  const context = {
+    candidates: (value) => changeDiffCandidates("/root", value),
+    plan: (id, value, candidate) => changeDiffCandidatePlan(planContext(), id, value, candidate),
+    row: (plan) => plan.record.mode === "copy"
+      ? changeDiffCandidateRow({ workspaceManifest: () => current }, plan) : "root\0worktree",
+    combine: combinedDiffIdentity
+  };
+  const first = changeDiffIdentityOperation(context, "c", state);
+  assert.ok(first);
+  current = { own: "c".repeat(64) };
+  assert.notEqual(changeDiffIdentityOperation(context, "c", state), first);
+  delete state.repositories.api.baseline;
+  assert.equal(changeDiffIdentityOperation(context, "c", state), null);
 });
 
 test("diff candidate planning isolates root submodules and temporary index state", () => {

@@ -183,6 +183,22 @@ try {
     packetReviewHash: world.packetReviewHash
   };
   expect("review", movedReview, "reusable-diff");
+  for (const [field, replacement, reason] of [
+    ["diffIdentity", null, "review-identity-unavailable"],
+    ["packetReviewHash", null, "review-identity-unavailable"],
+    ["diffIdentity", "changed", "review-contribution-changed"],
+    ["packetReviewHash", "changed", "review-packet-changed"]
+  ]) {
+    const changed = structuredClone(movedReview);
+    changed.rebind[field] = replacement;
+    expect("review", changed, "stale");
+    assert.equal(receiptValidity(id, "review").invalidation.reason, reason);
+  }
+  const savedDiff = world.diffIdentity;
+  world.diffIdentity = null;
+  expect("review", movedReview, "stale");
+  assert.equal(receiptValidity(id, "review").invalidation.reason, "review-identity-unavailable");
+  world.diffIdentity = savedDiff;
   const reboundReview = reviewBase();
   reboundReview.workspaceHash = "workspace-old";
   reboundReview.inputIdentity.fingerprint = "old-input";

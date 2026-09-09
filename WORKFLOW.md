@@ -1,6 +1,6 @@
 # Change Loop workflow
 
-**Version 3.5.14**
+**Version 3.5.15**
 
 Change Loop is an OpenSpec-native control plane for safe, economical software
 changes in brownfield repositories:
@@ -413,6 +413,11 @@ surface includes committed and dirty paths from recorded repository bases plus
 review contract artifacts. A missing base blocks review instead of appearing
 clean. Every receipt records the actual reviewer, session, implementation
 subjects, findings, closures, and scope.
+
+Concurrent-change sync reuses identity-valid review evidence through the
+[existing proof binding rules](.claude/harness/EVIDENCE.md). No-op sync preserves
+proof and lifecycle progress; changed inputs still require a current proof.
+This does not reset review waves or grant Land authority.
 
 Critical work requires a different model/provider family or a human unless the
 committed project policy explicitly waives diversity. Reviewer independence is
