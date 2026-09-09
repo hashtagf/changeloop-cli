@@ -5,7 +5,8 @@ const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${pr
 const directory = process.env.FOUNDATION_TEST_DIRECTORY
 const changeID = process.env.FOUNDATION_TEST_CHANGE ?? "webui-active"
 const archivedID = process.env.FOUNDATION_TEST_ARCHIVED ?? "webui-archived"
-if (process.env.FOUNDATION_TEST_PASSWORD) test.use({ httpCredentials: { username: "opencode", password: process.env.FOUNDATION_TEST_PASSWORD } })
+if (process.env.FOUNDATION_TEST_PASSWORD)
+  test.use({ httpCredentials: { username: "opencode", password: process.env.FOUNDATION_TEST_PASSWORD } })
 function href(scope = "active") {
   if (!directory) throw new Error("FOUNDATION_TEST_DIRECTORY must name an initialized real Foundation fixture")
   return `/changes?${new URLSearchParams({ server, directory, scope })}`
@@ -24,12 +25,28 @@ for (const scheme of ["light", "dark"] as const) {
   test(`S01/B01 ${scheme} explicit handoff creates only an editable branded draft`, async ({ page }) => {
     await page.setViewportSize({ width: scheme === "light" ? 390 : 1440, height: 900 })
     const submissions: string[] = []
-    page.on("request", (request) => { if (request.method() === "POST" && /\/session(?:\/|$)/.test(new URL(request.url()).pathname)) submissions.push(request.url()) })
+    page.on("request", (request) => {
+      if (request.method() === "POST" && /\/session(?:\/|$)/.test(new URL(request.url()).pathname))
+        submissions.push(request.url())
+    })
     await page.goto(href())
-    await page.getByRole("region", { name: "Changes", exact: true }).getByRole("button", { name: changeID, exact: false }).click()
+    await page
+      .getByRole("region", { name: "Changes", exact: true })
+      .getByRole("button", { name: changeID, exact: false })
+      .click()
     await page.getByRole("button", { name: "Continue in session", exact: true }).click()
     await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toContainText(`/build ${changeID}`)
     await expect(page.getByRole("img", { name: "Changeloop", exact: true })).toBeVisible()
+    const wordmark = await page.locator('[data-component="changeloop-wordmark"]').boundingBox()
+    const editor = await page.locator('[data-component="prompt-input"]').boundingBox()
+    const viewport = page.viewportSize()!
+    const expectedTop = 56 + (viewport.width < 640 ? 0.22 : 0.25375) * (viewport.height - 64)
+    expect(Math.abs(wordmark!.y - expectedTop)).toBeLessThan(2)
+    if (viewport.width < 640) expect(Math.abs(wordmark!.width - (viewport.width - 48))).toBeLessThan(2)
+    expect(wordmark!.width / wordmark!.height).toBeCloseTo(310 / 25, 1)
+    expect(editor!.y - (wordmark!.y + wordmark!.height)).toBeGreaterThanOrEqual(31)
+    expect(editor!.y - (wordmark!.y + wordmark!.height)).toBeLessThanOrEqual(34)
+    if (scheme === "dark") expect(wordmark!.width).toBe(720)
     await page.getByRole("textbox", { name: "Prompt", exact: true }).press("End")
     await page.getByRole("textbox", { name: "Prompt", exact: true }).pressSequentially(" review first")
     await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toContainText("review first")
@@ -37,18 +54,29 @@ for (const scheme of ["light", "dark"] as const) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await page.screenshot({ path: test.info().outputPath(`foundation-${scheme}-draft.png`) })
     await page.getByRole("link", { name: "Changes", exact: true }).click()
-    await page.getByRole("button", { name: "New change", exact: true }).click()
+    await page.getByRole("button", { name: "Back to changes", exact: true }).click()
+    await page.getByRole("button", { name: "New investigate", exact: true }).click()
     await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toHaveText("/investigate")
     expect(submissions).toEqual([])
   })
 }
 
 test.beforeEach(async ({ page }, info) => {
-  await page.addInitScript((settings) => {
-    localStorage.setItem("app-version.v1", JSON.stringify({ version: settings.version }))
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: !settings.legacy, shouldDisplayTabsToast: false } }))
-    localStorage.setItem("opencode-color-scheme", settings.scheme)
-  }, { legacy: info.title.includes("legacy empty"), scheme: info.title.includes("dark") ? "dark" : "light", version: pkg.version })
+  await page.addInitScript(
+    (settings) => {
+      localStorage.setItem("app-version.v1", JSON.stringify({ version: settings.version }))
+      localStorage.setItem(
+        "settings.v3",
+        JSON.stringify({ general: { newLayoutDesigns: !settings.legacy, shouldDisplayTabsToast: false } }),
+      )
+      localStorage.setItem("opencode-color-scheme", settings.scheme)
+    },
+    {
+      legacy: info.title.includes("legacy empty"),
+      scheme: info.title.includes("dark") ? "dark" : "light",
+      version: pkg.version,
+    },
+  )
 })
 
 test("U01/U02 real Changes tab, literal search, details and browser history", async ({ page }) => {
@@ -96,15 +124,35 @@ test("U03/U04 archive reads and same-selection stale retry", async ({ page }) =>
 
 test("S04 command submission failure retains the user's editable draft", async ({ page }) => {
   await page.goto(href())
-  await page.getByRole("region", { name: "Changes", exact: true }).getByRole("button", { name: changeID, exact: false }).click()
+  await page
+    .getByRole("region", { name: "Changes", exact: true })
+    .getByRole("button", { name: changeID, exact: false })
+    .click()
   await page.getByRole("button", { name: "Continue in session", exact: true }).click()
   const prompt = page.getByRole("textbox", { name: "Prompt", exact: true })
   await expect(prompt).toContainText(`/build ${changeID}`)
   // A regression to ordinary prompt dispatch must fail this test without calling a model.
-  await page.route("**/session/*/prompt*", (route) => route.fulfill({ status: 503, body: "Unexpected ordinary prompt dispatch" }))
-  await page.route("**/session/*/message", (route) => route.request().method() === "POST" ? route.fulfill({ status: 503, body: "Unexpected ordinary prompt dispatch" }) : route.continue())
-  await page.route("**/session/*/command", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ name: "ServiceUnavailableError", data: { message: "Fixture command preparation failure", service: "session.command" } }) }))
-  const failed = page.waitForResponse((response) => /\/session\/[^/]+\/command$/.test(new URL(response.url()).pathname) && response.status() === 503)
+  await page.route("**/session/*/prompt*", (route) =>
+    route.fulfill({ status: 503, body: "Unexpected ordinary prompt dispatch" }),
+  )
+  await page.route("**/session/*/message", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 503, body: "Unexpected ordinary prompt dispatch" })
+      : route.continue(),
+  )
+  await page.route("**/session/*/command", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        name: "ServiceUnavailableError",
+        data: { message: "Fixture command preparation failure", service: "session.command" },
+      }),
+    }),
+  )
+  const failed = page.waitForResponse(
+    (response) => /\/session\/[^/]+\/command$/.test(new URL(response.url()).pathname) && response.status() === 503,
+  )
   await page.getByRole("button", { name: "Send", exact: true }).click()
   await failed
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toContainText(`/build ${changeID}`)
@@ -121,8 +169,12 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(changes.getByRole("heading", { name: changeID, exact: true })).toBeVisible()
     await changes.getByRole("button", { name: "Usage", exact: true }).click()
     await expect(changes.getByText("Lifetime tokens", { exact: true })).toBeVisible()
-    await expect(changes.getByText("Lifetime tokens", { exact: true }).locator("xpath=following-sibling::dd[1]")).toHaveText("0")
-    await expect(changes.getByText("Lifetime requests", { exact: true }).locator("xpath=following-sibling::dd[1]")).toHaveText("Unavailable")
+    await expect(
+      changes.getByText("Lifetime tokens", { exact: true }).locator("xpath=following-sibling::dd[1]"),
+    ).toHaveText("0")
+    await expect(
+      changes.getByText("Lifetime requests", { exact: true }).locator("xpath=following-sibling::dd[1]"),
+    ).toHaveText("Unavailable")
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await expect(page.locator("html")).toHaveAttribute("data-color-scheme", scheme)
     await page.screenshot({ path: test.info().outputPath(`foundation-${scheme}-mobile.png`), fullPage: true })

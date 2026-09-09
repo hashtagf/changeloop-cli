@@ -1,4 +1,14 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+} from "solid-js"
 import { useSearchParams } from "@solidjs/router"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { useGlobal } from "@/context/global"
@@ -12,6 +22,13 @@ import { usePlatform } from "@/context/platform"
 import { loadCommands } from "@/context/global-sync/bootstrap"
 import { changeDraft } from "./changes/changes-draft"
 import { DocumentWorkspace } from "./changes/document-workspace"
+import { ChangesHeading } from "./changes/changes-layout"
+import { createDocumentReader } from "./changes/document-client"
+import { DataSourcesButton } from "./changes/document-workspace"
+import { HomeUtilityNav } from "./home/home-projects-view"
+import { useSettingsCommand } from "@/components/settings-dialog"
+import { useLanguage } from "@/context/language"
+import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 
 export function Changes(props: { reader?: ChangesReader }) {
@@ -19,6 +36,8 @@ export function Changes(props: { reader?: ChangesReader }) {
   const global = useGlobal()
   const platform = usePlatform()
   const tabs = useTabs()
+  const settings = useSettingsCommand()
+  const language = useLanguage()
   const [draftError, setDraftError] = createSignal<string>()
   const [draftPending, setDraftPending] = createSignal(false)
   const category = () => (query.scope === "active" || query.scope === "archive" ? query.scope : "investigations")
@@ -152,6 +171,68 @@ export function Changes(props: { reader?: ChangesReader }) {
       search: undefined,
       offset: undefined,
     })
+  const projectName = () =>
+    (connection() &&
+      global
+        .ensureServerCtx(connection()!)
+        .projects.list()
+        .find((project) => project.worktree === selection().directory)?.name) ||
+    selection().directory.split("/").filter(Boolean).at(-1) ||
+    "Project"
+  const [counts, { refetch: reloadCounts }] = createResource(
+    () =>
+      connection() && selection().directory
+        ? { http: connection()!.http, server: selection().server, directory: selection().directory, scope: category() }
+        : undefined,
+    async (target) => {
+      const abort = new AbortController()
+      const values = await Promise.allSettled([
+        createDocumentReader(target.http, platform.fetch)
+          .index({ directory: target.directory }, abort.signal)
+          .then((result) => result.data.total),
+        ...(["active", "archive"] as const).map((scope) =>
+          (props.reader ?? createChangesReader(target.http, platform.fetch))(
+            { server: target.server, directory: target.directory, scope, search: "", offset: 0 },
+            abort.signal,
+          ).then((result) => result.data.total),
+        ),
+      ])
+      return Object.fromEntries(
+        values.map((value, index) => [
+          ["investigations", "active", "archive"][index],
+          value.status === "fulfilled" ? value.value : undefined,
+        ]),
+      )
+    },
+  )
+  const [proposalTitle, { refetch: reloadTitle }] = createResource(
+    () =>
+      connection() && selection().changeID
+        ? { http: connection()!.http, directory: selection().directory, changeID: selection().changeID }
+        : undefined,
+    async (target) => {
+      const client = createDocumentReader(target.http, platform.fetch)
+      const abort = new AbortController()
+      const page = await client.index(target, abort.signal).catch(() => undefined)
+      const proposal = page?.data.items.find((item) => item.sourcePath.endsWith("/proposal.md"))
+      if (!proposal) return undefined
+      const body = await client.read({ ...target, documentID: proposal.id }, abort.signal).catch(() => undefined)
+      return body?.data.sections.find((section) => section.level === 1)?.title
+    },
+  )
+  const heading = () => (
+    <ChangesHeading
+      project={projectName()}
+      scope={category()}
+      search={selection().search}
+      counts={counts.loading ? {} : (counts() ?? {})}
+      onScope={scope}
+      onSearch={(search) => setQuery({ search: search || undefined, offset: undefined }, { replace: true })}
+      onNew={() => void openDraft()}
+      pending={draftPending()}
+      tools={<DataSourcesButton />}
+    />
+  )
   const documents = (investigation: boolean) => (
     <DocumentWorkspace
       server={selection().server}
@@ -159,6 +240,17 @@ export function Changes(props: { reader?: ChangesReader }) {
       directory={selection().directory}
       fetch={platform.fetch}
       changeID={investigation ? undefined : selection().changeID}
+      item={
+        investigation
+          ? undefined
+          : (refresh.state().data?.detail ??
+            refresh.state().data?.data.items.find((item) => item.id === selection().changeID))
+      }
+      onSection={(section) => setQuery({ section, document: undefined, anchor: undefined })}
+      onRefreshed={() => {
+        void reloadCounts()
+        void reloadTitle()
+      }}
       id={
         typeof (investigation ? query.investigation : query.document) === "string"
           ? String(investigation ? query.investigation : query.document)
@@ -194,61 +286,92 @@ export function Changes(props: { reader?: ChangesReader }) {
     <div class="m-2 min-h-0 flex-1 self-stretch overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]">
       <ScrollView class="h-full">
         <div class="mx-auto grid w-full max-w-[1080px] gap-4 px-3 lg:grid-cols-[280px_minmax(0,720px)] lg:gap-8 lg:px-6">
-          <aside class="min-w-0 pt-6 lg:pt-10">
-            <label class="mb-2 block text-v2-text-text-muted" for="changes-server">
-              Server
-            </label>
-            <select
-              id="changes-server"
-              class="mb-4 h-9 w-full rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2"
-              value={selection().server}
-              onChange={(event) => {
-                const selected = global.servers
-                  .list()
-                  .find((server) => ServerConnection.key(server) === event.currentTarget.value)
-                setQuery({
-                  server: event.currentTarget.value,
-                  directory: selected ? global.ensureServerCtx(selected).projects.list()[0]?.worktree : undefined,
-                  change: undefined,
-                  search: undefined,
-                  offset: undefined,
-                  investigation: undefined,
-                  document: undefined,
-                  anchor: undefined,
-                })
-              }}
-            >
-              {global.servers.list().map((server) => (
-                <option value={ServerConnection.key(server)}>{server.displayName ?? server.http.url}</option>
-              ))}
-            </select>
-            <label class="mb-2 block text-v2-text-text-muted" for="changes-project">
-              Project
-            </label>
-            <select
-              id="changes-project"
-              class="h-9 w-full min-w-0 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2"
-              value={selection().directory}
-              onChange={(event) =>
-                setQuery({
-                  directory: event.currentTarget.value,
-                  change: undefined,
-                  offset: undefined,
-                  search: undefined,
-                  investigation: undefined,
-                  document: undefined,
-                  anchor: undefined,
-                })
-              }
-            >
-              <Show when={selection().directory}>
-                <option value={selection().directory}>{selection().directory}</option>
-              </Show>
-              <ForProjects connection={connection()} selected={selection().directory} />
-            </select>
-            <p class="mt-3 break-words text-[12px] text-v2-text-text-muted">
-              {connection()?.displayName ?? connection()?.http.url}
+          <aside aria-label="Projects" class="min-w-0 pt-6 lg:pt-[120px] lg:pr-3">
+            <p class="mb-4 hidden h-7 items-center px-1.5 text-v2-text-text-muted [font-weight:530] lg:flex">
+              Projects
             </p>
+            <For each={global.servers.list()}>
+              {(server) => (
+                <div class="mb-2">
+                  <Show when={global.servers.list().length > 1}>
+                    <p class="mb-2 truncate px-1.5 text-xs text-v2-text-text-muted">
+                      {server.displayName ?? server.http.url}
+                    </p>
+                  </Show>
+                  <For
+                    each={[
+                      ...global
+                        .ensureServerCtx(server)
+                        .projects.list()
+                        .map((project) => ({
+                          directory: project.worktree,
+                          name: project.name ?? project.worktree.split("/").filter(Boolean).at(-1) ?? project.worktree,
+                        })),
+                      ...(ServerConnection.key(server) === selection().server &&
+                      selection().directory &&
+                      !global
+                        .ensureServerCtx(server)
+                        .projects.list()
+                        .some((project) => project.worktree === selection().directory)
+                        ? [{ directory: selection().directory, name: projectName() }]
+                        : []),
+                    ]}
+                  >
+                    {(project) => (
+                      <button
+                        type="button"
+                        title={project.directory}
+                        aria-current={
+                          ServerConnection.key(server) === selection().server &&
+                          project.directory === selection().directory
+                            ? "page"
+                            : undefined
+                        }
+                        class="mb-1 flex h-7 w-full min-w-0 items-center gap-2 rounded-[6px] px-1.5 text-left text-v2-text-text-muted hover:bg-v2-background-bg-layer-01 focus-visible:outline-2"
+                        classList={{
+                          "bg-v2-background-bg-layer-03 text-v2-text-text-base":
+                            ServerConnection.key(server) === selection().server &&
+                            project.directory === selection().directory,
+                        }}
+                        onClick={() =>
+                          setQuery({
+                            server: ServerConnection.key(server),
+                            directory: project.directory,
+                            change: undefined,
+                            investigation: undefined,
+                            document: undefined,
+                            anchor: undefined,
+                            section: undefined,
+                            search: undefined,
+                            offset: undefined,
+                            documentOffset: undefined,
+                          })
+                        }
+                      >
+                        <ProjectAvatar fallback={project.name} />
+                        <span class="truncate">{project.name}</span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              )}
+            </For>
+            <div class="mt-7 hidden lg:block">
+              <ButtonV2
+                variant="ghost"
+                class="w-full"
+                style={{ "justify-content": "flex-start" }}
+                onClick={() => scope("investigations")}
+              >
+                Changes
+              </ButtonV2>
+              <HomeUtilityNav
+                class="mt-1 flex"
+                language={language}
+                onOpenSettings={settings}
+                onOpenHelp={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
+              />
+            </div>
           </aside>
           <Show
             when={connection() && selection().directory}
@@ -257,24 +380,15 @@ export function Changes(props: { reader?: ChangesReader }) {
             <Show
               when={category() !== "investigations"}
               fallback={
-                <div class="min-w-0 py-6 lg:py-10">
-                  <h1 class="mb-6 text-[20px] font-medium">Changes</h1>
-                  <nav aria-label="Change scope" class="flex flex-wrap gap-2">
-                    <ButtonV2 variant="neutral" aria-pressed="true">
-                      Investigations
-                    </ButtonV2>
-                    <ButtonV2 variant="ghost" onClick={() => scope("active")}>
-                      Active
-                    </ButtonV2>
-                    <ButtonV2 variant="ghost" onClick={() => scope("archive")}>
-                      Archived
-                    </ButtonV2>
-                  </nav>
+                <div class="min-w-0 py-6 lg:pb-12 lg:pt-14">
+                  <Show when={!query.investigation}>{heading()}</Show>
                   {documents(true)}
                 </div>
               }
             >
               <ChangesView
+                heading={heading()}
+                title={proposalTitle.loading ? undefined : proposalTitle()}
                 state={refresh.state()}
                 selection={selection()}
                 section={typeof query.section === "string" ? query.section : "overview"}
@@ -295,7 +409,11 @@ export function Changes(props: { reader?: ChangesReader }) {
                   setQuery({ search: search || undefined, offset: undefined, change: undefined }, { replace: true })
                 }
                 onPage={(offset) => setQuery({ offset: offset || undefined })}
-                onRefresh={reload}
+                onRefresh={() => {
+                  reload()
+                  void reloadCounts()
+                  void reloadTitle()
+                }}
                 onContinue={openDraft}
                 onNew={() => openDraft()}
                 draftPending={draftPending()}
@@ -308,19 +426,5 @@ export function Changes(props: { reader?: ChangesReader }) {
         </div>
       </ScrollView>
     </div>
-  )
-}
-
-function ForProjects(props: { connection?: ServerConnection.Any; selected: string }) {
-  const global = useGlobal()
-  return (
-    <>
-      {props.connection &&
-        global
-          .ensureServerCtx(props.connection)
-          .projects.list()
-          .filter((project) => project.worktree !== props.selected)
-          .map((project) => <option value={project.worktree}>{project.name ?? project.worktree}</option>)}
-    </>
   )
 }

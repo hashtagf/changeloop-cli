@@ -37,7 +37,7 @@ export function NewSessionView(props: {
         data-component="session-new-design"
         class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-deep"
       >
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div class="absolute inset-x-0 top-[calc(22%+8px)] flex justify-center px-[15px] sm:top-[calc(25.375%+8px)] sm:px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <ChangeloopWordmark class="h-auto w-full text-v2-background-bg-inverse" />
             <div class="mt-8 flex flex-col gap-8">

@@ -1,9 +1,13 @@
 import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { changesFailureText, type ChangeItem, type ChangeSelection } from "./changes-reader"
+import { WorkflowTrack, sourceTime } from "./changes-layout"
+import { DataSourcesButton } from "./document-workspace"
 import type { ChangesState } from "./changes-refresh"
 
 export function ChangesView(props: {
+  heading?: JSX.Element
+  title?: string
   state: ChangesState
   selection: ChangeSelection
   section: string
@@ -23,43 +27,8 @@ export function ChangesView(props: {
   const page = () => props.state.data?.data
   const detail = () => props.state.data?.detail ?? page()?.items.find((item) => item.id === props.selection.changeID)
   return (
-    <section class="min-w-0 py-6 lg:py-10" aria-label="Changes">
-      <header class="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 class="text-[20px] font-medium text-v2-text-text-base">Changes</h1>
-        <ButtonV2 variant="ghost" disabled={props.draftPending} onClick={props.onNew}>
-          New change
-        </ButtonV2>
-        <ButtonV2 variant="outline" disabled={props.state.loading} onClick={props.onRefresh}>
-          Refresh
-        </ButtonV2>
-      </header>
-      <div class="mb-4 flex gap-2" role="group" aria-label="Change scope">
-        <ButtonV2 variant="ghost" onClick={props.onInvestigations}>
-          Investigations
-        </ButtonV2>
-        <ButtonV2
-          variant={props.selection.scope === "active" ? "neutral" : "ghost"}
-          aria-pressed={props.selection.scope === "active"}
-          onClick={() => props.onScope("active")}
-        >
-          Active
-        </ButtonV2>
-        <ButtonV2
-          variant={props.selection.scope === "archive" ? "neutral" : "ghost"}
-          aria-pressed={props.selection.scope === "archive"}
-          onClick={() => props.onScope("archive")}
-        >
-          Archived
-        </ButtonV2>
-      </div>
-      <input
-        class="mb-4 h-9 w-full min-w-0 rounded-md border border-v2-border-border-base bg-transparent px-3 text-v2-text-text-base focus-visible:outline-2"
-        type="search"
-        aria-label="Search changes"
-        placeholder="Search changes"
-        value={props.selection.search}
-        onInput={(event) => props.onSearch(event.currentTarget.value)}
-      />
+    <section class="min-w-0 py-6 lg:pb-12 lg:pt-14" aria-label="Changes">
+      <Show when={!props.selection.changeID}>{props.heading}</Show>
       <Show when={props.state.error}>
         {(error) => (
           <div role="alert" class="mb-4 rounded-md border border-v2-border-border-base p-3">
@@ -81,10 +50,6 @@ export function ChangesView(props: {
       <Show when={page()}>
         {(data) => (
           <>
-            <p class="mb-3 break-words text-[12px] text-v2-text-text-muted">
-              Snapshot: <time>{data().generatedAt}</time>
-              {props.state.stale ? " · Stale" : ""}
-            </p>
             <For each={data().diagnostics}>
               {(diagnostic) => (
                 <p role="status" class="mb-2 text-v2-text-text-muted">
@@ -92,7 +57,7 @@ export function ChangesView(props: {
                 </p>
               )}
             </For>
-            <Show when={props.selection.scope === "archive"}>
+            <Show when={props.selection.scope === "archive" && !props.selection.changeID}>
               <p class="mb-4 text-v2-text-text-muted">
                 Delivered history. Unavailable current verification does not undo delivery.
               </p>
@@ -104,6 +69,8 @@ export function ChangesView(props: {
                   {(item) => (
                     <ChangeDetails
                       item={item()}
+                      title={props.title}
+                      onInvestigations={props.onInvestigations}
                       section={props.section}
                       onSection={props.onSection}
                       onBack={() => props.onSelect()}
@@ -134,7 +101,7 @@ export function ChangesView(props: {
                       <li>
                         <button
                           type="button"
-                          class="w-full min-w-0 rounded-md px-2 py-3 text-left hover:bg-v2-background-bg-layer-01 focus-visible:outline-2"
+                          class="w-full min-w-0 rounded-md px-2 py-4 text-left hover:bg-v2-background-bg-layer-01 focus-visible:outline-2"
                           onClick={() => props.onSelect(item.id)}
                         >
                           <span class="block break-words font-medium text-v2-text-text-base">
@@ -144,7 +111,6 @@ export function ChangesView(props: {
                             <span>Phase: {item.phase || "Unavailable"}</span>
                             <span>Status: {item.status}</span>
                             <span>Evidence: {item.evidenceStatus ?? item.evidence?.status ?? "Unavailable"}</span>
-                            <span>Updated: {item.updatedAt ?? "Unavailable"}</span>
                           </span>
                         </button>
                       </li>
@@ -152,24 +118,35 @@ export function ChangesView(props: {
                   </For>
                 </ul>
               </Show>
-              <nav aria-label="Changes pages" class="mt-4 flex flex-wrap items-center gap-3">
-                <ButtonV2
-                  variant="ghost"
-                  disabled={props.selection.offset === 0}
-                  onClick={() => props.onPage(Math.max(0, props.selection.offset - 50))}
-                >
-                  Previous
-                </ButtonV2>
-                <span>{data().total} changes</span>
-                <ButtonV2
-                  variant="ghost"
-                  disabled={data().nextOffset === null}
-                  onClick={() => props.onPage(data().nextOffset ?? 0)}
-                >
-                  Next
-                </ButtonV2>
-              </nav>
+              <Show when={props.selection.offset > 0 || data().nextOffset !== null}>
+                <nav aria-label="Changes pages" class="mt-4 flex flex-wrap items-center gap-3">
+                  <ButtonV2
+                    variant="ghost"
+                    disabled={props.selection.offset === 0}
+                    onClick={() => props.onPage(Math.max(0, props.selection.offset - 50))}
+                  >
+                    Previous
+                  </ButtonV2>
+                  <span>{data().total} changes</span>
+                  <ButtonV2
+                    variant="ghost"
+                    disabled={data().nextOffset === null}
+                    onClick={() => props.onPage(data().nextOffset ?? 0)}
+                  >
+                    Next
+                  </ButtonV2>
+                </nav>
+              </Show>
             </Show>
+            <footer class="mt-5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-v2-text-text-muted">
+              <span title={data().generatedAt}>
+                Snapshot {sourceTime(data().generatedAt)}
+                {props.state.stale ? " · Stale" : ""}
+              </span>
+              <ButtonV2 variant="ghost" disabled={props.state.loading} onClick={props.onRefresh}>
+                Refresh
+              </ButtonV2>
+            </footer>
           </>
         )}
       </Show>
@@ -180,6 +157,8 @@ export function ChangesView(props: {
 
 function ChangeDetails(props: {
   item: ChangeItem
+  title?: string
+  onInvestigations: () => void
   section: string
   onSection: (section: string) => void
   onBack: () => void
@@ -193,19 +172,18 @@ function ChangeDetails(props: {
       <ButtonV2 variant="ghost" onClick={props.onBack}>
         Back to changes
       </ButtonV2>
-      <h2 class="my-4 break-words text-[18px] font-medium">{props.item.title || props.item.id}</h2>
-      <ButtonV2 class="mb-4" variant="outline" disabled={props.draftPending} onClick={props.onContinue}>
-        {props.draftPending ? "Preparing draft…" : "Continue in session"}
-      </ButtonV2>
-      <Show when={props.draftError}>
-        {(message) => (
-          <p role="alert" class="mb-4">
-            {message()}
-          </p>
-        )}
-      </Show>
+      <p class="mb-2 mt-5 break-words text-[12px] text-v2-text-text-muted">{props.item.id}</p>
+      <h1 class="mb-3 break-words text-[20px] leading-7 [font-weight:530]">
+        {(props.title || props.item.title || props.item.id).replace(/^Change:\s*/i, "")}
+      </h1>
+      <div class="mb-5 flex flex-wrap items-center gap-3 text-[12px] text-v2-text-text-muted">
+        <span>{props.item.status}</span>
+        <span>Updated {sourceTime(props.item.updatedAt)}</span>
+        <DataSourcesButton class="ml-auto" />
+      </div>
+      <WorkflowTrack phase={props.item.phase} onInvestigations={props.onInvestigations} />
       <nav
-        class="mb-5 flex flex-wrap gap-2"
+        class="mb-6 flex gap-5 overflow-x-auto whitespace-nowrap border-b border-v2-border-border-base"
         aria-label="Change details"
         onKeyDown={(event) => {
           if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return
@@ -221,7 +199,16 @@ function ChangeDetails(props: {
         <For each={["overview", "documents", "tasks", "evidence", "usage"]}>
           {(section) => (
             <ButtonV2
-              variant={section === props.section ? "neutral" : "ghost"}
+              variant="ghost"
+              class="rounded-none border-b-2 border-transparent px-0 pb-3"
+              style={{
+                padding: "10px 0",
+                "border-radius": "0",
+                height: "auto",
+                background: "transparent",
+                "flex-shrink": "0",
+              }}
+              classList={{ "border-v2-text-text-base": section === props.section }}
               aria-current={section === props.section ? "page" : undefined}
               onClick={() => props.onSection(section)}
             >
@@ -231,17 +218,6 @@ function ChangeDetails(props: {
         </For>
       </nav>
       <Switch>
-        <Match when={props.section === "overview"}>
-          <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-3">
-            <dt>Phase</dt>
-            <dd>{props.item.phase || "Unavailable"}</dd>
-            <dt>Lifecycle status</dt>
-            <dd>{props.item.status}</dd>
-            <dt>Updated</dt>
-            <dd class="break-words">{props.item.updatedAt ?? "Unavailable"}</dd>
-          </dl>
-          <p class="mt-5 text-[12px] text-v2-text-text-muted">Source: Foundation snapshot</p>
-        </Match>
         <Match when={props.section === "evidence"}>
           <Show when={props.item.evidence} fallback={<p>Evidence is unavailable.</p>}>
             {(evidence) => (
@@ -305,6 +281,22 @@ function ChangeDetails(props: {
         </Match>
       </Switch>
       <Show when={props.section !== "usage"}>{props.documents}</Show>
+      <footer class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-v2-border-border-base pt-5">
+        <div>
+          <h2 class="mb-2 font-medium">Continue in a session</h2>
+          <p class="text-[12px] text-v2-text-text-muted">Review the command draft before sending.</p>
+        </div>{" "}
+        <ButtonV2 class="mb-4" variant="outline" disabled={props.draftPending} onClick={props.onContinue}>
+          {props.draftPending ? "Preparing draft…" : "Continue in session"}
+        </ButtonV2>
+        <Show when={props.draftError}>
+          {(message) => (
+            <p role="alert" class="mb-4">
+              {message()}
+            </p>
+          )}
+        </Show>
+      </footer>
     </article>
   )
 }

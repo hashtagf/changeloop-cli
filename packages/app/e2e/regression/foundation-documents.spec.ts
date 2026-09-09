@@ -69,16 +69,21 @@ for (const scheme of ["light", "dark"]) {
     ).not.toBe("")
     const reader = page.getByRole("article", { name: "Document reader" })
     await expect(reader.getByText("Saved source wording.", { exact: true })).toBeVisible()
+    await expect(page.locator('[data-component="changes-heading"]')).toHaveCount(0)
+    await expect(reader.getByRole("heading", { name: "Interface research", exact: true })).toHaveCount(1)
+    await expect(reader.getByRole("navigation", { name: "Document sections" })).toBeVisible()
+    await reader.getByRole("button", { name: "Options", exact: true }).click()
+    await expect(reader.getByText("Saved source wording.", { exact: true })).toHaveCount(0)
     await expect(reader.locator("script, svg, img, iframe, form")).toHaveCount(0)
     expect(await page.evaluate(() => Reflect.get(window, "readerAttack"))).toBeUndefined()
     expect(remote).toEqual([])
     await expect(reader.locator('a[href^="javascript:"]')).toHaveCount(0)
     await expect(reader.getByRole("link", { name: "external reference" })).toHaveAttribute("rel", "noopener noreferrer")
-    await page.getByRole("combobox", { name: "Document section" }).selectOption({ label: "Options" })
+
     await expect(page).toHaveURL(/anchor=line-/)
     await page.getByRole("button", { name: "Home", exact: true }).click()
     await page.getByRole("link", { name: "Changes", exact: true }).click()
-    await expect(page.getByRole("combobox", { name: "Document section" })).toHaveValue("line-6")
+    await expect(page.getByRole("button", { name: "Options", exact: true })).toHaveAttribute("aria-current", "location")
     const sources = page.getByRole("button", { name: "Data sources", exact: true })
     await sources.click()
     await expect(page.getByRole("dialog")).toContainText("digest identifies content")
@@ -171,3 +176,51 @@ test("F06/V04 same-document stale errors preserve content and missing readers st
   await expect(page.getByRole("alert")).toContainText("Document read unavailable")
   await expect(page.getByRole("article", { name: "Document reader" })).toHaveCount(0)
 })
+
+for (const scheme of ["light", "dark"]) {
+  test(`VF01/VF03 ${scheme} approved list and overview composition`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.goto(href())
+    const heading = page.locator('[data-component="changes-heading"]')
+    await expect(heading.getByRole("heading", { name: "Changes", exact: true })).toBeVisible()
+    await expect(page.getByRole("complementary", { name: "Projects" })).toBeVisible()
+    const workflow = await heading.getByRole("navigation", { name: "Foundation workflow" }).boundingBox()
+    const search = await heading.getByRole("searchbox").boundingBox()
+    const scope = await heading.getByRole("navigation", { name: "Change scope" }).boundingBox()
+    expect(search!.x).toBeCloseTo(516, 0)
+    expect(search!.width).toBeCloseTo(720, 0)
+    expect(search!.height).toBe(36)
+    expect(workflow!.y + workflow!.height).toBeLessThan(search!.y)
+    expect(search!.y + search!.height).toBeLessThan(scope!.y)
+    await expect(heading.getByRole("button", { name: /Investigations · 1/ })).toBeVisible()
+    const selected = heading.getByRole("button", { name: /Investigations ·/ })
+    expect(await selected.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe("2px")
+    await page.screenshot({ path: test.info().outputPath(`prototype-list-${scheme}.png`), fullPage: true })
+    await page.goto(href({ scope: "active", change: "webui-active" }))
+    await expect(page.getByRole("heading", { name: "Interface agreement", exact: true })).toBeVisible()
+    await expect(page.locator('[data-component="changes-heading"]')).toHaveCount(0)
+    const overview = page.getByRole("region", { name: "Change overview" })
+    await expect(overview.getByRole("heading", { name: "Why", exact: true })).toBeVisible()
+    await expect(overview).toContainText("Keep research and proof traceable.")
+    await expect(overview.getByRole("navigation", { name: "Agreement documents" })).toBeVisible()
+    await expect(page.getByRole("article", { name: "Document reader" })).toHaveCount(0)
+    await page.screenshot({ path: test.info().outputPath(`prototype-overview-${scheme}.png`), fullPage: true })
+    for (const section of ["Documents", "Tasks", "Evidence", "Usage"]) {
+      await page
+        .getByRole("navigation", { name: "Change details" })
+        .getByRole("button", { name: section, exact: true })
+        .click()
+      await expect(page.getByRole("region", { name: "Changes", exact: true })).toContainText(
+        section === "Documents" ? "Keep research and proof traceable." : section === "Tasks" ? "1/2 checked" : section === "Evidence" ? "safe-reader" : "Lifetime tokens",
+      )
+      await page.screenshot({ path: test.info().outputPath(`prototype-${section}-${scheme}.png`), fullPage: true })
+      await page.setViewportSize({ width: 390, height: 844 })
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await page.screenshot({
+        path: test.info().outputPath(`prototype-${section}-${scheme}-mobile.png`),
+        fullPage: true,
+      })
+      await page.setViewportSize({ width: 1440, height: 1000 })
+    }
+  })
+}
