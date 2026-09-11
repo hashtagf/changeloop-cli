@@ -259,11 +259,11 @@ function json(path, fallback = {}) {
   try { return JSON.parse(readFileSync(path, "utf8")); } catch { return fallback; }
 }
 
-test("lease: disjoint keys acquire atomically with increasing fencing", () => {
+test("lease: independent workspaces acquire atomically with increasing fencing", () => {
   const root = mkdtempSync(join(tmpdir(), "graph-lease-"));
   const plans = new Map([
     ["T001", { id: "T001", dependsOn: [], leaseKeys: ["path:root:src/api"], paths: ["src/api/**"], claims: [], repository: "root" }],
-    ["T002", { id: "T002", dependsOn: [], leaseKeys: ["path:root:src/web"], paths: ["src/web/**"], claims: [], repository: "root" }],
+    ["T002", { id: "T002", dependsOn: [], leaseKeys: ["path:web:src/web"], paths: ["src/web/**"], claims: [], repository: "web" }],
     ["T003", { id: "T003", dependsOn: [], leaseKeys: ["path:root:src"], paths: ["src/**"], claims: [], repository: "root" }]
   ]);
   const runtime = createLeaseRuntime({

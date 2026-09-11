@@ -28,6 +28,14 @@ leased task and allowed paths. It reports its summary, focused checks, and
 blockers to the parent for coordination; that report is not evidence.
 Foundation accepts results from observed workspace writes and lease authority.
 Resume `advance`; Proof owns the aggregate graph join.
+The planner serializes tasks in a shared repository workspace because lease
+release observes the repository diff. Parallel groups use independent
+workspaces; do not widen a returned group just because paths look disjoint.
+Force release abandons result authority. Never toggle completed checkboxes to
+manufacture a result; keep incomplete work pending and follow runtime recovery.
+If a completed checkbox is returned with unresolved lease authority, preserve
+valid implementation and rerun its focused verification under the returned
+lease before releasing the result; do not rewrite the checkbox to reacquire.
 
 If an acquire loses to another host, do not spawn that worker. Keep and run any
 leases already acquired by this host, release their results, then dispatch

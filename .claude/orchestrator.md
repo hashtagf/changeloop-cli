@@ -25,6 +25,8 @@ sensitive data. Upgrade when risk appears.
 
 ## Build
 
+Approve spec before Build.
+
 Start from a compact packet, not conversation history. Read only referenced
 files needed by the task, edit only its sandbox and allowed paths, and check
 `tasks.md` after focused verification.

@@ -9,11 +9,13 @@ import { join } from "node:path";
 import {
   REVIEW_SCHEMA, claudeResultEnvelope, configuredReviewPrompt,
   createConfiguredReviewerRuntime, reviewFindingIssues, validReview,
-  validReviewFinding
+  validReviewFinding, normalizeReviewFindingPaths, reviewerUsageRow
 } from
   "../runtime/evidence/configured-reviewer.mjs";
 import { createRuntimeEnvironment } from
   "../runtime/core/runtime-environment.mjs";
+import { checkpointReviewResult, recoverReviewResult } from
+  "../runtime/evidence/review-result-recovery.mjs";
 
 const root = mkdtempSync(join(tmpdir(), "foundation-configured-reviewer-"));
 const workspace = join(root, "workspace");
@@ -73,6 +75,8 @@ const review = process.env.FAKE_CLAUDE_INVALID === "1"
 emit({
   type: "result", subtype: "success", is_error: false,
   session_id: process.env.FAKE_CLAUDE_SESSION || sessionId,
+  usage: { input_tokens: 120, output_tokens: 35, cache_creation_input_tokens: 8, cache_read_input_tokens: 90 },
+  total_cost_usd: 0.125, duration_ms: 1234,
   structured_output: review
 });
 `);
@@ -95,6 +99,9 @@ fs.writeFileSync(outputPath, JSON.stringify({
 process.stdout.write(JSON.stringify({
   type: "thread.started", thread_id: "codex-review-session"
 }) + "\\n");
+process.stdout.write(JSON.stringify({ type: "turn.completed", usage: {
+  input_tokens: 40, cached_input_tokens: 10, output_tokens: 5
+} }) + "\\n");
 `);
 chmodSync(codexExecutable, 0o755);
 
@@ -167,6 +174,17 @@ for (const path of ["contract/specs/dashboard/spec.md",
 assert.match(reviewFindingIssues({ findings: [{
   ...validFinding, path: "openspec/changes/other/specs/dashboard/spec.md"
 }] }, contractPacket)[0], /outside the dispatched review scope/);
+const aliasReview = { status: "pass", summary: "reviewed", verifiedFindingIds: [],
+  findings: [{ ...validFinding, severity: "minor",
+    path: "openspec/changes/nested/specs/dashboard/spec.md" }] };
+const normalizedAlias = normalizeReviewFindingPaths(aliasReview, {
+  ...contractPacket, reviewScope: { ...contractPacket.reviewScope, mode: "delta" }
+});
+assert.equal(normalizedAlias.findings[0].path, "contract/specs/dashboard/spec.md");
+assert.equal(aliasReview.findings[0].path, "openspec/changes/nested/specs/dashboard/spec.md");
+assert.throws(() => normalizeReviewFindingPaths({ ...aliasReview, findings: [{
+  ...validFinding, path: "../outside.mjs"
+}] }, contractPacket), /invalid finding path/);
 const legacyContractPacket = {
   ...contractPacket, reviewScope: { mode: "full", paths: ["contract/specs"] },
   changedSurface: { ...contractPacket.changedSurface, manifest: [{
@@ -272,11 +290,14 @@ const policy = () => ({ review: {
   diversity: "single-model", independence: "required",
   defaultReviewer: "claude-opus", reviewers: { "claude-opus": reviewer }
 } });
+const usageRows = [];
+const recordUsage = (changeId, rows) => usageRows.push(...rows.map((row) => ({ ...row, changeId })));
 const runtime = createConfiguredReviewerRuntime({
   root, foundationPolicy: policy,
   commandExists: (command) => existsSync(command),
   now: () => "2026-08-14T00:00:00.000Z",
   uuid: () => "11111111-1111-4111-8111-111111111111",
+  recordUsage,
   fail: (message) => { throw new Error(message); }
 });
 const codexReviewer = {
@@ -285,6 +306,7 @@ const codexReviewer = {
 };
 const codexRuntime = createConfiguredReviewerRuntime({
   root,
+  recordUsage,
   foundationPolicy: () => ({ review: {
     diversity: "cross-model", independence: "required",
     defaultReviewer: "codex", reviewers: { codex: codexReviewer }
@@ -318,6 +340,19 @@ try {
   const capture = JSON.parse(readFileSync(join(workspace,
     "claude-capture.json"), "utf8"));
   assert.equal(result.status, "pass");
+  const usage = usageRows.find((row) => row.changeId === "claude-only");
+  assert.equal(usage.outputTokens, 35);
+  assert.equal(usage.cacheCreationTokens, 8);
+  assert.equal(usage.cacheReadTokens, 90);
+  assert.equal(usage.cost, 0.125);
+  assert.equal(usage.operationId, "prove");
+  assert.equal(usage.sessionId, result.reviewer.sessionId);
+  assert.equal(reviewerUsageRow(reviewer, "s", {}, () => "now"), null);
+  assert.equal(reviewerUsageRow(reviewer, "s", { usage: {
+    output_tokens: -1, input_tokens: "120"
+  } }, () => "now"), null);
+  assert.equal(reviewerUsageRow(reviewer, "s", { usage: { output_tokens: 0 } },
+    () => "now").cost, null);
   assert.equal(result.reviewer.sessionId, "11111111-1111-4111-8111-111111111111");
   assert.equal(realpathSync(capture.cwd), realpathSync(workspace));
   assert.equal(capture.changeId, "claude-only");
@@ -340,6 +375,11 @@ try {
   });
   assert.equal(codexResult.status, "pass");
   assert.equal(codexResult.reviewer.sessionId, "codex-review-session");
+  const codexUsage = usageRows.find((row) => row.changeId === "codex-only");
+  assert.equal(codexUsage.sessionId, "codex-review-session");
+  assert.equal(codexUsage.cacheReadTokens, 10);
+  assert.equal(codexUsage.cost, null);
+  assert.equal(codexUsage.requestId, "configured-reviewer:codex-review-session:turn:1");
   const priorInvocations = readFileSync(join(workspace, "claude-invocations.txt"), "utf8");
   const invalidPacket = runtime.runReview({
     changeId: "missing-packet-file", workspace, packet: missingPacket
@@ -487,6 +527,30 @@ try {
   }));
   assert.throws(() => environment.foundationPolicy(),
     /providerFamily must be anthropic/);
+
+  const recoveryReference = ".foundation/reviews/recovery/saved.json";
+  const recoveryPath = join(root, recoveryReference);
+  mkdirSync(join(root, ".foundation/reviews/recovery"), { recursive: true });
+  const recoveryReviewer = { identity: "codex", providerFamily: "openai",
+    modelFamily: "gpt", modelId: "test", sessionId: "actual-session" };
+  const recoveryReport = { changeId: "recovery", status: "pass", summary: "done",
+    findings: [], verifiedFindingIds: [], reviewer: recoveryReviewer,
+    reportPath: recoveryPath, reportReference: recoveryReference };
+  writeFileSync(recoveryPath, JSON.stringify(recoveryReport));
+  const recoveryRequest = { changeId: "recovery", packetDigest: "packet",
+    workspaceHash: "workspace", packet: {} };
+  const recoverySubject = { actor: "implementer" };
+  recoveryRequest.configuredResult = checkpointReviewResult(root,
+    recoveryRequest, recoverySubject, recoveryReport);
+  const recover = (overrides = {}, subject = recoverySubject, current = "workspace") =>
+    recoverReviewResult(root, { ...recoveryRequest, ...overrides }, subject,
+      recoveryReviewer, current);
+  assert.equal(recover().reviewer.sessionId, "actual-session");
+  assert.throws(() => recover({ packetDigest: "changed" }), /binding changed/);
+  assert.throws(() => recover({}, { actor: "other" }), /binding changed/);
+  assert.throws(() => recover({}, recoverySubject, "changed"), /binding changed/);
+  writeFileSync(recoveryPath, JSON.stringify({ ...recoveryReport, summary: "tampered" }));
+  assert.throws(() => recover(), /integrity or reviewer provenance/);
 
   process.stdout.write("configured reviewer tests: PASS\n");
 } finally {

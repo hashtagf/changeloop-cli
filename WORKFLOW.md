@@ -1,6 +1,6 @@
 # Change Loop workflow
 
-**Version 3.5.15**
+**Version 3.5.17**
 
 Change Loop is an OpenSpec-native control plane for safe, economical software
 changes in brownfield repositories:
@@ -55,7 +55,17 @@ under `.foundation/prototypes/`. It always records the selected conclusion in
 
 ### `/change <intent>`
 
-Change authors one compact semantic draft v3. The transactional compiler creates
+Change authors one semantic draft v3 with compact bookkeeping and enough
+behavioral detail to understand scope and acceptance without chat history.
+Reconcile the relevant available conversation, latest corrections, and retained
+decisions before drafting, then check their coverage in the compiled packet.
+Use diagrams and affected folder mapping when boundaries, flow, or structure
+need explanation; preserve that context for Build and session restart.
+Agent-authored document prose follows the user's requested document language,
+or the language of their current request; machine syntax and canonical
+identities stay stable. See the [Change authoring workflow](.claude/skills/change/references/workflow.md)
+for the detail, language, and compiled-packet inspection rules.
+The transactional compiler creates
 `openspec/changes/<id>/`, assigns stable cross-ledger IDs, validates the complete
 agreement, installs it, and prepares isolation. The draft records:
 
@@ -77,6 +87,13 @@ virtual-default semantics.
 After compilation, the OpenSpec packet is the source of truth. The semantic
 draft is temporary and `.foundation/` is derived coordination state. Draft v1
 remains compatible; draft v2 retains its unambiguous bookkeeping behavior.
+
+For newly started changes, present the compiled spec, scope, and acceptance
+criteria and wait for explicit user approval before Build, including `/dev`.
+Record it with `change resolve <change> --approve-spec --decision-ref <ref>`.
+Runtime approval binds agreement content and revision; task checkboxes alone
+do not invalidate it. Agreement edits require renewed approval. Legacy
+primitive-created/in-flight changes retain their compatibility route.
 
 Referenced diagrams, prototype selections, and local integration documentation
 must resolve to regular files inside the project. Remote integration sources
@@ -153,13 +170,18 @@ permission-bound, single-use, and does not turn a worktree or container into a
 security boundary. The complete operator contract is in the harness guide.
 
 One-task changes without shared external authority stay in the current agent.
-Independent tasks with disjoint declared paths may use native workers even in
-one repository; overlapping, dependent, unknown-scope, or shared-resource work
-stays serialized. The harness plans dependency and resource scopes,
+Independent tasks in separate repository workspaces may use native workers.
+Tasks sharing a workspace stay serialized because lease release observes the
+whole repository diff; disjoint paths alone cannot identify their writer.
+The harness plans dependency and resource scopes,
 leases them all-or-none with fencing generations, and accepts only observed
 writes inside the granted authority. Load one primary construction skill per
 task and only the cross-cutting security or observability skills whose triggers
 apply.
+
+A force-released lease grants no result authority. If its task was already
+checked complete, the planner returns it for leased verification without
+rewriting the checkbox; only an accepted release clears that recovery.
 
 For multi-repository work, the committed topology selects repositories and
 access modes before task, provider, or worker planning. Providers may execute
@@ -235,8 +257,10 @@ A provider that executed and failed has three honest exits:
 A waiver removes the capability from the required set while the claim continues
 to declare it. It remains visible as `user-waived`, preserves receipts already
 earned, and can be revoked. There is no route that turns failed evidence into a
-pass or lands it silently. Review and acceptance use their own explicit policy
-and withdrawal routes.
+pass or lands it silently. Review may use the same explicit waiver route;
+acceptance retains its explicit withdrawal route. New waivers bind the current
+workspace and contract revision. Changed content expires them; original failed
+receipts remain available and proof names the accepted exceptions.
 
 When executable wiring is absent, `evidence detect` reads project manifests
 without executing scripts, `evidence init` previews additions and writes only
@@ -391,6 +415,17 @@ choices, including reject, inconclusive, or pause; they never contain a
 preselected passing receipt.
 
 ## Review, acceptance, and external authority
+
+Review has one persisted 30-minute window beginning at the first dispatch.
+Retries, fallbacks, and delta review share its deadline; resume never resets it.
+At expiry, report completed findings and unreviewed scope and ask whether to
+continue, Land with explicit acceptance of remaining risks, or pause. Only a
+user decision may open another 30-minute window, recorded through
+`change resolve <change> --continue-review --decision-ref <ref>`.
+Timeout is not a pass. Try repair first; if it cannot progress, explain the
+attempted remedies and offer further work or explicit waivers for the current
+diff before Land. Conflicts, incomplete Apply, and missing side-effect authority
+still require their actual resolution, never a claim of successful delivery.
 
 Under `workflow.reviewPolicy: "risk-tiered"` every change receives review, with
 the correction circuit bounded by risk:

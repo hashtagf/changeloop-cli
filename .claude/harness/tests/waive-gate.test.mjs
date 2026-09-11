@@ -42,7 +42,7 @@ test("waivable capability validates reason, protected routes, duplicates, and re
   }, []), /requires --reason/);
   assert.throws(() => assertWaivableCapability(world.context, "change", {
     capability: "review", reason: "why"
-  }, []), /review cannot be waived/);
+  }, []), /not required/);
   assert.throws(() => assertWaivableCapability(world.context, "change", {
     capability: "acceptance", reason: "why"
   }, []), /withdraw the requirement/);
@@ -103,4 +103,20 @@ test("waive operation handles revocation and refuses archived changes", () => {
     capability: "test", "decision-ref": "decision:3", reason: "why"
   }), /already archived/);
   assert.equal(archived.saves.length, 0);
+});
+
+test("review waiver binds the current diff and a stale waiver can be revoked", () => {
+  const world = fixture({ required: ["review"], state: { contractRevision: 4 } });
+  world.context.relevantHash = () => "reviewed-diff";
+  waiveGateOperation(world.context, "change", {
+    capability: "review", reason: "User accepts unfinished review", "decision-ref": "decision:land"
+  });
+  assert.deepEqual(world.state.waivers[0].binding, {
+    workspaceHash: "reviewed-diff", contractRevision: 4
+  });
+  world.context.relevantHash = () => { throw new Error("workspace unavailable"); };
+  waiveGateOperation(world.context, "change", {
+    capability: "review", revoke: true, "decision-ref": "decision:revoke"
+  });
+  assert.deepEqual(world.state.waivers, []);
 });

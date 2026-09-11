@@ -371,6 +371,12 @@ verdicts and never trigger fallback. Uninspectable packets and finding/closure
 binding errors retain an error attempt and exhaust that request immediately,
 without spending a full review on another model for unchanged validation input.
 Rejected findings remain diagnostic data, not passing evidence.
+A completed configured report is checkpointed before attempt and receipt
+recording. Retrying the same request after interrupted recording reuses that
+report only when its digest, packet, workspace, implementation subject, and
+reviewer provenance still match. It retains the actual reviewer session and
+does not launch another model or append another completed attempt. A changed
+binding stops recovery and preserves the report for inspection.
 On the existing `advance --through proven|archived` route, the backend revalidates
 the retained packet and rejected result. It may restore missing control-workspace
 location metadata without widening scope. Only a now-valid binding with a ready
@@ -406,6 +412,12 @@ New standard changes must explicitly decide whether acceptance is required;
 silence remains `undecided` and blocks validation rather than becoming approval.
 
 ## Test and discovery
+
+With automatic report detection, counted shell summaries such as
+`suite: ALL PASS (12/12 assertions)` and `suite: 2/12 assertion(s) FAILED`
+also provide discovery counts, including when retained by RTK. Suite names
+must be unique and counts consistent; bare `PASS` and malformed summaries do
+not establish a count. These summaries do not establish critical-case IDs.
 
 The configured structured JSON report must expose a non-negative integer such as
 `numTotalTests`, `totalTests`, `testCount`, or `expected`. If the command passes
@@ -572,8 +584,11 @@ declaring it, and the waiver is carried as a `user-waived` advisory in proof
 readiness, the proof record, the archive, and on the `LAND READY` line. The
 receipts already earned stay valid — a waiver is subtractive and cannot change
 what any other provider attested — so the next `proof run` executes nothing.
-`--revoke` restores the requirement. There is no route that lands a failing
-proof. `review` and `acceptance` are refused here: review is waived through
-`review.independence` / `review.diversity` in `foundation.json`, and acceptance
-is withdrawn through `change resolve --acceptance-not-required` or by dropping
-the capability from the claim.
+`--revoke` restores the requirement. New waivers bind the current workspace and
+contract revision and expire when either changes. `review` can be waived with
+an explicit user decision naming the remaining risks; original failed receipts
+and incomplete review remain visible, never converted into passing evidence.
+The final proof covers the remaining required set and records the exceptions.
+`acceptance` retains its withdrawal route through
+`change resolve --acceptance-not-required` or an explicit claim amendment.
+The review deadline and continuation contract is in [WORKFLOW.md](../../WORKFLOW.md).

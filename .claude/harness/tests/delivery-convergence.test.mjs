@@ -74,6 +74,9 @@ test("consumer inspection preserves lifecycle files and resumes amended current 
       } }, services: {} }
     }));
     runtime("start", join(project, ".foundation/draft.json"));
+    const unapproved = JSON.parse(runtime("advance", "inspect-resume", "--through", "build"));
+    assert.equal(unapproved.boundary, "spec-approval-required");
+    runtime("resolve", "inspect-resume", "--approve-spec", "--decision-ref", "fixture://user/spec");
     runtime("advance", "inspect-resume", "--through", "build");
     const before = protectedFiles();
     const action = JSON.parse(runtime("advance", "inspect-resume", "--inspect"));
@@ -102,6 +105,9 @@ test("consumer inspection preserves lifecycle files and resumes amended current 
     };
     writeFileSync(join(project, ".foundation/amendment.json"), JSON.stringify(amendment));
     runtime("amend", "inspect-resume", join(project, ".foundation/amendment.json"));
+    assert.equal(JSON.parse(runtime("advance", "inspect-resume", "--through", "build")).boundary,
+      "spec-approval-required");
+    runtime("resolve", "inspect-resume", "--approve-spec", "--decision-ref", "fixture://user/amended-spec");
     runtime("sandbox", "sync", "inspect-resume");
     const after = JSON.parse(runtime("packet", "inspect-resume", "--resume"));
     assert.equal(after.pendingTaskCount, 2);

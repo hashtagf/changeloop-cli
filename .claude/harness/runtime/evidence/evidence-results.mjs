@@ -88,6 +88,34 @@ export function parseNodeTestSpecOutput(value) {
   };
 }
 
+// The dependency-free shell suites emit counted summaries, including when a
+// host captures only their final lines. Bare PASS text is never a test count.
+export function parseAssertionSummaryOutput(value) {
+  const rows = String(value || "").split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /: (?:ALL PASS|\d+\/\d+ assertion\(s\) FAILED)/.test(line));
+  if (!rows.length) return null;
+  const seen = new Set();
+  let totalTests = 0;
+  let failed = 0;
+  for (const row of rows) {
+    const pass = row.match(/^(.+): ALL PASS \((\d+)\/(\d+) assertions\)$/);
+    const fail = row.match(/^(.+): (\d+)\/(\d+) assertion\(s\) FAILED$/);
+    const match = pass || fail;
+    if (!match || seen.has(match[1])) return null;
+    seen.add(match[1]);
+    const count = Number(match[3]);
+    const observed = Number(match[2]);
+    if (!Number.isSafeInteger(count) || !Number.isSafeInteger(observed) ||
+        observed > count || (pass && observed !== count)) return null;
+    totalTests += count;
+    failed += fail ? observed : 0;
+    if (!Number.isSafeInteger(totalTests)) return null;
+  }
+  return { totalTests, failed, passed: totalTests - failed,
+    format: "assertion-summary", criticalCases: [] };
+}
+
 export function mutationProtocolResult(value) {
   const text = String(value || "");
   const line = text.match(

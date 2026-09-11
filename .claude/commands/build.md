@@ -16,7 +16,7 @@ requested diagnosis.
 - `WAIT`/`ASK_USER`: report waits; ask only for the decision; resume yourself.
 - `DONE`: stop at Build, before Proof.
 
-Read `references/build-policy.md` for repair and `references/build-dispatch.md`
+Read `references/build-policy.md` before editing and `references/build-dispatch.md`
 only for parallel work or leases.
 
 Edit only allowed sandbox paths. Host owns leases and tasks. Start every

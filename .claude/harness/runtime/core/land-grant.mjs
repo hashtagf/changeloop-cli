@@ -73,7 +73,11 @@ export function createLandGrantRuntime({
   }
 
   function read(id) {
-    return readJson(grantPath(id), null);
+    // Bootstrap treats null as "no fallback"; a missing grant is an ordinary
+    // authority state, not a malformed JSON recovery failure.
+    const missing = {};
+    const value = readJson(grantPath(id), missing);
+    return value === missing ? null : value;
   }
 
   function valid(id) {

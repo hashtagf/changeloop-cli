@@ -1,9 +1,12 @@
+import { REVIEW_WINDOW_MS, reviewWindowRemaining, reviewWindowError, currentWaivers } from "../core/user-decisions.mjs";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { acquireProcessLock, isProcessAlive } from "../core/process-lock.mjs";
 import { effectiveReviewAttemptLimit } from "../core/authority-policy.mjs";
 import { reviewFindingIssues, reviewPacketIssues, validReview } from "../evidence/configured-reviewer.mjs";
+import { checkpointReviewResult, recoverReviewResult } from "../evidence/review-result-recovery.mjs";
+import { normalizeReviewCompletionFindings } from "../evidence/review-attempt-store.mjs";
 
 export function authorityRequestDisplayValue(request, limit = 8192) {
   const packetBytes = Buffer.byteLength(JSON.stringify(request.packet || null));
@@ -514,6 +517,7 @@ export function createAuthorityRuntime({
   providerConfig,
   reviewPacketValue,
   loadRuntime,
+  saveRuntime,
   evidence,
   resolvedAcceptance,
   relevantHash,
@@ -668,6 +672,14 @@ export function createAuthorityRuntime({
   function dispatchAuthorityUnlocked(id, flags = {}) {
     const context = dispatchRequestContext(id, flags);
     if (context.handled) return context.value;
+    const windowState = loadRuntime(id);
+    if (!windowState.reviewWindow) {
+      const startedAt = now();
+      windowState.reviewWindow = { startedAt,
+        deadline: new Date(Date.parse(startedAt) + REVIEW_WINDOW_MS).toISOString() };
+      saveRuntime(windowState);
+    }
+    if (!reviewWindowRemaining(windowState, Date.parse(now()))) throw reviewWindowError(id);
     const { entry, request, requestId, reviewerType } = context;
     function dispatchRouting() {
     const routing = reviewPolicy(id);
@@ -1200,14 +1212,18 @@ export function createAuthorityRuntime({
     }
     const resumedFallback = resumeMainSessionFallback();
     if (resumedFallback.handled) return resumedFallback.value;
+    let recoveredReport = null;
     function recoverOrphanedController(entry) {
       if (entry.value.status !== "dispatched") return entry;
       requestEntry = entry;
       const controller = requestEntry.value.configuredController;
-      if (!controller)
+      if (!controller && !entry.value.configuredResult)
         fail(`configured review dispatch '${requestId}' is indeterminate; do not rerun it automatically. Abort it with a reason, then request the next bounded route or pause`);
-      if (isProcessAlive(Number(controller.pid)))
+      if (controller && isProcessAlive(Number(controller.pid)))
         fail(`configured review dispatch '${requestId}' is still running in controller PID ${controller.pid}`);
+      recoveredReport = recoverReviewResult(root, entry.value, subject, configured,
+        authorityWorkspaceHash(id, entry.value.provider));
+      if (recoveredReport) return entry;
       const attemptDigest = requestEntry.value.dispatch?.attemptDigest;
       const attempt = attemptDigest ? reviewAttemptByDigest(id, attemptDigest) : null;
       if (attempt?.status === "dispatched")
@@ -1248,9 +1264,10 @@ export function createAuthorityRuntime({
     // never gains a receipt, so counting it here locked the change out of
     // review forever.
     const deliveredAi = deliveredAiAttempts(id, history);
-    if (unrecordedDeliveredAiResponse(id, history, requestEntry.value.provider))
+    if (!recoveredReport && unrecordedDeliveredAiResponse(id, history, requestEntry.value.provider))
       fail("a completed AI response has no matching recorded receipt; repair that authority record or pause instead of starting another configured reviewer");
-    const scope = deliveredAi.length === 0 ? "full" : "delta";
+    const scope = recoveredReport ? requestEntry.value.dispatch.scope.mode
+      : deliveredAi.length === 0 ? "full" : "delta";
     const workspace = loadRuntime(id).workspace?.path || root;
     const dispatched = dispatchAuthorityUnlocked(id, {
       request: requestId,
@@ -1274,8 +1291,9 @@ export function createAuthorityRuntime({
         startedAt: now()
       }
     });
-    const report = runConfiguredReview({
+    const report = recoveredReport || runConfiguredReview({
       changeId: id,
+      timeoutMs: reviewWindowRemaining(loadRuntime(id), Date.parse(now())),
       reviewer: reviewerName,
       workspace,
       packet: dispatched.packet,
@@ -1284,6 +1302,14 @@ export function createAuthorityRuntime({
         ...(scope === "delta" ? [deliveredAi.at(-1)?.reviewerSessionId] : [])
       ].filter(Boolean)
     });
+    const checkpoint = checkpointReviewResult(root, dispatched, subject, report);
+    if (checkpoint) {
+      const resultEntry = authorityStore.list(id)
+        .find((row) => row.value.requestId === requestId);
+      authorityStore.replace(resultEntry, {
+        ...resultEntry.value, configuredResult: checkpoint
+      });
+    }
     function handleConfiguredInfrastructureError() {
       if (report.status !== "error") return { handled: false, value: null };
       const failed = completeReviewAttempt(id,
@@ -1312,6 +1338,7 @@ export function createAuthorityRuntime({
         ]
       };
       authorityStore.replace(failedEntry, failedRequest);
+      if (!reviewWindowRemaining(loadRuntime(id), Date.parse(now()))) throw reviewWindowError(id);
       // Validation is deterministic for this packet/result. Changing models
       // cannot repair its binding; retain the error and existing resume route.
       const nextReviewer = report.retryable === false ? null
@@ -1455,13 +1482,25 @@ export function createAuthorityRuntime({
     return { reviewerSession, infrastructureError };
     }
     const { reviewerSession, infrastructureError } = validateConfiguredReviewResult();
-    const completed = completeReviewAttempt(id,
-      dispatched.dispatch.attemptDigest, {
+    const completion = {
         reviewerSessionId: reviewerSession,
         resultStatus: report.status,
         findings: report.findings,
         verifiedFindingIds: report.verifiedFindingIds
-      });
+      };
+    const currentAttempt = recoveredReport && reviewAttemptByDigest(id,
+      loadRuntime(id).reviewHistory?.chainHead);
+    const alreadyCompleted = currentAttempt?.status === "completed";
+    if (alreadyCompleted && (currentAttempt.requestId !== requestId ||
+        currentAttempt.attempt !== dispatched.dispatch.attempt ||
+        currentAttempt.workspaceHash !== dispatched.workspaceHash ||
+        currentAttempt.reviewerSessionId !== reviewerSession ||
+        currentAttempt.resultStatus !== report.status ||
+        stableHash(currentAttempt.findings) !== stableHash(normalizeReviewCompletionFindings(completion)) ||
+        stableHash(currentAttempt.verifiedFindingIds) !== stableHash([...report.verifiedFindingIds].sort())))
+      fail("saved configured review result does not match its completed attempt");
+    const completed = alreadyCompleted ? currentAttempt
+      : completeReviewAttempt(id, dispatched.dispatch.attemptDigest, completion);
     const dispatchedEntry = authorityStore.list(id)
       .find((row) => row.value.requestId === requestId);
     const {
@@ -1530,7 +1569,9 @@ export function createAuthorityRuntime({
     const result = authorityStore.status(id, workspaceHash, requestId,
       (request) => authorityWorkspaceHash(id, request.provider));
     if (!result.found) fail(`unknown authority request '${requestId}'`);
-    return result.value;
+    const waived = new Set(currentWaivers(loadRuntime(id), workspaceHash).map((row) => row.capability));
+    return { ...result.value, requests: result.value.requests.map((request) =>
+      waived.has(request.type) ? { ...request, status: "user-waived", originalStatus: request.status } : request) };
   }
 
   // The response shape is a contract. Without a way to emit it, a responder

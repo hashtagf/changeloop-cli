@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { diagnosticExport } from "./diagnostic-export.mjs";
 
-export const FEEDBACK_SCHEMA_VERSION = 3;
+export const FEEDBACK_SCHEMA_VERSION = 4;
 
 export function readinessProjection(packet) {
   const providers = Array.isArray(packet.providers) ? packet.providers :
@@ -46,8 +46,11 @@ export function reviewRepairIntervals(operations = [], attempts = []) {
       candidate.workspaceHash !== attempt.workspaceHash);
     if (!laterChanged) return [];
     const fromMs = timestamp(attempt.completedAt);
+    const nextReviewMs = timestamp(laterChanged.timestamp);
     const resumed = orderedOperations.find((operation) =>
-      operation.operation === "proof-advance" && timestamp(operation.startedAt) > fromMs);
+      ["advance", "proof-advance"].includes(operation.operation) &&
+      timestamp(operation.startedAt) > fromMs &&
+      (nextReviewMs === null || timestamp(operation.startedAt) <= nextReviewMs));
     const toMs = timestamp(resumed?.startedAt);
     if (fromMs === null || toMs === null || toMs <= fromMs) return [];
     return [{
@@ -60,6 +63,36 @@ export function reviewRepairIntervals(operations = [], attempts = []) {
       basis: "failed-review-to-proof-resume-with-later-changed-workspace"
     }];
   });
+}
+
+// Durations are intervals, not counters: nested operations and duplicate
+// attempts must not count the same wall-clock time twice.
+export function intervalDuration(intervals) {
+  const ordered = intervals.map(({ from, to }) => [timestamp(from), timestamp(to)])
+    .filter(([from, to]) => from !== null && to !== null && to >= from)
+    .sort((left, right) => left[0] - right[0]);
+  if (!ordered.length) return null;
+  let total = 0;
+  let [start, end] = ordered[0];
+  for (const [from, to] of ordered.slice(1)) {
+    if (from > end) { total += end - start; start = from; }
+    end = Math.max(end, to);
+  }
+  return total + end - start;
+}
+
+function unattributedDuration(metrics, repairs, operations) {
+  if (metrics.unattributedWaitMs === null || metrics.unattributedWaitMs === undefined)
+    return null;
+  // Historical totals without boundaries cannot be safely subtracted from
+  // repair: the same human wait can be inside that repair interval.
+  if (metrics.humanWaitMs > 0 && !metrics.humanWaitSpans?.length) return null;
+  const attributed = [...repairs, ...(metrics.humanWaitSpans || [])];
+  const active = operations.map((row) => ({ from: row.startedAt, to: row.finishedAt }))
+    .filter((row) => timestamp(row.from) !== null && timestamp(row.to) !== null);
+  const outsideActive = (intervalDuration([...active, ...attributed]) ?? 0) -
+    (intervalDuration(active) ?? 0);
+  return Math.max(0, metrics.unattributedWaitMs - outsideActive);
 }
 
 export function operationCauseCoverage(operations = []) {
@@ -79,14 +112,12 @@ export function feedbackSnapshotValue({
   readiness = null, observedAt = null
 }) {
   const repairIntervals = reviewRepairIntervals(operations, reviewAttempts);
-  const repairMs = repairIntervals.length
-    ? repairIntervals.reduce((sum, row) => sum + row.durationMs, 0) : null;
+  const repairMs = intervalDuration(repairIntervals);
   const reviewDurations = reviewAttempts.flatMap((row) => {
     const from = timestamp(row.timestamp);
     const to = timestamp(row.completedAt);
     return from !== null && to !== null && to >= from ? [to - from] : [];
   });
-  const humanWaitMs = metrics.humanWaitMs ?? 0;
   return {
     version: FEEDBACK_SCHEMA_VERSION,
     changeId,
@@ -101,11 +132,10 @@ export function feedbackSnapshotValue({
       reviewerTimingAvailability: !reviewDurations.length ? "unavailable" :
         reviewDurations.length === reviewAttempts.length ? "complete" : "partial",
       repairMs,
+      repairTimingAvailability: repairMs === null ? "unavailable" : "derived",
       repairIntervals,
       humanWaitMs: metrics.humanWaitMs ?? null,
-      unattributedMs: metrics.unattributedWaitMs === null ||
-        metrics.unattributedWaitMs === undefined
-        ? null : Math.max(0, metrics.unattributedWaitMs - (repairMs ?? 0) - humanWaitMs),
+      unattributedMs: unattributedDuration(metrics, repairIntervals, operations),
       basis: "operations+review-attempts+verified-human-transitions"
     },
     guards: {

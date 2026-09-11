@@ -135,9 +135,24 @@ test("lease acquisition request validates dispatch, task, dependencies, and owne
     exists: () => true,
     readJson: () => ({ owner: "prior" })
   }), "change-a", "t001", { owner: "agent-a" });
-  assert.deepEqual(result.keys, ["repo:root"]);
+  assert.deepEqual(result.keys, ["repo:root", "resource:lease-workspace:change-a:root"]);
   assert.equal(result.prior.owner, "prior");
   assert.equal(result.expiresAt, "2026-08-27T00:30:00.000Z");
+});
+
+test("disjoint tasks still fence the shared workspace and independent roots do not", () => {
+  const request = (id, taskId, repository) => leaseAcquisitionRequest(requestContext({
+    dispatchable: true, tasks: [{ id: taskId, repository, dependsOn: [],
+      leaseKeys: [`path:${repository}:src/${taskId}`] }]
+  }), id, taskId, { owner: taskId });
+  const first = request("change-a", "T001", "root");
+  const held = first.keys.map((key) => ({ descriptor: {
+    key, changeId: "change-a", taskId: "T001", owner: "T001"
+  } }));
+  const second = request("change-a", "T002", "root");
+  assert.equal(leaseResourceConflicts(second.keys, held, "change-a", "T002", "T002").length, 1);
+  const independent = request("change-a", "T003", "api");
+  assert.equal(leaseResourceConflicts(independent.keys, held, "change-a", "T003", "T003").length, 0);
 });
 
 function lockedContext(overrides = {}) {
@@ -166,6 +181,16 @@ function lockedContext(overrides = {}) {
   };
   return { context, writes };
 }
+
+test("legacy active task leases fence shared workspaces before any resource write", () => {
+  const shared = lockedContext({ workspaceLeases: () => [{ taskId: "T002" }] });
+  assert.throws(() => acquireLeaseUnderLock(shared.context), /workspace 'root' conflicts/);
+  assert.equal(shared.writes.length, 0);
+  const independent = lockedContext({
+    workspaceLeases: () => [{ taskId: "T002", repository: "api" }]
+  });
+  assert.equal(acquireLeaseUnderLock(independent.context).taskId, "T001");
+});
 
 test("lease transaction renews matching authority and rejects conflicts or stale renewal", () => {
   const renewal = { path: "/resource", descriptor: owned };
@@ -376,6 +401,8 @@ test("locked release fences resources and persists observed or takeover results"
   writes.length = 0;
   removed.length = 0;
   releaseLeaseUnderLock({ ...base, force: true });
+  assert.deepEqual(removed, ["/owned", "/leases/results/change/T001.json"],
+    "force release removes previously accepted result authority");
   assert.equal(writes[0][0], "/index");
   assert.equal(writes[0][1].status, "taken-over");
   assert.equal(writes[0][1].executionAttempt, 1);

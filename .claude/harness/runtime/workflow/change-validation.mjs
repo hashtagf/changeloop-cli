@@ -1,3 +1,4 @@
+import { currentWaivers } from "../core/user-decisions.mjs";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
@@ -425,8 +426,6 @@ export function revokeGateWaiver(context, id, state, waivers, request) {
 
 export function assertWaivableCapability(context, id, request, waivers) {
   if (!request.reason) context.fail("change waive requires --reason <why>");
-  if (request.capability === "review")
-    context.fail("review cannot be waived here; use the configured risk route or record an explicit policy/change decision");
   if (request.capability === "acceptance")
     context.fail(`acceptance cannot be waived here; withdraw the requirement instead: claude-foundation change resolve ${id} --acceptance-not-required`);
   if (waivers.some((row) => row.capability === request.capability))
@@ -442,15 +441,17 @@ export function waiveGateOperation(context, id, flags = {}) {
   const request = waiverRequest(flags, context.fail);
   const state = context.loadRuntime(id);
   if (state.status === "archived") context.fail(`change '${id}' is already archived`);
-  const waivers = state.waivers || [];
   if (flags.revoke)
-    return revokeGateWaiver(context, id, state, waivers, request);
+    return revokeGateWaiver(context, id, state, state.waivers || [], request);
+  const waivers = currentWaivers(state, context.relevantHash?.(id));
   assertWaivableCapability(context, id, request, waivers);
-  state.waivers = [...waivers, {
+  state.waivers = [...(state.waivers || []).filter((row) => row.capability !== request.capability), {
     capability: request.capability,
     reason: request.reason,
     authority: { kind: "host-user-decision", reference: request.decisionRef },
-    recordedAt: context.now()
+    recordedAt: context.now(),
+    ...(context.relevantHash ? { binding: { workspaceHash: context.relevantHash(id),
+      contractRevision: Number(state.contractRevision || 0) } } : {})
   }];
   context.saveRuntime(state);
   context.log(`GATE WAIVED ${id}/${request.capability}\n  reason: ${request.reason}\n  decision: ${request.decisionRef}\n  recorded in proof advisories; the claim keeps declaring it\n  next: claude-foundation proof run ${id}`);
@@ -710,7 +711,8 @@ export function requiredProvidersOperation(context, id) {
   const capabilityContext = {
     providers: contract.providers || {},
     providerCapability: context.providerCapability,
-    waived: new Set((state.waivers || []).map((row) => row.capability)),
+    waived: new Set(currentWaivers(state, state.waivers?.some((row) => row.binding)
+      ? context.relevantHash?.(id) : undefined).map((row) => row.capability)),
     required: new Set()
   };
   for (const claim of contract.claims) {
@@ -748,6 +750,7 @@ export function createChangeValidationRuntime({
   markBlocked = () => {},
   root,
   activeChangePath,
+  relevantHash,
   changePath,
   walk,
   loadRuntime,
@@ -1881,7 +1884,7 @@ export function createChangeValidationRuntime({
   }
 
   const requiredProviders = requiredProvidersOperation.bind(null, {
-    loadRuntime, evidence, providerCapability, reviewPolicy,
+    loadRuntime, relevantHash, evidence, providerCapability, reviewPolicy,
     resolvedAcceptance, policyCapabilitySplit, foundationPolicy
   });
 
@@ -1897,9 +1900,11 @@ export function createChangeValidationRuntime({
   // does not get this treatment: dropping an inferred capability there would
   // under-require evidence, so it must still stop.
   function advisoryCapabilities(id) {
-    const waived = (loadRuntime(id).waivers || []).map((row) => ({
+    const state = loadRuntime(id);
+    const active = currentWaivers(state, state.waivers?.some((row) => row.binding) ? relevantHash(id) : undefined);
+    const waived = (state.waivers || []).map((row) => ({
       capability: row.capability,
-      reason: "user-waived",
+      reason: active.includes(row) ? "user-waived" : "waiver-stale",
       detail: row.reason,
       authority: row.authority,
       recordedAt: row.recordedAt,
@@ -1920,7 +1925,7 @@ export function createChangeValidationRuntime({
   }
 
   const waiveGate = waiveGateOperation.bind(null, {
-    loadRuntime, saveRuntime, requiredProviders, providerCapability,
+    loadRuntime, saveRuntime, relevantHash, requiredProviders, providerCapability,
     providerConfig, now, fail, log: console.log
   });
 

@@ -227,7 +227,8 @@ test("sandbox setup batch runner surfaces worker failures", () => {
 test("sandbox setup batch bounds captured output per job", () => {
   const [row] = runSandboxSetupBatch([{
     command: `node -e "process.stdout.write('x'.repeat(70000))"`,
-    cwd: process.cwd(), timeoutMs: 1000
+    // This checks truncation, not startup latency under the shared suite pool.
+    cwd: process.cwd(), timeoutMs: 10000
   }]);
   assert.equal(row.result.status, 0);
   assert.equal(row.result.stdout.length, 65536);
@@ -790,6 +791,22 @@ test("prepareBuild reuses a complete building sandbox", () => {
   };
   assert.deepEqual(prepareBuildSandbox(context, "change"), { repaired: false });
   assert.deepEqual(calls, [["retry", "change"]]);
+});
+
+test("prepareBuild synchronizes revised agreements before setup and stops on conflicts", () => {
+  const calls = [];
+  const context = {
+    loadRuntime: () => ({ status: "building", workspace: { path: "/sandbox/root" } }),
+    workspaceInspection: () => ({ status: "active", repositories: [] }),
+    synchronizeAgreement: (id) => calls.push(["sync", id]),
+    retryFailedSetups: (id) => calls.push(["setup", id])
+  };
+  prepareBuildSandbox(context, "change");
+  assert.deepEqual(calls, [["sync", "change"], ["setup", "change"]]);
+  calls.length = 0;
+  context.synchronizeAgreement = () => { throw new Error("packet edits would be lost"); };
+  assert.throws(() => prepareBuildSandbox(context, "change"), /packet edits would be lost/);
+  assert.deepEqual(calls, []);
 });
 
 test("prepareBuild repairs a missing root record in multi-repository state", () => {

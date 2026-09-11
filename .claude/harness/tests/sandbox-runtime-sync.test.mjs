@@ -135,6 +135,26 @@ test("copy sync reconciles target movement and preserves task progress", () => {
   rmSync(fixture.root, { recursive: true, force: true });
 });
 
+test("Build preparation imports amended tasks and preserves completed work", () => {
+  const fixture = syncFixture("amended", { unchanged: true });
+  try {
+    fixture.state.status = "building";
+    fixture.state.workspace.changeSourceHash = "previous-agreement";
+    write(join(fixture.source, "tasks.md"),
+      "- [ ] T001 keep progress\n- [ ] T002 new requirement\n");
+    capture(() => fixture.runtime.prepareBuild("amended"));
+    const tasks = readFileSync(join(fixture.destination, "tasks.md"), "utf8");
+    assert.match(tasks, /\[x\] T001 keep progress/);
+    assert.match(tasks, /\[ \] T002 new requirement/);
+    assert.equal(fixture.state.workspace.changeSourceHash, "source-hash");
+    const saves = fixture.saves();
+    capture(() => fixture.runtime.prepareBuild("amended"));
+    assert.equal(fixture.saves(), saves, "unchanged agreements do not repeat synchronization");
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("repeated no-op sync preserves proof bytes and proven state", () => {
   const fixture = syncFixture("no-op", { unchanged: true });
   try {

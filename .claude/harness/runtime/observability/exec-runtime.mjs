@@ -79,9 +79,10 @@ export function buildExecCommandViolation(commandArgs, workspace) {
 // passes its exit code through untouched, and appends one observed-duration
 // row so `metrics` can report external execution time next to harness
 // operation time and evidence execution time.
-export function createExecRuntime({ logs, loadRuntime, now, fail }) {
+export function createExecRuntime({ logs, loadRuntime, now, fail, assertApproval = null }) {
   function execObserved(id, commandArgs, { phase } = {}) {
     const state = loadRuntime(id);
+    assertApproval?.(id, state);
     if (state.status === "archived")
       fail("an archived change is finished evidence; exec records nothing against it");
     if (!commandArgs.length) fail("exec requires a command after --");

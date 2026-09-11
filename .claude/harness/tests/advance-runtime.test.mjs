@@ -6,7 +6,7 @@ import {
   prepareAdvanceBuild, runAdvanceProof
 } from "../runtime/workflow/advance-runtime.mjs";
 import {
-  feedbackSnapshotValue, operationCauseCoverage, reviewRepairIntervals
+  feedbackSnapshotValue, operationCauseCoverage, reviewRepairIntervals, intervalDuration
 } from "../runtime/observability/feedback-runtime.mjs";
 
 const stableHash = (value) => `hash:${JSON.stringify(value)}`;
@@ -229,6 +229,7 @@ test("advance --through runs deterministic proof and Land until archived", async
   const state = { status: "building", workspace: { path: "/tmp/change" } };
   let proofRuns = 0;
   let landRuns = 0;
+  let grants = 0;
   const runtime = createAdvanceRuntime({
     loadRuntime: () => state,
     agentDispatchValue: () => ({ action: "build-complete" }),
@@ -238,7 +239,8 @@ test("advance --through runs deterministic proof and Land until archived", async
     readJson: () => proofRuns ? { status: "PASS", workspaceHash: "workspace-a" } : {},
     proofAdvancePath: () => "/proof.json",
     stableHash,
-    hasLandGrant: () => true,
+    hasLandGrant: () => grants > 0,
+    authorizeLand: () => { assert.equal(state.status, "proven"); grants += 1; },
     runProof: async () => {
       proofRuns += 1;
       state.status = "proven";
@@ -254,6 +256,7 @@ test("advance --through runs deterministic proof and Land until archived", async
   assert.equal(value.reached, "archived");
   assert.equal(proofRuns, 1);
   assert.equal(landRuns, 1);
+  assert.equal(grants, 1);
 });
 
 test("advance --through build stops before proof and preserves one resume route", async () => {
@@ -290,6 +293,26 @@ test("advance --through records each phase once", async () => {
   });
   await runtime.showAdvance("change-a", { through: "build" });
   assert.deepEqual(phases, ["build"]);
+});
+
+test("plain advance prepares the amended agreement before choosing work", async () => {
+  let prepared = false;
+  const runtime = createAdvanceRuntime({
+    loadRuntime: () => ({ status: "building", workspace: { path: "/tmp/change" } }),
+    prepareBuild: async () => { prepared = true; },
+    agentDispatchValue: () => {
+      assert.equal(prepared, true);
+      return { action: "run-in-session", packetCommand: "packet", task: { taskId: "T002" } };
+    },
+    agentPlanValue: () => ({ tasks: [{ id: "T002", text: "New amended task",
+      repository: "root", paths: ["src/**"] }] }),
+    relevantHash: () => "workspace-a", deliveredAiAttempts: () => [],
+    authorityStatusValue: () => ({ requests: [] }),
+    readJson: () => ({}), proofAdvancePath: () => "/proof.json", stableHash,
+    output: () => {}
+  });
+  const value = await runtime.advanceThrough("change-a", null);
+  assert.equal(value.action, "EDIT", JSON.stringify(value));
 });
 
 test("advance preserves exact runtime failures in a repair envelope", () => {
@@ -464,6 +487,50 @@ test("feedback classifies observed review repair without inventing wait", () => 
   assert.equal(snapshot.timing.humanWaitMs, null);
   assert.equal(snapshot.timing.unattributedMs, 149_396);
   assert.equal(snapshot.evidenceObservationGroups[0].independent, false);
+});
+
+test("feedback derives repair on advance and excludes resumes after the next review", () => {
+  const attempts = [
+    { status: "completed", resultStatus: "fail", digest: "a", workspaceHash: "a",
+      completedAt: "2026-09-11T00:00:00Z", findings: [{ id: "F1", severity: "major" }] },
+    { status: "completed", resultStatus: "pass", workspaceHash: "b",
+      timestamp: "2026-09-11T00:05:00Z" }
+  ];
+  const operation = { operation: "advance", startedAt: "2026-09-11T00:03:00Z" };
+  const intervals = reviewRepairIntervals([operation], attempts);
+  assert.equal(intervals.length, 1);
+  assert.equal(intervals[0].durationMs, 180000);
+  assert.deepEqual(reviewRepairIntervals([
+    { ...operation, startedAt: "2026-09-11T00:06:00Z" }
+  ], attempts), []);
+  const snapshot = feedbackSnapshotValue({ changeId: "a", metrics: {},
+    operations: [operation], reviewAttempts: attempts });
+  assert.equal(snapshot.timing.repairTimingAvailability, "derived");
+  const overlapped = feedbackSnapshotValue({ changeId: "a", operations: [operation],
+    reviewAttempts: attempts, metrics: {
+      unattributedWaitMs: 600000, humanWaitMs: 60000,
+      humanWaitSpans: [{ from: "2026-09-11T00:01:00Z", to: "2026-09-11T00:02:00Z" }]
+    } });
+  assert.equal(overlapped.timing.unattributedMs, 420000,
+    "human wait inside repair is subtracted only once");
+  const activeOverlap = feedbackSnapshotValue({ changeId: "a",
+    operations: [operation, { operation: "exec", startedAt: "2026-09-11T00:01:00Z",
+      finishedAt: "2026-09-11T00:02:00Z" }], reviewAttempts: attempts,
+    metrics: { unattributedWaitMs: 600000 } });
+  assert.equal(activeOverlap.timing.unattributedMs, 480000,
+    "repair overlapping an observed operation is not subtracted from idle twice");
+  const legacy = feedbackSnapshotValue({ changeId: "a", operations: [operation],
+    reviewAttempts: attempts, metrics: { unattributedWaitMs: 600000, humanWaitMs: 60000 } });
+  assert.equal(legacy.timing.unattributedMs, null,
+    "legacy totals cannot establish overlap without boundaries");
+});
+
+test("timing unions duplicate and overlapping intervals without inventing measurements", () => {
+  const row = (from, to) => ({ from: `2026-09-11T00:00:${from}Z`, to: `2026-09-11T00:00:${to}Z` });
+  assert.equal(intervalDuration([row("00", "10"), row("05", "15"),
+    row("00", "10"), row("20", "25")]), 20000);
+  assert.equal(intervalDuration([row("00", "00")]), 0);
+  assert.equal(intervalDuration([{ from: "invalid", to: null }]), null);
 });
 
 test("feedback keeps missing timing unknown and retains measured zero", () => {

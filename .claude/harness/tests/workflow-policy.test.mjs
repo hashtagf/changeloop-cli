@@ -198,6 +198,8 @@ try {
   let lastConfiguredReviewArgs = null;
   let configuredReviewResults = {};
   let configuredReviewCalls = 0;
+  let persistConfiguredResult = false;
+  let interruptReceipt = false;
   let providerRepository = null;
   let receiptValidityResult = { validity: "valid" };
   const attemptStore = createReviewAttemptStore({
@@ -301,6 +303,7 @@ try {
     },
     loadRuntime: () => state,
     evidence: () => ({ claims: [{ id: "claim-a" }] }),
+    saveRuntime: (next) => { state = next; },
     resolvedAcceptance: () => ({ required: false }),
     relevantHash: () => workspaceHash,
     validate: () => {},
@@ -338,19 +341,31 @@ try {
       lastConfiguredReviewArgs = args;
       const configuredResult = configuredReviewResults[args.reviewer];
       if (configuredResult) return configuredResult;
-      return {
+      const report = {
         status: "pass", summary: "configured review passed", findings: [],
         verifiedFindingIds: [], reportReference: "report.json",
         reviewer: { sessionId: configuredReviewSession }
       };
+      if (persistConfiguredResult) {
+        report.changeId = args.changeId;
+        report.reviewer = { ...report.reviewer, identity: "codex-sol",
+          providerFamily: "openai", modelFamily: "gpt-5.6", modelId: "gpt-5.6-sol" };
+        report.reportReference = `.foundation/reviews/${args.changeId}/saved.json`;
+        report.reportPath = join(fixture, report.reportReference);
+        writeJson(report.reportPath, report);
+      }
+      return report;
     },
     reviewerStatus: () => ({ ok: true }),
     writeJson,
     receiptPath: (id) => join(fixture, `${id}-receipt.json`),
-    recordReceipt: (id, _provider, status, flags) => writeJson(
+    recordReceipt: (id, _provider, status, flags) => {
+      if (interruptReceipt) { interruptReceipt = false; throw new Error("receipt interrupted"); }
+      return writeJson(
       join(fixture, `${id}-receipt.json`), {
         status, review: { attemptDigest: flags["review-attempt"] }
-      }),
+      });
+    },
     receiptValidity: () => receiptValidityResult,
     fileDigest: () => "digest",
     providerWorkspaceHash: () => workspaceHash,
@@ -586,6 +601,22 @@ try {
   assert.equal(completedCodex.status, "completed");
   assert.equal(completedCodex.reviewerSessionId, "actual-codex-thread",
     "configured review completion binds the real thread.started session");
+
+  state = { version: 2, changeId: "change-saved", reviewHistory: null };
+  const savedRequest = quiet(() => authority.requestAuthority("change-saved", { type: "review" }));
+  persistConfiguredResult = true;
+  interruptReceipt = true;
+  const callsBeforeRecovery = configuredReviewCalls;
+  const savedFlags = { request: savedRequest.requestId, "subject-actor": "human-implementer" };
+  assert.throws(() => quiet(() => authority.runAuthorityReviewer("change-saved", savedFlags)),
+    /receipt interrupted/);
+  const savedAttemptDigest = state.reviewHistory.chainHead;
+  quiet(() => authority.runAuthorityReviewer("change-saved", savedFlags));
+  assert.equal(configuredReviewCalls, callsBeforeRecovery + 1,
+    "receipt recovery must reuse the saved review without another model invocation");
+  assert.equal(state.reviewHistory.chainHead, savedAttemptDigest,
+    "receipt recovery must not append another attempt");
+  persistConfiguredResult = false;
 
   state = { version: 2, changeId: "change-orphan", reviewHistory: null };
   const orphanRequest = quiet(() => authority.requestAuthority(
@@ -971,6 +1002,7 @@ try {
     request: recoveryRequest.requestId, "subject-actor": "human-implementer"
   }));
   const advanceRecovery = createAdvanceRuntime({
+    nowMs: () => Date.parse(now()),
     loadRuntime: () => state, agentDispatchValue: () => ({ action: "build-complete" }),
     relevantHash: () => workspaceHash, deliveredAiAttempts: () => [],
     authorityStatusValue: () => ({ requests: authorityStore.list(recoveryId).map((row) => row.value) }),

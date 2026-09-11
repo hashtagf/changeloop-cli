@@ -37,7 +37,7 @@ test("draft bookkeeping derives mechanical IDs and unambiguous bindings", () => 
     ["zero-window-returns-nothing"]);
   assert.deepEqual(value.execution.providers.test.criticalCases, ["CC-001"]);
   assert.deepEqual(value.execution.providers.test.command,
-    ["sh", "-lc", "node --test"]);
+    ["sh", "-c", "node --test"]);
 });
 
 test("draft bookkeeping never guesses ambiguous multi-claim task bindings", () => {

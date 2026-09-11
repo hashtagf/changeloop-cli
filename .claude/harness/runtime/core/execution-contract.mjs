@@ -9,6 +9,11 @@ function digest(value) {
 
 export function workspaceCapabilityValue(changeId, state) {
   const status = state?.status || "change";
+  if (state?.specApproval?.required && (!state.specApproval.identity ||
+      state.specApproval.revision !== Number(state.contractRevision || 0))) return {
+    phase: "change", mode: "agreement-only",
+    roots: [`openspec/changes/${changeId}`, ".foundation"]
+  };
   if (status === "change") return {
     phase: "change", mode: "agreement-only",
     roots: [`openspec/changes/${changeId}`, ".foundation"]

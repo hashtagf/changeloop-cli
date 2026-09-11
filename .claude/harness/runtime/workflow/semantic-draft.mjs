@@ -337,8 +337,8 @@ function derivedExecution(source, claims, tasks) {
   if (source.execution) return source.execution;
   const commands = unique(tasks.map((task) => task.verify).filter(Boolean));
   const command = commands.length === 1
-    ? ["sh", "-lc", commands[0]]
-    : ["sh", "-lc", commands.map((value) => `(${value})`).join(" && ")];
+    ? ["sh", "-c", commands[0]]
+    : ["sh", "-c", commands.map((value) => `(${value})`).join(" && ")];
   const capabilities = unique(claims.flatMap((claim) => claim.capabilities));
   const providers = {};
   for (const capability of capabilities) {

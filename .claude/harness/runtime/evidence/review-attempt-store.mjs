@@ -559,6 +559,7 @@ export function createReviewAttemptStore({
       "Do not ask the user to choose redesign/split/pause and do not dispatch another open-ended AI review. " +
       "Continue when proof is satisfied; otherwise route a remaining item as AUTO_REPAIR inside the locked contract, " +
       "CONTRACT_DECISION_REQUIRED only for changed behavior/security/data/rollout, or EXTERNAL_WAIT for missing authority." +
+      ` If repair cannot progress, report attempted remedies and remaining risks; ask whether to keep working or accept those risks with change waive ${id} --capability review --reason <remaining-risk> --decision-ref <user-decision>, then Land.` +
       baseMoveRecovery);
   }
 

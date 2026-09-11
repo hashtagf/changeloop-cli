@@ -106,7 +106,7 @@ test("Claude operation persists invalid envelopes with the default timeout", () 
   const [executable, args, options] = calls.spawned[0];
   assert.equal(executable, "claude");
   assert.equal(args[args.indexOf("--session-id") + 1], "requested-session");
-  assert.equal(options.timeout, 45 * 60 * 1000);
+  assert.equal(options.timeout, 30 * 60 * 1000);
   assert.equal(options.cwd, "/workspace");
   assert.equal(options.env.CLAUDECODE, undefined);
 });

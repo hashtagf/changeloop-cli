@@ -1,3 +1,4 @@
+import { assertSpecApproval, agreementIdentity } from "../core/user-decisions.mjs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -788,6 +789,7 @@ export function sandboxCreatePreflight(context, id, flags = {}) {
       fail(`unattended sandbox creation requires a trusted host-owned security attestation; detected virtualization alone is insufficient: ${preflight.reasons.join("; ")}`);
   }
   const initial = loadRuntime(id);
+  assertSpecApproval(root, id, initial, { workspace: false });
   const topology = repositoryCatalog();
   if (topology.drift.length)
     fail(`sandbox preflight found unregistered submodule(s): ${
@@ -1062,6 +1064,7 @@ export function createSandbox(context, id, flags = {}) {
 
 export function prepareBuildSandbox(context, id) {
   const state = context.loadRuntime(id);
+  if (context.root) assertSpecApproval(context.root, id, state, { workspace: false });
   if (state.status === "change") context.validate(id, "root", { quiet: true });
   const inspection = context.workspaceInspection(id, state);
   const repositoryRecordsExist = Object.keys(state.repositories || {}).length > 0;
@@ -1071,6 +1074,7 @@ export function prepareBuildSandbox(context, id) {
   const incomplete = state.status === "change" || inspection.status !== "active" ||
     repositoryIncomplete;
   if (incomplete) context.create(id, { quiet: true });
+  context.synchronizeAgreement?.(id);
   context.retryFailedSetups(id);
   return { repaired: incomplete };
 }
@@ -1797,6 +1801,9 @@ export function createSandboxRuntime({
   }
 
   function updateSandboxSyncState(id, state, source, fingerprints, invalidated) {
+    const approvedSource = state.specApproval?.identity &&
+      state.specApproval.revision === Number(state.contractRevision || 0) &&
+      state.specApproval.identity === agreementIdentity(root, id);
     state.workspace.changeSourceHash = directoryHash(source);
     delete state.workspace.recovery;
     if (invalidated)
@@ -1806,6 +1813,9 @@ export function createSandboxRuntime({
       state.contractRevision = Number(state.contractRevision || 0) + 1;
     if (fingerprints.priorExecution !== fingerprints.nextExecution)
       state.executionRevision = Number(state.executionRevision || 0) + 1;
+    // Sync projects the already-approved bytes; its bookkeeping revision is
+    // not another product decision. Content changes still require approval.
+    if (approvedSource) state.specApproval.revision = Number(state.contractRevision || 0);
     if (invalidated && existsSync(proofPath(id))) rmSync(proofPath(id));
   }
 
@@ -1896,7 +1906,13 @@ export function createSandboxRuntime({
   });
 
   const prepareBuild = prepareBuildSandbox.bind(null, {
-    loadRuntime, validate, workspaceInspection, create, retryFailedSetups
+    root, loadRuntime, validate, workspaceInspection, create, retryFailedSetups,
+    synchronizeAgreement: (id) => {
+      const state = loadRuntime(id);
+      if (state.workspace?.changeSourceHash &&
+          state.workspace.changeSourceHash !== directoryHash(changePath(id)))
+        sync(id);
+    }
   });
 
   return {

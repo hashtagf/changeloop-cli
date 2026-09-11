@@ -83,7 +83,7 @@
     },
     {
       "name": "change resolve",
-      "usage": "change resolve <change> [--impact low|medium|high] [--coupling isolated|coupled] [--ambiguity clear|unclear] [--surface <glob,glob>] [--security <terms>] [--review] [--size xs|s|m|l] [--acceptance-not-required | --acceptance-required --acceptance-reason <why> [--acceptance-claims <ids>]] [--reopen-grounding --decision-ref <ref> --reopen-reason <why>] [--ci-not-required --decision-ref <ref>]",
+      "usage": "change resolve <change> [--impact low|medium|high] [--coupling isolated|coupled] [--ambiguity clear|unclear] [--surface <glob,glob>] [--security <terms>] [--review] [--size xs|s|m|l] [--acceptance-not-required | --acceptance-required --acceptance-reason <why> [--acceptance-claims <ids>]] [--reopen-grounding --decision-ref <ref> --reopen-reason <why>] [--ci-not-required --decision-ref <ref>] [--approve-spec --decision-ref <ref>] [--continue-review --decision-ref <ref>]",
       "audience": "agent",
       "kind": "write",
       "idempotent": true,

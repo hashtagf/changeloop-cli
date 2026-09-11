@@ -1,3 +1,4 @@
+import { reviewWindowRemaining, reviewWindowError, currentWaivers } from "../core/user-decisions.mjs";
 import { repairActionForWorkspace } from "../evidence/repair-runtime.mjs";
 import {
   lifecycleOutcome, lifecycleUserProjection, lifecycleUserState
@@ -421,9 +422,9 @@ export function coordinatorAction({
       ? ["rerun only invalidated evidence"] : ["apply the dependency-ordered repair batch"]
   });
 
-  if (proofCursor.status === "NEEDS_USER_DECISION" ||
+  if (proofPreflight?.status !== "READY" && (proofCursor.status === "NEEDS_USER_DECISION" ||
       proofCursor.route === "CONTRACT_DECISION_REQUIRED" ||
-      proofCursor.route === "NO_PROGRESS_DECISION") return envelope(id, "ASK_USER", {
+      proofCursor.route === "NO_PROGRESS_DECISION")) return envelope(id, "ASK_USER", {
     legacyAction: "REQUEST_DECISION", actor: "user",
     boundary: "user-authority",
     reason: "proof reached a material decision boundary",
@@ -495,8 +496,11 @@ export function createAdvanceRuntime({
   authorityStatusValue, authorityNext, readJson, proofAdvancePath, stableHash,
   proofReadinessValue = null, agentPlanValue = null,
   budgetDecisionValue = null,
+  nowMs = Date.now,
+  assertApproval = null,
   prepareBuild = null, runProof = null, runLand = null,
   recoverReviewBindings = null,
+  authorizeLand = null,
   hasLandGrant = () => false,
   recordPhase = null, output = console.log,
   capture = (operation) => operation(),
@@ -508,6 +512,7 @@ export function createAdvanceRuntime({
     try {
       return capture(() => {
         const state = loadRuntime(id);
+        assertApproval?.(id, state);
         if (state.status === "archived") return coordinatorAction({
           id, state, dispatch: { action: "build-complete" }, workspaceHash: null,
           stableHash
@@ -522,6 +527,9 @@ export function createAdvanceRuntime({
           if (proofReadinessValue) proofPreflight = proofReadinessValue(id, "prove", options);
         }
         const openRequests = authority.requests || [];
+        if (openRequests.some((request) => request.type === "review" &&
+            ["requested", "dispatched", "infrastructure-exhausted"].includes(request.status)) &&
+            !reviewWindowRemaining(state, nowMs())) throw reviewWindowError(id);
         let plan = null;
         if (agentPlanValue && ["run-in-session", "run-leased-in-session", "spawn-group"]
           .includes(dispatch.action)) {
@@ -535,7 +543,8 @@ export function createAdvanceRuntime({
           state,
           dispatch,
           workspaceHash,
-          latestReview: deliveredAiAttempts(id).at(-1) || null,
+          latestReview: currentWaivers(state, workspaceHash).some((row) => row.capability === "review")
+            ? null : deliveredAiAttempts(id).at(-1) || null,
           proofCursor: readJson(proofAdvancePath(id), {}),
           authorityRequests: openRequests,
           proofPreflight,
@@ -639,6 +648,7 @@ export function createAdvanceRuntime({
       summary: "The same authorized operation completed twice without changing delivery state",
       options: [
         { id: "revise", outcome: "revise the work or contract so the blocked result can change" },
+        { id: "land", outcome: "After inspecting remaining findings and the current diff, explicitly accept waivable evidence gaps and Land; conflicts and failed Apply still require recovery" },
         { id: "pause", outcome: "preserve the current state and stop this delivery attempt" }
       ],
       recommended: "revise"
@@ -664,10 +674,10 @@ export function createAdvanceRuntime({
     };
     try {
       return await captureAsync(async () => {
-        if (!through) return advanceValue(id);
-        if (!["build", "proven", "archived"].includes(through))
+        if (through && !["build", "proven", "archived"].includes(through))
           throw new Error("advance --through must be build|proven|archived");
         const initial = loadRuntime(id);
+        assertApproval?.(id, initial, { workspace: false });
         // Preparation is identity-reused and also owns recovery of failed
         // sandbox setup. Re-enter it while Build is active so a prior setup
         // failure cannot be bypassed by the next coordinator invocation.
@@ -675,6 +685,7 @@ export function createAdvanceRuntime({
           recordActivePhase("build");
           await prepareBuild(id);
         }
+        if (!through) return advanceValue(id);
         const targetResume = (value) => ({
           ...value,
           resume: resume(id, through),
@@ -704,6 +715,9 @@ export function createAdvanceRuntime({
             stage = "prove";
             operation = runProof;
           } else if (value.legacyAction === "LAND_READY" && through === "archived") {
+            // The explicit archived target authorizes Land only once the exact
+            // proof is ready. Earlier phases and inspection grant nothing.
+            if (!hasLandGrant(id) && authorizeLand) await authorizeLand(id);
             if (!hasLandGrant(id)) return targetResume(value);
             if (!runLand) return targetResume(value);
             stage = "land";

@@ -1,3 +1,4 @@
+import { currentWaivers } from "../core/user-decisions.mjs";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { measuredNumber } from "../core/measured-number.mjs";
@@ -1121,7 +1122,7 @@ export function createEvidenceContract({
       impact: state.impact,
       coupling: state.coupling,
       reviewRequired: Boolean(state.reviewRequired),
-      reviewPolicy: reviewPolicy(id, state, contract),
+      reviewPolicy: reviewPolicy(id, { ...state, waivers: [] }, contract),
       acceptance: resolvedAcceptance(id, state, contract),
       externalOperations: handoffContract(id).operations,
       claims: contract.claims,
@@ -1140,7 +1141,10 @@ export function createEvidenceContract({
     });
     const policy = foundationPolicy().review || {};
     const riskTiered = foundationPolicy().workflow.reviewPolicy === "risk-tiered";
-    return assembleReviewPolicy({ state, signals, riskRoute, policy, riskTiered });
+    const result = assembleReviewPolicy({ state, signals, riskRoute, policy, riskTiered });
+    const waived = currentWaivers(state, state.waivers?.some((row) => row.binding) ? relevantHash(id) : undefined)
+      .find((row) => row.capability === "review");
+    return waived ? { ...result, required: false, userWaiver: waived } : result;
   }
   
   const executionFingerprint = executionFingerprintOperation.bind(null, {

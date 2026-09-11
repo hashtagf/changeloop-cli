@@ -119,7 +119,7 @@ if (!phase && prePhaseDraftMutationAllowed()) {
 
 if (violations.length === 0) {
   if (pinnedCommand !== null) {
-    recordAudit({ phase, tool, mode, reason:
+    recordAudit({ phase, tool, mode, outcome: "rewritten", reason:
       "phase guard: pinned the reported shell directory as the Build workspace anchor" });
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
@@ -137,7 +137,8 @@ const changeShellRecovery = phase === "change" && tool === "Bash"
 const reason = `BLOCKED: phase guard (${phase || "unknown"}/${tool}): ${violations.join("; ")}. ` +
   `No mutation ran.${changeShellRecovery} Continue inside the active phase workspace, ` +
   "or ask the user only if scope or authority must change.";
-recordAudit({ phase: phase || "unknown", tool, mode, reason });
+recordAudit({ phase: phase || "unknown", tool, mode,
+  outcome: mode === "block" ? "blocked" : "audit-only", reason });
 
 if (mode === "block") {
   process.stdout.write(JSON.stringify({ decision: "block", reason }));
@@ -350,7 +351,7 @@ function recordAudit(row) {
     const auditPath = join(logDir, "guardrail-audit.jsonl");
     rotateAudit(auditPath);
     appendFileSync(auditPath, `${JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       timestamp: new Date().toISOString(),
       ...row,
     })}\n`, { mode: 0o600 });

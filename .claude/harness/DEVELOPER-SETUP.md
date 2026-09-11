@@ -1,6 +1,6 @@
 # Developer setup
 
-Change Loop v3.5.15 front-loads material decisions so Build and Prove can run to a
+Change Loop v3.5.17 front-loads material decisions so Build and Prove can run to a
 bounded conclusion without repeatedly interviewing the developer. The shipped
 workflow adds:
 
@@ -23,15 +23,15 @@ workflow adds:
 Before the first Change Loop packet on a developer machine:
 
 1. Install Node.js 20.19 or later.
-2. Verify `claude-foundation version` is `3.5.15` and the repository runtime API
-   is `34`. A delta between the two is advisory while both doctors still pass:
+2. Verify `claude-foundation version` is `3.5.17` and the repository runtime API
+   is `36`. A delta between the two is advisory while both doctors still pass:
    the CLI forwards to the runtime installed in the project, so an older CLI
    prints `warning: project runtime API … differs from CLI API …` and keeps
    working. Only a doctor that exits non-zero is a blocked machine.
 3. When the CLI itself is behind, upgrade it: `brew upgrade claude-foundation`.
-   If instead the pinned source is absent, clone tag `v3.5.15` from
+   If instead the pinned source is absent, clone tag `v3.5.17` from
    `Maximumsoft-Co-LTD/claude-foundation` into
-   `~/.local/share/claude-foundation/3.5.15`.
+   `~/.local/share/claude-foundation/3.5.17`.
 4. Install or refresh the runtime inside the project with
    `claude-foundation init <project-path>`. The equivalent entrypoint inside a
    source checkout is `bash /path/to/claude-foundation/install.sh

@@ -126,7 +126,7 @@ export async function routeRuntimeCommand(command, values, api) {
         flags,
         rest
       } = parseStrictCommandFlags(values, "change resolve", {
-        boolean: ["review", "acceptance-required", "acceptance-not-required", "reopen-grounding", "ci-not-required"],
+        boolean: ["review", "acceptance-required", "acceptance-not-required", "reopen-grounding", "ci-not-required", "approve-spec", "continue-review"],
         value: ["impact", "coupling", "security", "size", "ambiguity", "surface", "acceptance-reason", "acceptance-claims", "decision-ref", "reopen-reason"]
       });
       if (rest.length !== 1) die("change resolve requires exactly one change id");

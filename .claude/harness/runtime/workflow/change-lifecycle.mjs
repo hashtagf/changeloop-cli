@@ -1,3 +1,4 @@
+import { agreementIdentity, REVIEW_WINDOW_MS } from "../core/user-decisions.mjs";
 import {
   cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync,
   realpathSync, statSync, writeFileSync
@@ -335,7 +336,7 @@ export function deriveDraftBookkeeping(input, slugify) {
   if (draft.tasks.length === 1 && draft.tasks[0].verify) {
     for (const provider of Object.values(providers))
       if (["test-discovery", "command"].includes(provider.adapter) && !provider.command)
-        provider.command = ["sh", "-lc", draft.tasks[0].verify];
+        provider.command = ["sh", "-c", draft.tasks[0].verify];
   }
   if (draft.grounding?.claims?.length === claims.length)
     draft.grounding.claims = draft.grounding.claims.map((claim, index) => ({
@@ -843,6 +844,30 @@ export function createChangeLifecycle({
   }
 
   function resolveChange(id, flags) {
+    if (flags["approve-spec"] || flags["continue-review"]) {
+      const decisionRef = String(flags["decision-ref"] || "").trim();
+      if (!decisionRef) fail("This operation requires --decision-ref from an explicit user answer");
+      if (Object.keys(flags).some((key) => !["approve-spec", "continue-review", "decision-ref"].includes(key)) ||
+          flags["approve-spec"] && flags["continue-review"])
+        fail("Record one user decision at a time, separately from agreement edits");
+      const state = loadRuntime(id);
+      if (state.status === "archived") fail(`change '${id}' is already archived`);
+      if (flags["approve-spec"]) {
+        validate(id, "root", { quiet: true });
+        const current = loadRuntime(id);
+        current.specApproval = { required: true, identity: agreementIdentity(root, id),
+          revision: Number(current.contractRevision || 0), decisionRef, approvedAt: now() };
+        saveRuntime(current);
+      } else {
+        if (!state.reviewWindow) fail("No review window has started for this change");
+        const startedAt = now();
+        state.reviewWindowHistory = [...(state.reviewWindowHistory || []), state.reviewWindow];
+        state.reviewWindow = { startedAt, deadline: new Date(Date.parse(startedAt) + REVIEW_WINDOW_MS).toISOString(), decisionRef };
+        saveRuntime(state);
+      }
+      console.log(`DECISION RECORDED ${id}\n  next: claude-foundation advance ${id} --through ${flags["approve-spec"] ? "build" : "proven"}`);
+      return;
+    }
     const state = loadRuntime(id);
     applyGroundingReopen(state, flags);
     applyResolveAttributes(state, flags);
@@ -906,7 +931,10 @@ export function createChangeLifecycle({
         // as `change validate`, including OpenSpec strict lint when available.
         measureStage("change.validate", () => validate(id, "root"));
         bindClaudeSession(id, "change");
-        console.log(`AGREED ${id}\n  next: claude-foundation advance ${id} --through build`);
+        const pending = loadRuntime(id);
+        pending.specApproval = { required: true };
+        saveRuntime(pending);
+        console.log(`AGREED ${id}\n  inspect: openspec/changes/${id}/\n  awaiting user approval before Build\n  next: claude-foundation change resolve ${id} --approve-spec --decision-ref <user-decision>`);
       });
     } catch (error) {
       let rollbackIssues;
@@ -953,7 +981,7 @@ export function createChangeLifecycle({
     const stagedPath = join(transactionRoot, "next");
     const priorPath = join(transactionRoot, "prior");
     cpSync(basePath, stagedPath, { recursive: true, errorOnExist: true });
-    writeSemanticAmendment(stagedPath, compiled, slugify);
+    writeSemanticAmendment(stagedPath, compiled, slugify, { schema: state.schema });
     const priorState = structuredClone(state);
     let installed = false;
     try {

@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { createChangeLifecycle } from "../runtime/workflow/change-lifecycle.mjs";
+import { assertSpecApproval, reviewWindowRemaining, REVIEW_WINDOW_MS } from "../runtime/core/user-decisions.mjs";
 
 function writeJson(path, value) {
   mkdirSync(dirname(path), { recursive: true });
@@ -138,6 +139,37 @@ test("atomic start consumes its transient draft only after success", (t) => {
   value.lifecycle.startAtomic(value.draftPath, { consumeDraft: true });
   assert.equal(existsSync(value.draftPath), false);
   assert.equal(existsSync(join(value.changes, "atomic-change")), true);
+});
+
+test("spec approval is explicit, content-bound, and separate from edits", (t) => {
+  const value = fixture(t);
+  value.lifecycle.startAtomic(value.draftPath);
+  const statePath = join(value.runtime, "atomic-change.json");
+  const state = () => JSON.parse(readFileSync(statePath));
+  assert.throws(() => assertSpecApproval(value.root, "atomic-change", state()), { code: "SPEC_APPROVAL_REQUIRED" });
+  assert.throws(() => value.lifecycle.resolveChange("atomic-change", { "approve-spec": true }), /decision-ref/);
+  assert.throws(() => value.lifecycle.resolveChange("atomic-change", {
+    "approve-spec": true, "decision-ref": "fixture://approval", impact: "high"
+  }), /separately from agreement edits/);
+  value.lifecycle.resolveChange("atomic-change", { "approve-spec": true, "decision-ref": "fixture://approval" });
+  assert.doesNotThrow(() => assertSpecApproval(value.root, "atomic-change", state()));
+  writeFileSync(join(value.changes, "atomic-change", "proposal.md"), "Different behavior");
+  assert.throws(() => assertSpecApproval(value.root, "atomic-change", state()), { code: "SPEC_APPROVAL_REQUIRED" });
+});
+
+test("review continuation requires authority and preserves the previous window", (t) => {
+  const value = fixture(t);
+  value.lifecycle.startAtomic(value.draftPath);
+  const path = join(value.runtime, "atomic-change.json");
+  const state = JSON.parse(readFileSync(path));
+  state.reviewWindow = { deadline: "2026-09-01T00:30:00Z" };
+  writeJson(path, state);
+  assert.throws(() => value.lifecycle.resolveChange("atomic-change", { "continue-review": true }), /decision-ref/);
+  value.lifecycle.resolveChange("atomic-change", { "continue-review": true, "decision-ref": "fixture://continue" });
+  const next = JSON.parse(readFileSync(path));
+  assert.deepEqual(next.reviewWindowHistory, [state.reviewWindow]);
+  assert.equal(next.reviewWindow.decisionRef, "fixture://continue");
+  assert.equal(reviewWindowRemaining(next, Date.parse("2026-09-02T00:00:00Z")), REVIEW_WINDOW_MS);
 });
 
 test("atomic start removes change and runtime state after late validation failure", (t) => {

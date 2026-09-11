@@ -65,7 +65,12 @@ export function leaseAcquisitionRequest(context, id, taskId, flags) {
     context.fail(`task '${task.id}' is blocked by pending task(s): ${blockedBy.join(", ")}`);
   const durationMs = Number(context.policy().execution.leaseMinutes) * 60 * 1000;
   const expiresAt = new Date(context.nowMs() + durationMs).toISOString();
-  const keys = [...new Set(task.leaseKeys || task.resources || [])].sort();
+  // Also enforce the planner's shared-workspace serialization for callers of
+  // the compatibility acquire primitive. Different changes have isolated roots.
+  const keys = [...new Set([
+    ...(task.leaseKeys || task.resources || []),
+    `resource:lease-workspace:${id}:${task.repository || "root"}`
+  ])].sort();
   const taskLeasePath = join(context.leases, "tasks", id, `${task.id}.json`);
   const prior = context.exists(taskLeasePath)
     ? context.readJson(taskLeasePath, {}) : {};
@@ -76,6 +81,10 @@ export function acquireLeaseUnderLock(context) {
   const {
     id, task, owner, keys, prior, plan, expiresAt, taskLeasePath
   } = context;
+  const occupied = (context.workspaceLeases?.() || []).find((lease) =>
+    lease.taskId !== task.id && (lease.repository || "root") === (task.repository || "root"));
+  if (occupied)
+    throw new Error(`workspace '${task.repository || "root"}' conflicts with active task '${occupied.taskId}'`);
   const descriptors = context.resourceDescriptors();
   const renewal = leaseRenewalRows(descriptors, id, task.id, owner);
   const conflicts = leaseResourceConflicts(keys, descriptors, id, task.id, owner);
@@ -261,11 +270,14 @@ export function releaseLeaseUnderLock(context) {
     join(context.leases, "results", id, `${taskLease.taskId}.json`),
     { version: 1, ...taskLease, status: "observed", observedWrites, acceptedAt: context.now() }
   );
-  if (force) context.writeJson(index, {
+  if (force) {
+    context.remove(join(context.leases, "results", id, `${taskLease.taskId}.json`), { force: true });
+    context.writeJson(index, {
     ...taskLease, status: "taken-over", resources: [],
     executionAttempt: Math.max(1, Number(taskLease.executionAttempt || 0)),
     expiresAt: context.now(), releasedAt: context.now()
-  });
+    });
+  }
   else context.remove(index);
 }
 
@@ -343,7 +355,7 @@ export function createLeaseRuntime({
     const operation = acquireLeaseUnderLock.bind(null, {
       ...request,
       leases, resourceDescriptors, writeJson, now, readJson, stableHash,
-      leasePath, observedTaskSurface
+      leasePath, observedTaskSurface, workspaceLeases: () => active(id)
     });
     const result = withAcquisitionLock(operation);
     console.log(`LEASE ACQUIRED ${id}/${request.task.id}\n  owner: ${request.owner}\n  lease: ${result.leaseId}\n  generation: ${result.fencingGeneration}\n  attempt: ${result.executionAttempt}\n  expires: ${request.expiresAt}`);

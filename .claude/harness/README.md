@@ -36,6 +36,12 @@ Installed users should start with `WORKFLOW.md`. The rest of this page maps the
 runtime for maintainers and evidence authors; `EVIDENCE.md` is the canonical
 provider and receipt contract.
 
+Runtime API 35 adds spec approval through `change resolve --approve-spec`,
+an explicit review continuation through `change resolve --continue-review`,
+and content-bound review waivers through `change waive --capability review`.
+Each requires a real `--decision-ref`. Review dispatches share a persisted
+30-minute deadline. See [WORKFLOW.md](../../WORKFLOW.md) for the user contract.
+
 Every phase view is derived from one versioned execution contract. Semantic
 draft v3 compiles meaningful keys into stable cross-ledger IDs and writes only
 the OpenSpec artifacts the change needs. After Change, protocol-v5 `advance`
@@ -355,8 +361,9 @@ shared-resource concurrency and applies the model tiers in `foundation.json`.
 The complete plan is persisted under `.foundation/plans/`; stdout is a compact
 summary, or one group selected with `--group`. `packet --task` emits only the
 chosen task's claims, files, providers, and model. A one-task change recommends
-one agent. Multiple ready tasks with disjoint declared paths can fan out in the
-same repository; overlapping, dependent, or unknown scopes stay serialized.
+one agent. Ready tasks can fan out across independent repository workspaces.
+Tasks sharing a workspace stay serialized even with disjoint paths: result
+validation observes the repository diff and cannot attribute concurrent writes.
 The plan is advice and bounded authority for the native
 host; the harness does not invoke a model itself.
 
@@ -394,9 +401,11 @@ and the change that lands later synchronizes onto the moved target
 reports such overlaps as `overlaps`, for information. Only an explicit
 `[resources:]` token names something two changes cannot use at once (a shared
 database, a deploy target); those still block the plan and a concurrent proof
-run. Within one change, conflict scopes are hierarchical: disjoint paths let
-tasks run in parallel, and missing or ambiguous scope takes the exclusive
-repository key for that change's workers. All keys are acquired atomically.
+run. Within one change, each repository workspace has an exclusive lease key;
+path and contract scopes still bound task authority. All keys are acquired
+atomically. A force release discards any old accepted result; a completed task
+with unresolved lease authority is scheduled for verification without changing
+its checkbox, and recovery clears only after an accepted release.
 Proof records node diagnostics plus one aggregate graph proof, while Land
 persists a prepare-all snapshot and compare-and-swap revalidates it before each
 multi-remote mutation wave.
@@ -784,7 +793,10 @@ cannot be combined with `--through` or `--host-result`.
 `feedback <change>` is the read-only explanation surface. Its readiness uses
 current runtime receipt validity; `observedAt` identifies when it was read.
 Missing reviewer/repair measurements remain null, and partial reviewer timing
-is labeled. The dashboard separately exposes recorded status and freshness:
+is labeled. Repair timing is explicitly derived, covers both `advance` and
+legacy proof resumes, and merges overlapping intervals. It is elapsed
+fail-to-resume time, not a measurement of active editing. The dashboard
+separately exposes recorded status and freshness:
 receipt identity alone cannot establish current workspace validity, so a
 recorded passing proof is unverified until checked by the runtime.
 `feedback <change> --diagnostics` emits allowlisted metadata and provider aliases,
@@ -797,6 +809,16 @@ provides evidence of repair. Source-cohort hashing is lazy and failure-contained
 so ordinary commands do not pay the provenance cost. Metrics and feedback group
 provider receipts by command-execution identity; a group with multiple providers
 is explicitly non-independent even when it yields multiple capability receipts.
+
+Configured ephemeral reviewers ingest CLI-reported usage internally under stable
+session/turn identities; replayed imports do not add the same event twice.
+Missing cost stays null. Hook audit schema 2 separates enforcement `mode` from
+`outcome`: an anchor rewrite is `rewritten`, a refused mutation is `blocked`,
+and an audit-only violation is `audit-only`; mode alone is not a block count.
+
+Derived semantic-draft and amendment provider commands use a non-login shell
+to preserve the prepared PATH. Explicit provider commands retain their declared
+shell semantics; repository toolchain requirements still belong to the project.
 
 ## Playwright ownership
 

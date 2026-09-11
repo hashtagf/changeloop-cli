@@ -1,5 +1,13 @@
 # Build operating policy
 
+Before editing, including after a session restart, read the full requirements
+and scenarios for the returned tasks and their dependencies, plus relevant
+design decisions, diagrams, folder mapping, and evidence obligations at the
+packet's references. A scenario preview or hash is navigation, not the full
+agreement or proof that it was read. Follow truncated references to their
+source; resolve missing or contradictory material through the existing
+amendment/decision route. Preserve scope settled before this session.
+
 The protocol-v5 `advance` action is the current authority. Do not call lifecycle
 primitives unless its recovery explicitly names one. Update `tasks.md` only for
 the returned task after focused checks; the coordinator owns planning and phase
@@ -26,6 +34,11 @@ only when its action requests observed execution.
 
 For defect guards, test adjacent input partitions and source-language coercion
 boundaries before completing their tasks; do not stop at the reported repro.
+For UI outcomes, check that the required value is rendered and reachable, not
+only calculated. For evolving persisted or wire data, exercise the supported
+older representation. Map required critical cases to claims and executable
+observations through the existing agreement; discovered test tags alone do not
+add or prove acceptance criteria.
 
 Reuse an existing deterministic test command for every claim it actually
 observes, including compatibility and validation claims. Do not create a

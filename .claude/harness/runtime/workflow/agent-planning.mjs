@@ -441,32 +441,14 @@ export function createAgentPlanner({
   recordInstructionManifest, modelForTask, showPacket, fail,
   recordScheduler
 }) {
-  // Build resources are repo-qualified (`workspace:api`); evidence resources
-  // are a different vocabulary (`workspace-read`, `dev-server`). Judging build
-  // tasks with the evidence comparator made every pair of tasks in one
-  // repository conflict, so a single-repository change never planned more than
-  // one agent and maxParallelAgents did nothing. Two tasks in one repository
-  // are independent when their declared paths are disjoint — which is what
-  // `[paths:]` is for. An undeclared scope is still treated as the whole tree.
-  function pathScope(value) {
-    return String(value).replace(/[*?[].*$/, "").replace(/\/+$/, "");
-  }
-
-  function pathsOverlap(left, right) {
-    if (!left.length || !right.length) return true;
-    return left.some((one) => right.some((other) => {
-      const a = pathScope(one);
-      const b = pathScope(other);
-      if (!a || !b) return true;
-      return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
-    }));
-  }
-
+  // Lease release observes a whole repository diff, not per-process writes.
+  // Disjoint declared paths cannot establish which concurrent worker wrote
+  // a file. Serialize a shared workspace until writes have isolated provenance;
+  // independent repository workspaces can still run concurrently.
   function taskResourcesConflict(left, right) {
     const shared = left.resources.filter((resource) => right.resources.includes(resource));
-    if (!shared.length) return false;
-    if (shared.some((resource) => !resource.startsWith("workspace:"))) return true;
-    return pathsOverlap(left.paths || [], right.paths || []);
+    return shared.length > 0 || (left.leaseKeys || []).some((key) =>
+      (right.leaseKeys || []).some((held) => conflictKeysOverlap(key, held)));
   }
 
   function changeConflictKeys(changeId, state, repositories) {
@@ -500,15 +482,26 @@ export function createAgentPlanner({
         ...taskMetadata(task),
         authorityDigest: stableHash(task.text.replace(/\s+/g, " ").trim())
       }));
+    // A checkbox cannot restore authority abandoned by force release. Keep
+    // that task dispatchable for re-verification without rewriting tasks.md.
+    let requiresLeaseRecovery = false;
+    const schedulableTasks = allTasks.map((task) => {
+      if (!task.done) return task;
+      const leasePath = join(root, ".foundation", "leases", "tasks", id, `${task.id}.json`);
+      const lease = existsSync(leasePath) ? readJson(leasePath, {}) : null;
+      if (!lease?.leaseId) return task;
+      requiresLeaseRecovery = true;
+      return { ...task, done: false };
+    });
     const { tasks, completed } = enrichAgentTasks({ modelForTask, fail },
-      id, allTasks, repositories, selectedPolicy);
+      id, schedulableTasks, repositories, selectedPolicy);
     const schedulingWaves = [];
     const groups = groupAgentTasks(tasks, completed,
       selectedPolicy.execution.maxParallelAgents, taskResourcesConflict, fail,
       (wave) => schedulingWaves.push(wave));
     const contract = evidence(id);
     const claims = contract.claims;
-    const singleAgent = singleAgentExecutionEligible(tasks, claims);
+    const singleAgent = !requiresLeaseRecovery && singleAgentExecutionEligible(tasks, claims);
     const priorPlanPath = join(plans, `${id}.json`);
     const priorPlan = existsSync(priorPlanPath) ? readJson(priorPlanPath, {}) : {};
     const activeConflicts = activeRepositoryConflicts(id, repositories);

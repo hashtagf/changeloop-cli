@@ -23,6 +23,16 @@ returned bounded packet in this calling session, fill the pre-attributed
 response template, and record it; do not rerun the failed adapter. Final
 in-contract findings close only from their current claim/critical-case
 receipts—never AI round three or a generic redesign/split/pause question.
+All review dispatches share one persisted 30-minute window, including retries,
+fallbacks, and delta review; resuming does not reset it. At expiry, report
+completed findings and unreviewed scope. Let the user choose another 30-minute
+window, Land with explicit risk acceptance, or pause. Record an authorized
+extension through `change resolve <id> --continue-review --decision-ref <ref>`.
+Try in-contract repairs first. If repair cannot progress, explain what was
+tried and offer further investigation or Land with the remaining risks.
+Use `change waive <id> --capability <capability> --reason <remaining-risk>
+--decision-ref <ref>` only after the user's explicit decision, including review.
+The waiver binds the current workspace and agreement; it never creates a pass.
 Reopen one Decision Sheet only for changed behavior, compatibility, security,
 data, or rollout.
 

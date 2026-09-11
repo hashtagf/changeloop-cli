@@ -9,6 +9,7 @@ import {
   mutationProtocolResult,
   numericReportValue,
   parseJsonOutput,
+  parseAssertionSummaryOutput,
   parseNodeTestSpecOutput,
   parseTapOutput,
   playwrightAnnotationCriticalCases,
@@ -20,6 +21,18 @@ import {
   visitPlaywrightReport
 } from "../runtime/evidence/evidence-results.mjs";
 import { criticalCaseResult } from "../runtime/evidence/adapter-runtime.mjs";
+
+test("shell summary counts remain measured through host output filtering", () => {
+  assert.deepEqual(parseAssertionSummaryOutput(
+    "OUTPUT (last 5 lines):\n  first: ALL PASS (54/54 assertions)\n\n  second: ALL PASS (117/117 assertions)\n"),
+  { totalTests: 171, failed: 0, passed: 171, format: "assertion-summary", criticalCases: [] });
+  assert.deepEqual(parseAssertionSummaryOutput("suite: 2/5 assertion(s) FAILED\n"),
+    { totalTests: 5, failed: 2, passed: 3, format: "assertion-summary", criticalCases: [] });
+  for (const output of ["PASS: works", "suite: ALL PASS", "suite: ALL PASS (3/4 assertions)",
+    "suite: 6/5 assertion(s) FAILED", "suite: ALL PASS (1/1 assertions)\nsuite: ALL PASS (1/1 assertions)",
+    "suite: ALL PASS (999999999999999999/999999999999999999 assertions)"])
+    assert.equal(parseAssertionSummaryOutput(output), null, output);
+});
 
 test("all adapters share one typed evidence-result contract", () => {
   assert.deepEqual(evidenceResultValue({
