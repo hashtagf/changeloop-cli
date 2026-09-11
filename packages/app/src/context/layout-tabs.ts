@@ -1,4 +1,7 @@
 export const SESSION_OPEN_FILE_TAB = "open-file"
+// Reserved side-panel tab that frames a running dev server. Named "preview-pane"
+// rather than "preview" so it never reads as the ephemeral preview slot below.
+export const SESSION_PREVIEW_PANE_TAB = "preview-pane"
 
 export type SessionTabs = {
   active?: string
@@ -42,6 +45,14 @@ export function previewSessionTab(current: SessionTabState, tab: string): Sessio
 
 export function openSessionTab(current: SessionTabState, tab: string): SessionTabState {
   const preview = sessionTabPreview(current)
+  if (tab === SESSION_PREVIEW_PANE_TAB) {
+    // A durable panel, not a file: it never consumes the ephemeral preview slot.
+    return {
+      tabs: { all: [...current.tabs.all.filter((item) => item !== tab), tab], active: tab },
+      preview,
+    }
+  }
+
   if (tab === "review") {
     return {
       tabs: { all: current.tabs.all.filter((item) => item !== tab), active: tab },

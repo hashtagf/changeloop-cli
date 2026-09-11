@@ -47,12 +47,14 @@ import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import {
   SESSION_OPEN_FILE_TAB,
+  SESSION_PREVIEW_PANE_TAB,
   createOpenSessionFileTab,
   createSessionTabs,
   getTabReorderIndex,
   shouldShowFileTree,
   type Sizing,
 } from "@/pages/session/helpers"
+import { PREVIEW_TEXT, PreviewPanel } from "@/pages/session/preview-panel"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
@@ -182,6 +184,7 @@ export function SessionSidePanel(props: {
     fileBrowser: () => !!props.fileBrowserState,
   })
   const contextOpen = tabState.contextOpen
+  const previewPaneOpen = tabState.previewPaneOpen
   const openFileOpen = tabState.openFileOpen
   const panelTabs = tabState.panelTabs
   const openedTabs = tabState.openedTabs
@@ -391,6 +394,34 @@ export function SessionSidePanel(props: {
                                   </div>
                                 </Tabs.Trigger>
                               </Show>
+                              <Show when={previewPaneOpen()}>
+                                <Tabs.Trigger
+                                  value={SESSION_PREVIEW_PANE_TAB}
+                                  closeButton={
+                                    <TooltipKeybind
+                                      title={language.t("common.closeTab")}
+                                      keybind={command.keybind("tab.close")}
+                                      placement="bottom"
+                                      gutter={10}
+                                    >
+                                      <IconButton
+                                        icon="close-small"
+                                        variant="ghost"
+                                        class="h-5 w-5"
+                                        onClick={() => tabs().close(SESSION_PREVIEW_PANE_TAB)}
+                                        aria-label={language.t("common.closeTab")}
+                                      />
+                                    </TooltipKeybind>
+                                  }
+                                  hideCloseButton
+                                  onMiddleClick={() => tabs().close(SESSION_PREVIEW_PANE_TAB)}
+                                >
+                                  <div class="flex items-center gap-1.5">
+                                    <Icon name="eye" size="small" />
+                                    <span>{PREVIEW_TEXT.tab}</span>
+                                  </div>
+                                </Tabs.Trigger>
+                              </Show>
                               <SortableProvider ids={openedTabs()}>
                                 <For each={panelTabs()}>
                                   {(tab) => (
@@ -442,6 +473,20 @@ export function SessionSidePanel(props: {
                                   "bg-background-stronger": !settings.general.newLayoutDesigns(),
                                 }}
                               >
+                                <TooltipKeybind
+                                  title={PREVIEW_TEXT.open}
+                                  keybind=""
+                                  class="flex items-center"
+                                >
+                                  <IconButton
+                                    icon="eye"
+                                    variant="ghost"
+                                    iconSize="large"
+                                    class="!rounded-md"
+                                    onClick={() => void tabs().open(SESSION_PREVIEW_PANE_TAB)}
+                                    aria-label={PREVIEW_TEXT.open}
+                                  />
+                                </TooltipKeybind>
                                 <TooltipKeybind
                                   title={language.t("command.file.open")}
                                   keybind={command.keybind("file.open")}
@@ -495,6 +540,15 @@ export function SessionSidePanel(props: {
                               <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                                 <SessionContextTab />
                               </div>
+                            </Tabs.Content>
+                          </Show>
+
+                          <Show when={activeTab() === SESSION_PREVIEW_PANE_TAB}>
+                            <Tabs.Content
+                              value={SESSION_PREVIEW_PANE_TAB}
+                              class="flex flex-col h-full overflow-hidden contain-strict"
+                            >
+                              <PreviewPanel active={activeTab() === SESSION_PREVIEW_PANE_TAB} />
                             </Tabs.Content>
                           </Show>
 
@@ -605,6 +659,40 @@ export function SessionSidePanel(props: {
                                 </div>
                               </Tabs.Trigger>
                             </Show>
+                            <Show when={previewPaneOpen()}>
+                              <Tabs.Trigger
+                                value={SESSION_PREVIEW_PANE_TAB}
+                                closeButton={
+                                  <TooltipV2
+                                    value={
+                                      <>
+                                        {language.t("common.closeTab")}
+                                        <Show when={closeTabKeybind().length > 0}>
+                                          <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
+                                        </Show>
+                                      </>
+                                    }
+                                    placement="bottom"
+                                    gutter={10}
+                                  >
+                                    <IconButton
+                                      icon="close-small"
+                                      variant="ghost"
+                                      class="h-5 w-5"
+                                      onClick={() => tabs().close(SESSION_PREVIEW_PANE_TAB)}
+                                      aria-label={language.t("common.closeTab")}
+                                    />
+                                  </TooltipV2>
+                                }
+                                hideCloseButton
+                                onMiddleClick={() => tabs().close(SESSION_PREVIEW_PANE_TAB)}
+                              >
+                                <div class="flex items-center gap-1.5">
+                                  <Icon name="eye" size="small" />
+                                  <span>{PREVIEW_TEXT.tab}</span>
+                                </div>
+                              </Tabs.Trigger>
+                            </Show>
                             <For each={panelTabs()}>
                               {(tab) => (
                                 <Show
@@ -661,6 +749,19 @@ export function SessionSidePanel(props: {
                                 "bg-background-stronger": !settings.general.newLayoutDesigns(),
                               }}
                             >
+                              <TooltipV2
+                                value={PREVIEW_TEXT.open}
+                                placement="bottom"
+                                class="flex items-center"
+                              >
+                                <IconButtonV2
+                                  icon={<Icon name="eye" />}
+                                  variant="ghost-muted"
+                                  size="large"
+                                  onClick={() => void tabs().open(SESSION_PREVIEW_PANE_TAB)}
+                                  aria-label={PREVIEW_TEXT.open}
+                                />
+                              </TooltipV2>
                               <TooltipV2
                                 value={
                                   <>
@@ -723,6 +824,15 @@ export function SessionSidePanel(props: {
                             <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                               <SessionContextTab />
                             </div>
+                          </Tabs.Content>
+                        </Show>
+
+                        <Show when={activeTab() === SESSION_PREVIEW_PANE_TAB}>
+                          <Tabs.Content
+                            value={SESSION_PREVIEW_PANE_TAB}
+                            class="flex flex-col h-full overflow-hidden contain-strict"
+                          >
+                            <PreviewPanel active={activeTab() === SESSION_PREVIEW_PANE_TAB} />
                           </Tabs.Content>
                         </Show>
 

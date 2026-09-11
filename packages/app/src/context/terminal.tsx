@@ -103,6 +103,31 @@ type TerminalCacheEntry = {
 
 const caches = new Set<Map<string, TerminalCacheEntry>>()
 
+const OUTPUT_TAIL_LIMIT = 8000
+const [outputTails, setOutputTails] = createStore<Record<string, string>>({})
+
+/**
+ * Keep a bounded tail of live PTY output per project so other surfaces can read
+ * what a running process printed. Transient by design: nothing here is persisted.
+ */
+export function observeTerminalOutput(dir: string, chunk: string) {
+  if (!dir || !chunk) return
+  const next = `${outputTails[dir] ?? ""}${chunk}`
+  setOutputTails(dir, next.length > OUTPUT_TAIL_LIMIT ? next.slice(-OUTPUT_TAIL_LIMIT) : next)
+}
+
+export function terminalOutputTail(dir: string) {
+  return outputTails[dir] ?? ""
+}
+
+export function clearTerminalOutputTail(dir?: string) {
+  if (dir) {
+    setOutputTails(dir, "")
+    return
+  }
+  for (const key of Object.keys(outputTails)) setOutputTails(key, "")
+}
+
 const trimTerminal = (pty: LocalPTY) => {
   if (!pty.buffer && pty.cursor === undefined && pty.scrollY === undefined) return pty
   return {
@@ -129,6 +154,8 @@ export function clearWorkspaceTerminals(
     entry?.value.clear()
   }
 
+  // Output from terminals that no longer exist must not keep suggesting dead servers.
+  clearTerminalOutputTail(dir)
   void removePersisted(terminalPersistTarget(scope, dir), platform)
 
   if (scope !== ServerScope.local) return

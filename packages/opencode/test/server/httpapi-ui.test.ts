@@ -17,7 +17,7 @@ import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { ServerAuth } from "../../src/server/auth"
 import { authorizationRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
-import { serveEmbeddedUIEffect, serveUIEffect } from "../../src/server/shared/ui"
+import { DEFAULT_CSP, csp, cspForHtml, serveEmbeddedUIEffect, serveUIEffect } from "../../src/server/shared/ui"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
@@ -353,6 +353,20 @@ describe("HttpApi UI fallback", () => {
       expect(csp).toContain(`'sha256-${createHash("sha256").update(script).digest("base64")}'`)
       expect(csp).toContain("img-src 'self' data: https: blob:")
       expect(csp).toContain("connect-src * data: blob:")
+      // The session preview frames a dev server; nothing else is relaxed.
+      expect(csp).toContain("frame-src 'self' http: https:")
+      expect(csp).toContain("default-src 'self'")
+      expect(csp).toContain("style-src 'self' 'unsafe-inline'")
+      expect(csp).not.toContain("frame-src *")
+    }),
+  )
+
+  it.live("keeps one framing policy for embedded and proxied HTML", () =>
+    Effect.sync(() => {
+      expect(DEFAULT_CSP).toContain("frame-src 'self' http: https:")
+      expect(csp("abc")).toContain("frame-src 'self' http: https:")
+      expect(cspForHtml("<html></html>")).toContain("frame-src 'self' http: https:")
+      expect(DEFAULT_CSP).not.toContain("frame-ancestors")
     }),
   )
 

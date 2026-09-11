@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test"
+import { createMemo, createRoot } from "solid-js"
+import { createStore } from "solid-js/store"
 import {
   SESSION_OPEN_FILE_TAB,
+  SESSION_PREVIEW_PANE_TAB,
   closeSessionTab,
   openSessionTab,
   previewSessionTab,
   type SessionTabState,
 } from "./layout-tabs"
+import { createSessionTabs } from "@/pages/session/helpers"
 
 const state = (all: string[], active?: string, preview?: string): SessionTabState => ({
   tabs: { all, active },
@@ -78,5 +82,73 @@ describe("closeSessionTab", () => {
         "file://b.ts",
       ),
     ).toEqual(state(["file://a.ts", "file://c.ts"], "file://a.ts"))
+  })
+})
+
+describe("preview pane tab", () => {
+  test("appends and activates the pane without consuming the preview slot", () => {
+    expect(openSessionTab(state(["file://a.ts"], "file://a.ts", "file://a.ts"), SESSION_PREVIEW_PANE_TAB)).toEqual(
+      state(["file://a.ts", SESSION_PREVIEW_PANE_TAB], SESSION_PREVIEW_PANE_TAB, "file://a.ts"),
+    )
+  })
+
+  test("reactivates an already open pane without duplicating it", () => {
+    expect(
+      openSessionTab(state(["file://a.ts", SESSION_PREVIEW_PANE_TAB], "file://a.ts"), SESSION_PREVIEW_PANE_TAB),
+    ).toEqual(state(["file://a.ts", SESSION_PREVIEW_PANE_TAB], SESSION_PREVIEW_PANE_TAB))
+  })
+
+  test("closing the pane selects the left neighbour and keeps the other tabs", () => {
+    expect(
+      closeSessionTab(
+        state(["file://a.ts", SESSION_PREVIEW_PANE_TAB, "file://b.ts"], SESSION_PREVIEW_PANE_TAB),
+        SESSION_PREVIEW_PANE_TAB,
+      ),
+    ).toEqual(state(["file://a.ts", "file://b.ts"], "file://a.ts"))
+  })
+
+  const sessionTabs = (all: string[], active?: string) =>
+    createSessionTabs({
+      tabs: createMemo(() => ({ active: () => active, all: () => all })),
+      pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice("file://".length) : undefined),
+      normalizeTab: (tab) => tab,
+      review: () => true,
+      hasReview: () => true,
+      fileBrowser: () => true,
+    })
+
+  test("is an active, closable tab that is never treated as a file tab", () => {
+    createRoot((dispose) => {
+      const [store] = createStore({ ready: true })
+      expect(store.ready).toBe(true)
+      const result = sessionTabs(["file://a.ts", SESSION_PREVIEW_PANE_TAB], SESSION_PREVIEW_PANE_TAB)
+
+      expect(result.previewPaneOpen()).toBe(true)
+      expect(result.activeTab()).toBe(SESSION_PREVIEW_PANE_TAB)
+      expect(result.closableTab()).toBe(SESSION_PREVIEW_PANE_TAB)
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.panelTabs()).toEqual(["file://a.ts"])
+      dispose()
+    })
+  })
+
+  test("restores the pane as the fallback tab when nothing else is active", () => {
+    createRoot((dispose) => {
+      const result = sessionTabs([SESSION_PREVIEW_PANE_TAB])
+
+      expect(result.previewPaneOpen()).toBe(true)
+      expect(result.activeTab()).toBe(SESSION_PREVIEW_PANE_TAB)
+      dispose()
+    })
+  })
+
+  test("leaves existing review and context selection untouched", () => {
+    createRoot((dispose) => {
+      const result = sessionTabs(["context"], "context")
+
+      expect(result.previewPaneOpen()).toBe(false)
+      expect(result.activeTab()).toBe("context")
+      dispose()
+    })
   })
 })

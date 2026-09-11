@@ -13,7 +13,7 @@ import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { terminalFontFamily, useSettings } from "@/context/settings"
-import type { LocalPTY } from "@/context/terminal"
+import { observeTerminalOutput, type LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
@@ -663,6 +663,7 @@ export const Terminal = (props: TerminalProps) => {
 
           const data = typeof event.data === "string" ? event.data : ""
           if (!data) return
+          observeTerminalOutput(directory, data)
           output?.push(data)
           cursor += data.length
           seek = cursor

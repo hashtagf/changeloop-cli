@@ -2,9 +2,9 @@ import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { same } from "@/utils/same"
-import { SESSION_OPEN_FILE_TAB } from "@/context/layout-tabs"
+import { SESSION_OPEN_FILE_TAB, SESSION_PREVIEW_PANE_TAB } from "@/context/layout-tabs"
 
-export { SESSION_OPEN_FILE_TAB } from "@/context/layout-tabs"
+export { SESSION_OPEN_FILE_TAB, SESSION_PREVIEW_PANE_TAB } from "@/context/layout-tabs"
 
 const emptyTabs: string[] = []
 
@@ -38,6 +38,11 @@ export const createSessionTabs = (input: TabsInput) => {
       fileBrowser() &&
       (input.tabs().active() === SESSION_OPEN_FILE_TAB || input.tabs().all().includes(SESSION_OPEN_FILE_TAB)),
   )
+  const previewPaneOpen = createMemo(
+    () =>
+      input.tabs().active() === SESSION_PREVIEW_PANE_TAB ||
+      input.tabs().all().includes(SESSION_PREVIEW_PANE_TAB),
+  )
   const panelTabs = createMemo(
     () => {
       const seen = new Set<string>()
@@ -46,6 +51,7 @@ export const createSessionTabs = (input: TabsInput) => {
         .all()
         .flatMap((tab) => {
           if (tab === "context" || tab === "review") return []
+          if (tab === SESSION_PREVIEW_PANE_TAB) return []
           if (tab === SESSION_OPEN_FILE_TAB && !fileBrowser()) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
@@ -62,6 +68,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active
+    if (active === SESSION_PREVIEW_PANE_TAB) return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
@@ -69,6 +76,7 @@ export const createSessionTabs = (input: TabsInput) => {
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (previewPaneOpen()) return SESSION_PREVIEW_PANE_TAB
     if (review() && hasReview()) return "review"
     return "empty"
   })
@@ -80,6 +88,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const closableTab = createMemo(() => {
     const active = activeTab()
     if (active === "context") return active
+    if (active === SESSION_PREVIEW_PANE_TAB) return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (!openedTabs().includes(active)) return
     return active
@@ -88,6 +97,7 @@ export const createSessionTabs = (input: TabsInput) => {
   return {
     contextOpen,
     openFileOpen,
+    previewPaneOpen,
     panelTabs,
     openedTabs,
     activeTab,
