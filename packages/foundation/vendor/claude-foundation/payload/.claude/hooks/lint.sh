@@ -68,11 +68,12 @@ node_bin() {
 
 case "$FILE_PATH" in
   *.go)
-    # gofmt has no module dependency — always run it first.
+    # gofmt has no module dependency — always run it first. Formatting is
+    # the harness's job: it rewrites the file itself and reports only a file
+    # gofmt cannot parse, which the agent has to fix.
     if have gofmt; then
-      diff="$(gofmt -d "$FILE_PATH" 2>&1)" || true
-      if [ -n "$diff" ]; then
-        printf '── gofmt: %s not formatted ──\n%s\n' "$FILE_PATH" "$diff" >&2
+      if ! out="$(gofmt -w "$FILE_PATH" 2>&1)"; then
+        printf '── gofmt: %s does not parse ──\n%s\n' "$FILE_PATH" "$out" >&2
         exit 2
       fi
     fi

@@ -1,6 +1,6 @@
 name: foundation-rapid
 version: 1
-description: Low-impact isolated change with minimal artifacts
+description: Low-impact isolated change with minimal artifacts and concise delta specs
 
 artifacts:
   - id: proposal
@@ -9,6 +9,12 @@ artifacts:
     template: proposal.md
     instruction: Explain what changes, why, and why this is low-risk and isolated.
     requires: []
+  - id: specs
+    generates: specs/**/*.md
+    description: Concise delta requirements and scenarios, merged into openspec/specs at Land
+    template: spec.md
+    instruction: Compiled from the draft's requirements; one SHALL statement and its scenarios per requirement. A legacy packet declaring skip_specs has none.
+    requires: [proposal]
   - id: tasks
     generates: tasks.md
     description: Single implementation ledger

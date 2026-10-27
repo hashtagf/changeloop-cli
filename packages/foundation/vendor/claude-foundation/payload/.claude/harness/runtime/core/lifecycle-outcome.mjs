@@ -19,6 +19,8 @@ const INTERNAL_DECISION_KINDS = new Set([
   "review-invocation", "machine-state", "internal-recovery"
 ]);
 
+const hasText = (value) => typeof value === "string" && value.trim().length > 0;
+
 export function lifecycleOwner(actor, explicitOwner = null) {
   return explicitOwner || OWNER_BY_ACTOR.get(actor) || null;
 }
@@ -40,9 +42,23 @@ export function validateLifecycleOutcome(value) {
       throw new Error(`internal decision '${kind}' must not be delegated to the user`);
     if (!kind && value.boundary !== "land-authority")
       throw new Error("ASK_USER requires a work decision or Land authority boundary");
+    if (value.protocol >= 6) {
+      const options = value.decision?.options || [];
+      if (!value.decision?.summary || options.length < 2 ||
+          !options.every((row) => row.id && row.outcome) ||
+          !options.some((row) => row.id === "pause") ||
+          !options.some((row) => row.id === value.decision.recommended))
+        throw new Error("ASK_USER requires an actionable decision with alternatives, pause, and a recommendation");
+    }
   }
   if (value.action === "WAIT" && !["external", "harness"].includes(value.owner))
     throw new Error("WAIT requires an external or harness-owned resume condition");
+  if (value.action === "WAIT" && value.protocol >= 6 &&
+      (!value.wait?.owner || !value.wait?.condition || !value.wait?.checkCommand))
+    throw new Error("WAIT requires a named owner, condition, and checking route");
+  if (value.action === "REPAIR" && !hasText(value.command) && !hasText(value.instruction))
+    throw new Error(`REPAIR lifecycle outcome '${value.legacyAction || "(unnamed)"}' requires an ` +
+      "actionable 'command' or 'instruction' naming what to fix");
   if (value.action === "DONE" && value.owner !== "harness")
     throw new Error("DONE lifecycle outcomes belong to the harness");
   return value;
@@ -58,6 +74,7 @@ export function lifecycleOutcome(value) {
 }
 
 export function lifecycleUserState(value) {
+  if (value.paused === true && value.action === "WAIT") return "PAUSED";
   if (value.action === "DONE")
     return value.reached === "archived" ? "DELIVERED" : "TARGET_REACHED";
   if (value.action === "ASK_USER") return "NEEDS_DECISION";
@@ -90,12 +107,19 @@ export function lifecycleUserProjection(value) {
         id: option.id,
         outcome: option.outcome
       })),
-      recommended: value.decision.recommended || null
+      recommended: value.decision.recommended || null,
+      ...(value.decision.attemptedStrategies ? {
+        attemptedStrategies: value.decision.attemptedStrategies.map(({ action, reason, observations }) =>
+          ({ action, reason, observations }))
+      } : {}),
+      ...(value.decision.wait ? { wait: {
+        owner: value.decision.wait.owner, condition: value.decision.wait.condition
+      } } : {})
     } : { kind: "land-authority", summary: base.summary, options: [] }
   };
-  if (state === "WAITING_EXTERNAL") return {
+  if (state === "WAITING_EXTERNAL" || state === "PAUSED") return {
     ...base,
-    owner: value.actor || "external-owner",
+    owner: value.wait?.owner || value.actor || "external-owner",
     condition: value.wait?.condition || value.reason || null
   };
   if (Array.isArray(value.repositories)) return {

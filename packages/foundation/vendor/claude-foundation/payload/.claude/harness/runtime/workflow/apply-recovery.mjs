@@ -52,10 +52,8 @@ export function targetHeadMovedDecision({
         id: "inspect",
         outcome: "Compare the recorded base with the current target history before choosing."
       },
-      {
-        id: "abandon",
-        outcome: "Retire this change and reopen it against the current commit."
-      },
+      // Replay keeps the work; retiring the change is never offered for a
+      // moved base, because a fresh change would redo what sync preserves.
       { id: "pause", outcome: "Change nothing and leave both workspaces as they are." }
     ],
     recommended: "sync",
@@ -77,26 +75,37 @@ export const MANUAL_APPLY_STATUS = Object.freeze([
   "rolling-back", "manual-recovery", "recovering-backup", "settling-current"
 ]);
 
-export function defaultManualRecoveryDecision(transactionRoot) {
+// Keeping the current target is the one resolution that cannot lose bytes: it
+// overwrites nothing, the sandbox is then synchronized onto the kept content
+// and proved again. So the harness applies it itself and hands the divergent
+// paths to the agent as a notice. Restoring the backup replaces current
+// content and stays an explicit user choice.
+export function manualRecoveryDecision(transactionRoot, {
+  changeId = null,
+  summary = "An earlier apply stopped partway through rolling back and left the working tree in a state Foundation did not finish resolving.",
+  divergentPaths = [],
+  recoveryError = null
+} = {}) {
   return {
     kind: "manual-recovery",
-    summary: "An earlier apply stopped partway through rolling back and left the working tree in a state Foundation did not finish resolving.",
+    summary,
     options: [
       {
-        id: "inspect",
-        outcome: "Inspect the working tree against the recorded transaction backup before choosing a recovery."
-      },
-      {
         id: "keep-current",
-        outcome: "Preserve the current files and abandon automatic rollback."
+        outcome: "Keep the current target files (nothing is overwritten), then synchronize the sandbox onto them and prove again before Land continues."
       },
       {
         id: "restore-backup",
-        outcome: "Restore the recorded backup after explicitly resolving the divergence."
+        outcome: "Replace the divergent target files with the recorded pre-apply backup" + (changeId
+          ? `: 'claude-foundation advance ${changeId} --through archived --recover-apply restore-backup --decision-ref <user-decision>'.`
+          : ".")
       },
       { id: "pause", outcome: "Leave the journal pending and make no further changes." }
     ],
-    recommended: "inspect",
+    recommended: "keep-current",
+    automaticRecovery: "keep-current",
+    divergentPaths: (divergentPaths || []).slice(0, 50),
+    recoveryError,
     transactionRoot
   };
 }
@@ -140,8 +149,15 @@ export function recoverApplyJournal(context, {
 }) {
   if (MANUAL_APPLY_STATUS.includes(journal.status)) {
     if (!options.resolution) {
-      context.blockWithDecision(id, "apply-manual-recovery", journal.decision ||
-        defaultManualRecoveryDecision(transactionRoot));
+      // Journals written before automatic keep-current carry an older
+      // decision; the current one is rebuilt from the journal's own facts.
+      context.blockWithDecision(id, "apply-manual-recovery", manualRecoveryDecision(
+        transactionRoot, {
+          changeId: id,
+          ...(journal.decision?.summary ? { summary: journal.decision.summary } : {}),
+          divergentPaths: journal.divergentPaths || [],
+          recoveryError: journal.recoveryError || null
+        }));
       return;
     }
     context.settleApplyTransaction(journal, options.resolution, options.decisionRef);
@@ -209,7 +225,9 @@ export function createApplyRecovery({
         transactionId: journal.transactionId || entry.name,
         status: journal.status,
         counts: projectionCounts(journal.entries),
-        appliedPaths: (journal.appliedPaths || []).length
+        appliedPaths: (journal.appliedPaths || []).length,
+        divergentPaths: journal.divergentPaths || [],
+        recoveryError: journal.recoveryError || null
       });
     }
     return pending;

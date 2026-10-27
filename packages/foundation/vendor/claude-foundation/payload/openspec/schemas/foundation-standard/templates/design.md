@@ -1,12 +1,27 @@
 # Design
 
-> This file is conditional. Semantic draft v3 creates it only for a durable
+> This file is conditional. Semantic draft v4 creates it only for a durable
 > decision, diagram, integration, selected prototype, migration, compatibility,
 > rollout, rollback, or architecture constraint.
 
 ## Current state
 
 <Only load-bearing brownfield facts, verified against code.>
+
+<!-- Sections follow the outline in this order, rendered only when the draft's
+work type (declared or inferred from task paths) or fields need them:
+Overview, Current state, Domain language, Assumptions, Work type, Architecture,
+Tenancy, User flow, Runtime behavior, Domain model and modules, API contract,
+Event and job contract, Data model and migration, UI contract, Config contract,
+Integration contract, Public interface contract, Migration plan, Performance
+analysis, Dependency change, Deprecation plan, Infrastructure plan, Privacy
+assessment, Experiment design, Client release plan, Model card and evaluation
+plan, Bugfix analysis, Refactor invariants, Decisions, Quality attributes,
+Threat model, Failure matrix, Observability and usage, Compatibility and
+rollout, Capacity and cost, Backup and recovery, Test strategy, Dependencies,
+Risks, Selected prototype; appendices File map and Test map. The harness
+derives Work type, File map, and Test map; never author those headings. Thai
+headings from the outline are accepted. Empty sections are omitted. -->
 
 ## Domain language
 

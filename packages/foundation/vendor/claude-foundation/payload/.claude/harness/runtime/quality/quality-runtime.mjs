@@ -298,9 +298,14 @@ export function createQualityRuntime({
   function scopeIssues(change) {
     if (!change) return [];
     const state = loadRuntime(change);
-    const matcher = declaredSurfaceMatcher(change, state);
+    const matchers = new Map();
+    const matcher = (repositoryId) => {
+      if (!matchers.has(repositoryId))
+        matchers.set(repositoryId, declaredSurfaceMatcher(change, state, repositoryId));
+      return matchers.get(repositoryId);
+    };
     return canonicalChangedSurface(change, state)
-      .filter((row) => !matcher(row.path))
+      .filter((row) => !matcher(row.repositoryId)(row.path))
       .map((row) => ({ repository: row.repositoryId, path: row.path,
         reason: "changed path is outside the declared change surface" }));
   }

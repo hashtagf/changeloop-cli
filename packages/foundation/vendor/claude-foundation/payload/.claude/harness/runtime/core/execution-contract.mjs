@@ -9,6 +9,11 @@ function digest(value) {
 
 export function workspaceCapabilityValue(changeId, state) {
   const status = state?.status || "change";
+  if (state?.specApproval?.required && (!state.specApproval.identity ||
+      state.specApproval.revision !== Number(state.contractRevision || 0))) return {
+    phase: "change", mode: "agreement-only",
+    roots: [`openspec/changes/${changeId}`, ".foundation"]
+  };
   if (status === "change") return {
     phase: "change", mode: "agreement-only",
     roots: [`openspec/changes/${changeId}`, ".foundation"]
@@ -39,11 +44,25 @@ export function workspaceMutationDecision({
   target,
   foundationRoot,
   investigationRoot,
+  investigationStateRoot = null,
+  prototypeRoot = null,
+  investigationCompare = false,
   additionalRoots = [],
   landTransaction = false,
   contains
 }) {
   if (!target) return { allowed: false, reason: "mutation target is missing or invalid" };
+  if (capability.phase === "investigate") {
+    const allowed = [investigationRoot, investigationStateRoot,
+      ...(investigationCompare ? [prototypeRoot] : [])].filter(Boolean)
+      .some((root) => contains(target, root));
+    return allowed ? { allowed: true, reason: null } : {
+      allowed: false,
+      reason: investigationCompare
+        ? "Investigate may write only its record, note, state, or approved prototype directory"
+        : "Investigate may write only its record, note, or machine-owned state"
+    };
+  }
   if (contains(target, foundationRoot)) return { allowed: true, reason: null };
   if (capability.phase === "change") {
     const allowed = [...capability.roots, investigationRoot].filter(Boolean)

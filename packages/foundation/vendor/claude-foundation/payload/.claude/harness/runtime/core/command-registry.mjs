@@ -10,7 +10,7 @@ import { basename, dirname, join } from "node:path";
 // into `commands.json`, because a second copy of a description is a second
 // thing to keep current.
 const LOOP_COMMAND_ORDER = [
-  "investigate", "change", "build", "prove", "land", "changes", "dev"
+  "investigate", "change", "build", "prove", "land", "deliver", "changes", "dev"
 ];
 
 const RUNTIME_COMMAND_ALIASES = {
@@ -26,6 +26,7 @@ const RUNTIME_COMMAND_ALIASES = {
   "run-provider": "evidence run",
   prove: "proof finalize",
   "host-execution-import": "telemetry host-import",
+  "delivery-advance": "deliver advance",
   validate: "change validate"
 };
 

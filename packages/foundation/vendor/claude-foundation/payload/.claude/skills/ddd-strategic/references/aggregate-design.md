@@ -1,5 +1,18 @@
 # Aggregate design
 
+## Contents
+
+- [Principle 5: Size aggregates around invariants, not entities](#principle-5-from-skillmd-size-aggregates-around-invariants-not-entities)
+- [Principle 6: Separate internal domain events from cross-context integration events](#principle-6-from-skillmd-separate-internal-domain-events-from-cross-context-integration-events)
+- [What an aggregate actually is](#what-an-aggregate-actually-is)
+- [Vernon's four rules](#vernons-four-rules)
+- [The sizing test](#the-sizing-test)
+- [The canonical example: splitting the Scrum aggregate](#the-canonical-example-splitting-the-scrum-aggregate)
+- [Aggregates within bounded contexts](#aggregates-within-bounded-contexts)
+- [Aggregates and persistence](#aggregates-and-persistence)
+- [Aggregates and events](#aggregates-and-events)
+- [Common anti-patterns](#common-anti-patterns)
+
 ## Principle 5 (from SKILL.md): Size aggregates around invariants, not entities
 
 **Rule:** An aggregate is a *transactional consistency boundary* — the smallest set of entities and value objects that must change atomically to keep a business invariant true. Design aggregates *small*, reference other aggregates *by identity*, modify *one aggregate per transaction*, and let everything outside the boundary be *eventually consistent*. The test: "what business rule is invalidated if these two things are modified in separate transactions?" If you can't name one, they belong in different aggregates.

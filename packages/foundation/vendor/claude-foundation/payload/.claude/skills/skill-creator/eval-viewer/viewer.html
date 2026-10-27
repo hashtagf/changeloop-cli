@@ -1111,6 +1111,13 @@
     }
 
     // ---- Benchmark rendering ----
+    function fmtRunRate(result) {
+      if (!Number.isFinite(result.pass_rate)) return "—";
+      const rate = (result.pass_rate * 100).toFixed(0) + "%";
+      if (result.passed === undefined && result.total === undefined) return rate;
+      return rate + " (" + (result.passed ?? "—") + "/" + (result.total ?? "—") + ")";
+    }
+
     function renderBenchmark() {
       const data = EMBEDDED_DATA.benchmark;
       if (!data) return;
@@ -1138,9 +1145,10 @@
       html += '<table class="benchmark-table">';
 
       function fmtStat(stat, pct) {
-        if (!stat) return "—";
+        if (!stat || !Number.isFinite(stat.mean)) return "—";
         const suffix = pct ? "%" : "";
         const m = pct ? (stat.mean * 100).toFixed(0) : stat.mean.toFixed(1);
+        if (!Number.isFinite(stat.stddev)) return m + suffix + " ± —";
         const s = pct ? (stat.stddev * 100).toFixed(0) : stat.stddev.toFixed(1);
         return m + suffix + " ± " + s + suffix;
       }
@@ -1223,24 +1231,24 @@
 
             for (const run of configRuns) {
               const r = run.result || {};
-              const prClass = r.pass_rate >= 0.8 ? "benchmark-delta-positive" : r.pass_rate < 0.5 ? "benchmark-delta-negative" : "";
+              const prClass = !Number.isFinite(r.pass_rate) ? "" : r.pass_rate >= 0.8 ? "benchmark-delta-positive" : r.pass_rate < 0.5 ? "benchmark-delta-negative" : "";
               html += '<tr class="' + rowClass + '">';
               html += "<td>" + configLabel + "</td>";
               html += "<td>" + run.run_number + "</td>";
-              html += '<td class="' + prClass + '">' + ((r.pass_rate || 0) * 100).toFixed(0) + "% (" + (r.passed || 0) + "/" + (r.total || 0) + ")</td>";
+              html += '<td class="' + prClass + '">' + fmtRunRate(r) + "</td>";
               if (hasTime) html += "<td>" + (r.time_seconds != null ? r.time_seconds.toFixed(1) : "—") + "</td>";
-              if (hasErrors) html += "<td>" + (r.errors || 0) + "</td>";
+              if (hasErrors) html += "<td>" + (r.errors ?? "—") + "</td>";
               html += "</tr>";
             }
 
             // Average row
-            const rates = configRuns.map(r => (r.result || {}).pass_rate || 0);
-            const avgRate = rates.reduce((a, b) => a + b, 0) / rates.length;
-            const avgPrClass = avgRate >= 0.8 ? "benchmark-delta-positive" : avgRate < 0.5 ? "benchmark-delta-negative" : "";
+            const rates = configRuns.map(r => (r.result || {}).pass_rate).filter(Number.isFinite);
+            const avgRate = rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : null;
+            const avgPrClass = avgRate == null ? "" : avgRate >= 0.8 ? "benchmark-delta-positive" : avgRate < 0.5 ? "benchmark-delta-negative" : "";
             html += '<tr class="benchmark-row-avg ' + rowClass + '">';
             html += "<td>" + configLabel + "</td>";
             html += "<td>Avg</td>";
-            html += '<td class="' + avgPrClass + '">' + (avgRate * 100).toFixed(0) + "%</td>";
+            html += '<td class="' + avgPrClass + '">' + fmtRunRate({ pass_rate: avgRate }) + "</td>";
             if (hasTime) {
               const times = configRuns.map(r => (r.result || {}).time_seconds).filter(t => t != null);
               html += "<td>" + (times.length ? (times.reduce((a, b) => a + b, 0) / times.length).toFixed(1) : "—") + "</td>";

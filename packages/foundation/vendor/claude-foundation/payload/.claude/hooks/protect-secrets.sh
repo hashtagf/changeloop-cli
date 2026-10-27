@@ -25,9 +25,12 @@
 # round-trips, `c""at`) can still slip through a regex; treat this as one layer,
 # not the whole wall. Edit the pattern lists in is_secret_path() to tune.
 #
-# On a match the hook emits {"decision":"block","reason":...} (the same shape
-# dev-agent-guard.sh uses) so Claude Code denies the call and feeds the reason
-# back to the model. Otherwise it exits 0 and the tool proceeds.
+# On a match the hook never refuses the call. It rewrites it so the agent
+# still gets what it needs without the secret: a Read or Bash reader is pointed
+# at a redacted copy (keys and layout kept, values replaced by <redacted>), a
+# Grep that could print secret lines is scoped away from secret files or limited
+# to file names. Only when no redacted copy can be made (Node is missing) does
+# it fall back to refusing. FOUNDATION_SECRETS_GUARD=block restores refusals.
 
 set -uo pipefail
 
@@ -140,12 +143,60 @@ glob_is_docs_only() {
   return 1
 }
 
+# glob_is_scoped GLOB  ->  exit 0 if the glob names a file extension, so it
+# cannot reach a dotenv or key file (secret-shaped globs are refused earlier).
+# "*.ts" and "src/**/*.{ts,tsx}" are scoped; "*", "**/*", and "src/" are not.
+glob_is_scoped() {
+  case "$1" in
+    *'*'|*/|'') return 1 ;;
+    *.*) return 0 ;;
+  esac
+  return 1
+}
+
+# token_is_file TOKEN  ->  exit 0 if a Bash argument can name a file: it has a
+# path separator or a leading dot, or it exists. `process.env` and
+# `import.meta.env` are search patterns in `rg process.env src`, not files.
+token_is_file() {
+  local t="$1"
+  t="${t%\"}"; t="${t#\"}"; t="${t%\'}"; t="${t#\'}"
+  case "$t" in
+    */*|.*|~*) return 0 ;;
+  esac
+  [ -e "${event_cwd:-.}/$t" ]
+}
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+event_cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
+strict="$(printf '%s' "${FOUNDATION_SECRETS_GUARD:-}" | tr '[:upper:]' '[:lower:]')"
+
+# redacted_copy PATH  ->  prints the path of a redacted copy, or nothing.
+redacted_copy() {
+  command -v node >/dev/null 2>&1 || return 0
+  node "$HOOK_DIR/secret-redaction.mjs" "$1" "${event_cwd:-$PWD}" 2>/dev/null || true
+}
+
+# secret_absent PATH  ->  exit 0 if the named file does not exist. Nothing can
+# leak from it, so the call runs and the tool reports its own error.
+secret_absent() {
+  case "$1" in /*) [ ! -e "$1" ] ;; *) [ ! -e "${event_cwd:-$PWD}/$1" ] ;; esac
+}
+
+# rewrite FIELD VALUE CONTEXT  ->  run the call with one tool_input field replaced.
+rewrite() {
+  printf '%s' "$input" | jq -c --arg f "$1" --arg v "$2" --arg ctx "$3" \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse",
+      updatedInput: (.tool_input + {($f): $v}), additionalContext: $ctx}}'
+  exit 0
+}
+
 block() {
   jq -n --arg reason "$1 No secret contents were read; use a template, public key, or metadata-only search instead." \
     '{decision: "block", reason: $reason}'
   exit 0
 }
 
+SHOWN="secrets guard: showing a redacted copy, so keys and layout are visible and every value reads <redacted>. To change the real file, ask the user; never ask for secret values."
 REF="See .claude/hooks/protect-secrets.sh. Keep the blocked command internal. If secret-bearing work is genuinely required, ask for an external result or scope decision without requesting secret contents or suggesting that this guard be disabled."
 
 case "$tool_name" in
@@ -153,6 +204,9 @@ case "$tool_name" in
   Read)
     file_path="$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""')"
     if [ -n "$file_path" ] && is_secret_path "$file_path"; then
+      copy=""; [ "$strict" = block ] || copy="$(redacted_copy "$file_path")"
+      [ -z "$copy" ] || rewrite file_path "$copy" "$SHOWN"
+      [ "$strict" = block ] || ! secret_absent "$file_path" || exit 0
       block "BLOCKED by secrets guard: \"$file_path\" looks like a secret/credential file (.env, private key, credentials, …). Reading it would pull its contents into context. $REF"
     fi
     ;;
@@ -163,10 +217,17 @@ case "$tool_name" in
     g_glob="$(printf '%s' "$input" | jq -r '.tool_input.glob // ""')"
     g_mode="$(printf '%s' "$input" | jq -r '.tool_input.output_mode // ""')"
     g_pattern="$(printf '%s' "$input" | jq -r '.tool_input.pattern // ""')"
+    g_type="$(printf '%s' "$input" | jq -r '.tool_input.type // ""')"
     if [ -n "$g_path" ] && is_secret_path "$g_path"; then
+      copy=""; [ "$strict" = block ] || copy="$(redacted_copy "$g_path")"
+      [ -z "$copy" ] || rewrite path "$copy" "$SHOWN"
+      [ "$strict" = block ] || ! secret_absent "$g_path" || exit 0
       block "BLOCKED by secrets guard: Grep path \"$g_path\" is a secret/credential file; matching lines would leak its contents. $REF"
     fi
     if [ -n "$g_glob" ] && glob_targets_secret "$g_glob"; then
+      [ "$strict" = block ] || [ "$g_mode" != "content" ] ||
+        rewrite output_mode files_with_matches "secrets guard: this glob targets secret files, so the search lists matching file names without printing their lines."
+      [ "$strict" = block ] || exit 0
       block "BLOCKED by secrets guard: Grep glob \"$g_glob\" targets secret/credential files; with output_mode \"content\" this would leak their contents. Narrow the glob to exclude .env/credential files. $REF"
     fi
     # is_secret_path is a *filename* matcher, so a directory path with no glob
@@ -178,10 +239,20 @@ case "$tool_name" in
     # proves no secret file could ever match (glob_is_docs_only), so a search
     # scoped to "*.md" for documentation mentioning "password" or "API_KEY"
     # is not treated the same as an unscoped repo-wide leak.
-    if [ "$g_mode" = "content" ] && [ -n "$g_pattern" ] &&
-       { [ -z "$g_glob" ] || ! glob_is_docs_only "$g_glob"; } &&
+    # A file type, a regular file, or a glob that names an extension keeps
+    # the search out of dotenv and key files, so `password` in `*.ts` during
+    # auth work is ordinary code search.
+    if [ "$g_mode" = "content" ] && [ -n "$g_pattern" ] && [ -z "$g_type" ] &&
+       ! { [ -n "$g_path" ] && [ -f "$g_path" ]; } &&
+       { [ -z "$g_glob" ] || { ! glob_is_docs_only "$g_glob" && ! glob_is_scoped "$g_glob"; }; } &&
        printf '%s' "$g_pattern" | grep -Eqi \
          '(api[_-]?key|secret|passwd|password|private[_-]?key|access[_-]?token|auth[_-]?token|bearer|credential|client[_-]?secret|aws_[a-z_]*key)'; then
+      if [ "$strict" != block ]; then
+        # Keep this exclusion in step with is_secret_path's deny-lists.
+        [ -n "$g_glob" ] || rewrite glob '!{**/.env,**/.env.*,**/*.env,**/*.pem,**/*.key,**/*.pfx,**/*.p12,**/*.jks,**/*.keystore,**/*.kdbx,**/*.ppk,**/*.gpg,**/id_rsa,**/id_dsa,**/id_ecdsa,**/id_ed25519,**/.ssh/**,**/.gnupg/**,**/.npmrc,**/.pypirc,**/.netrc,**/_netrc,**/.htpasswd,**/.dockercfg,**/auth.json,**/*service*account*.json,**/*-key.json,**/*_key.json,**/*secret*,**/*credential*}' \
+          "secrets guard: this credential-shaped search skips secret files (.env, keys, credentials) so their values are never printed."
+        rewrite output_mode files_with_matches "secrets guard: this credential-shaped search lists matching file names without printing lines, because its glob could reach secret files."
+      fi
       block "BLOCKED by secrets guard: Grep pattern \"$g_pattern\" with output_mode \"content\" would print credential-shaped lines from every matching file, including .env files under \"${g_path:-the working directory}\". Use output_mode \"files_with_matches\" to locate them without printing their contents. $REF"
     fi
     ;;
@@ -189,6 +260,7 @@ case "$tool_name" in
   # ---- Bash --------------------------------------------------------------
   Bash)
     cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // ""')"
+    event_cwd="$(printf '%s' "$input" | jq -r '.cwd // ""')"
     [ -n "$cmd" ] || exit 0
 
     # (1) Neutralise quoted spans first, so a secret filename that only appears
@@ -265,13 +337,24 @@ case "$tool_name" in
       # shellcheck disable=SC2086 -- intentional word-splitting
       set -- $args
       for tok in "$@"; do
-        if is_secret_path "$tok"; then found="$tok"; break; fi
+        if is_secret_path "$tok" && token_is_file "$tok"; then found="$tok"; break; fi
       done
       [ -n "$found" ] && break
     done <<EOF
 $segments
 EOF
 
+    if [ -n "$found" ] && [ "$strict" != block ]; then
+      copy="$(redacted_copy "$found")"
+      if [ -n "$copy" ]; then
+        # Every spelling of the secret operand in the command reads the copy.
+        rewritten="$(FOUND="$found" COPY="$copy" CMD="$cmd" node -e '
+          const { FOUND: found, COPY: copy, CMD: cmd } = process.env;
+          process.stdout.write(cmd.split(found).join(copy));')"
+        rewrite command "$rewritten" "$SHOWN The command ran against the redacted copy."
+      fi
+      ! secret_absent "$found" || exit 0
+    fi
     if [ -n "$found" ]; then
       block "BLOCKED by secrets guard: this Bash command reads \"$found\", a secret/credential file, into context. $REF"
     fi

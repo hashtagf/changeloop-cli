@@ -1,9 +1,12 @@
 ---
 name: queue-fundamentals
-description: "Design, implement, review, or debug cross-process asynchronous work: brokers, streams, jobs, workers, pub/sub, and DB-backed queues. Covers queue shape, delivery semantics, idempotency, acknowledgement, retries/DLQ, ordering, backpressure, and transactional outbox. Use after architecture-fundamentals decides an async boundary belongs. Skip in-process async; use concurrency-fundamentals there."
+description: "Design cross-process jobs, brokers, streams, durable queues, delivery semantics, idempotency, retries, ordering, and backpressure. Use after choosing an async boundary. Record contracts in OpenSpec; skip in-process async and Change Loop worker leases."
 ---
 
 # Queue fundamentals
+
+Verify effect-plus-ack across crash/replay. Broker retry limits do not impose
+a product-repair retry ceiling.
 
 Use this as the primary skill when work crosses a process through durable async
 delivery. Treat at-least-once delivery as the default unless the broker contract

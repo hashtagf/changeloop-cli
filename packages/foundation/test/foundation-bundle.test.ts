@@ -1,5 +1,5 @@
 import path from "path"
-import { mkdir, mkdtemp, rm, writeFile } from "fs/promises"
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "fs/promises"
 import { afterEach, describe, expect, test } from "bun:test"
 import { createEmbeddedFoundationBundle } from "../src/foundation-bundle.js"
 
@@ -26,10 +26,55 @@ describe("Foundation build bundle", () => {
 
     expect(result.manifest.files).toContainEqual({
       path: "install-opencode.sh",
-      sha256: "67b216d86c8d6dfc1e6ae10a16141eb646665ff3b0b3878e20d27d3bd558acb0",
+      sha256: "b93bac292da789f48b3167e86375be7cfb5a83a73d6f80eb6075bf3bd9b99c78",
       mode: 0o755,
     })
     expect(result.source).toContain('"payload/install-opencode.sh"')
+  })
+
+  test("shipped vendor bundle is the tagged Foundation 3.6.8 release", async () => {
+    const vendor = path.resolve(import.meta.dir, "../vendor/claude-foundation")
+
+    const result = await createEmbeddedFoundationBundle(vendor)
+    const protocol = await Bun.file(path.join(vendor, "payload/.claude/harness/protocol.json")).json()
+
+    expect(result.manifest).toMatchObject({
+      release: "v3.6.8",
+      version: "3.6.8",
+      tagged: true,
+      commit: "402a2eb7c5784816657cfd00bd4c1f5833e07926",
+    })
+    expect(await Bun.file(path.join(vendor, "payload/VERSION")).text()).toBe("3.6.8\n")
+    expect(protocol).toMatchObject({ runtime: "3.6.8", runtimeApi: "42" })
+  })
+
+  test("shipped vendor omits harness tests and fixtures and stays within the scan depth limit", async () => {
+    const vendor = path.resolve(import.meta.dir, "../vendor/claude-foundation")
+    const root = path.resolve(import.meta.dir, "../../..")
+    const manifest = await Bun.file(path.join(vendor, "manifest.json")).json()
+
+    for (const file of manifest.files) {
+      expect(file.path.startsWith(".claude/harness/tests/")).toBe(false)
+      expect(file.path.startsWith(".claude/harness/fixtures/")).toBe(false)
+    }
+    const harness = await readdir(path.join(vendor, "payload/.claude/harness"))
+    expect(harness).not.toContain("tests")
+    expect(harness).not.toContain("fixtures")
+    const files = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: vendor, dot: true, onlyFiles: true }))
+    const depth = Math.max(
+      ...files.map((file) => path.relative(root, path.join(vendor, file)).split(path.sep).length - 1),
+    )
+    expect(depth).toBeLessThanOrEqual(12)
+  })
+
+  test("every shipped payload file matches its manifest checksum on disk", async () => {
+    const vendor = path.resolve(import.meta.dir, "../vendor/claude-foundation")
+    const manifest = await Bun.file(path.join(vendor, "manifest.json")).json()
+
+    for (const file of manifest.files) {
+      const bytes = await Bun.file(path.join(vendor, "payload", file.path)).bytes()
+      expect(new Bun.CryptoHasher("sha256").update(bytes).digest("hex")).toBe(file.sha256)
+    }
   })
 
   test("payload drift blocks bundle generation", async () => {

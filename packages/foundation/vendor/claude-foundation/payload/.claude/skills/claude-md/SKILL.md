@@ -1,39 +1,21 @@
 ---
 name: claude-md
-description: "Generate, tighten, or update the root CLAUDE.md for an existing repository. Use when the user asks to create or revise the agent-facing project guide. Ground it in actual code and preserve hand-authored rules. Produce a concise nine-section index: Project Overview, Tech stack, Architecture, Domain Model, Folder Structure, Current State, Team Agent, Roadmap, and Common Command. Use init-project-docs for deep human-facing documentation."
+description: "Create or revise a repository's concise agent-facing CLAUDE.md index from verified sources while preserving house rules. Use for project-guide requests. Skip deep onboarding documentation and transient workflow status; use init-project-docs for human-facing docs."
 ---
 
 # Revise CLAUDE.md
 
-`CLAUDE.md` loads every session. Keep it small, current, and traceable to files
-actually read. Preserve repository-owned instructions verbatim unless the user
-explicitly asks to change them.
+Keep the always-loaded guide concise, source-grounded, and current. Preserve
+hand-authored house rules and link canonical documentation instead of copying it.
 
-## Fixed shape
+Read [guide workflow](references/guide-workflow.md) for the nine-section shape
+and preservation rules before editing. Inspect real manifests, entry points,
+commands, and docs. Never infer shipped status from a commit or roadmap entry.
 
-Use one `#` title and these nine `##` sections; avoid deeper headings:
+Keep human intent, durable instructions, and factual project context distinct
+from agent summaries. Label missing evidence and preserve exact user wording
+when scope or authority depends on it.
 
-1. **Project Overview** — purpose, audience, entry point, one-command run.
-2. **Tech stack** — versions from manifests and lockfiles.
-3. **Architecture** — top components and boundaries; link deep docs.
-4. **Domain Model** — real entities and important relationships.
-5. **Folder Structure** — top-level nodes and purpose.
-6. **Current State** — built, active, and known gaps grounded in code/specs.
-7. **Team Agent** — actual `.claude/agents/*.md`, or `none`.
-8. **Roadmap** — only repository roadmap/milestones/TODO; otherwise say none.
-9. **Common Command** — exact run/build/test/lint commands from project files.
-
-## Workflow
-
-1. Read the existing `CLAUDE.md` and identify protected house rules.
-2. Inspect only authoritative project sources for each section.
-3. Reorganize and compress; link existing docs instead of copying them.
-4. Verify every command and path, check heading depth, and review the diff for
-   lost instructions or invented facts.
-
-Name environment variables but never values. State an honest unknown instead of
-filler. Do not copy Foundation runtime state, active task progress, receipts, or
-ephemeral context into this always-loaded file.
-
-Use `init-project-docs` when the user needs the detailed `docs/` suite; this
-skill should link that suite rather than duplicate it.
+This guide is product documentation, not a task ledger or proof store.
+Use `init-project-docs` for deep onboarding docs. Within an active change,
+edit only returned paths and resume its harness action.

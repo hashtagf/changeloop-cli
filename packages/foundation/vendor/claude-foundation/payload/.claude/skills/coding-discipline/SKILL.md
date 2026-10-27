@@ -1,9 +1,12 @@
 ---
 name: coding-discipline
-description: "Resolve unclear scope, consequential assumptions, speculative complexity, or diff-shape risk before coding. Use when the always-on conduct digest is insufficient: several plausible interpretations remain, the proposed solution may exceed the request, or unrelated edits may enter the change. This is a conduct aid, not a construction skill. Skip routine work whose scope, outcome, and evidence are already clear."
+description: "Resolve consequential assumptions, scope ambiguity, speculative complexity, or unrelated diff growth before implementation. Verify facts and choose the smallest adequate solution. Skip routine settled work; this conduct skill does not grant lifecycle or external-action authority."
 ---
 
 # Coding discipline
+
+Keep comments for non-obvious constraints and public contracts. Prove guards
+unnecessary before removal; uncertainty is not grounds for deletion.
 
 Use this only when the concise conduct rules in `.claude/rules/fundamentals.md`
 do not resolve the task. It selects a safe working stance; the primary
@@ -34,3 +37,5 @@ construction skill owns technical design and Foundation owns lifecycle/proof.
 Reference: read `references/details.md` only when a rule needs rationale or a
 worked application. Then load the construction/process skill for the actual
 technical decision.
+
+For cleanup, read [residue removal](references/cleanup.md).

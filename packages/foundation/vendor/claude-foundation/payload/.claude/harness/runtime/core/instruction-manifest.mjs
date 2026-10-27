@@ -1,20 +1,11 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { sortedJson } from "./trust.mjs";
 
 export const INSTRUCTION_MANIFEST_SCHEMA_VERSION = 1;
 
-function canonicalValue(value) {
-  if (Array.isArray(value)) return value.map(canonicalValue);
-  if (value && typeof value === "object")
-    return Object.fromEntries(Object.keys(value).sort()
-      .map((key) => [key, canonicalValue(value[key])]));
-  return value;
-}
-
-export function canonicalJson(value) {
-  return JSON.stringify(canonicalValue(value));
-}
+export { sortedJson as canonicalJson };
 
 export function sha256(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -109,7 +100,7 @@ export function createInstructionManifest({
     dispatch,
     execution
   };
-  return { ...manifest, manifestDigest: sha256(canonicalJson(manifest)) };
+  return { ...manifest, manifestDigest: sha256(sortedJson(manifest)) };
 }
 
 export function instructionManifestShapeReason(manifest) {
@@ -126,7 +117,7 @@ export function verifyInstructionManifest(manifest) {
   const shapeReason = instructionManifestShapeReason(manifest);
   if (shapeReason) return { valid: false, reason: shapeReason };
   const { manifestDigest, ...unsigned } = manifest;
-  const expected = sha256(canonicalJson(unsigned));
+  const expected = sha256(sortedJson(unsigned));
   return manifestDigest === expected
     ? { valid: true, reason: null, digest: expected }
     : { valid: false, reason: "digest-mismatch", digest: expected };

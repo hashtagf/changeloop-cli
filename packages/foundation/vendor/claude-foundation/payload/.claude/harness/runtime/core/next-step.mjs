@@ -22,12 +22,29 @@ const NEXT_BY_STATUS = {
   change: "advance --through build",
   building: "advance --through build",
   proven: "advance",
-  applied: "advance --through archived",
-  landing: "advance --through archived"
+  applied: "advance --through archived"
 };
 
-export function nextCommand(status, id) {
+const THROUGH_RANK = { build: 1, proven: 2, archived: 3 };
+
+// The furthest `advance --through` target already requested for a change (the
+// advance coordinator records it), never below what the user's approval
+// already covers: an approved spec authorizes Prove, so a Build-only route
+// would be a bounce. Land itself stays behind its own grant; this names only
+// the route that makes progress, so a printed resume never walks back.
+export function resumeThrough(state, floor = "build") {
+  const asked = THROUGH_RANK[state?.requestedThrough] ? state.requestedThrough : null;
+  const base = floor === "build" && state?.specApproval?.identity ? "proven" : floor;
+  return asked && THROUGH_RANK[asked] > THROUGH_RANK[base] ? asked : base;
+}
+
+export function nextCommand(status, id, state = null) {
   const operation = NEXT_BY_STATUS[status];
+  const floor = { change: "build", building: "build", "stale-proof": "proven" }[status];
+  const through = state && (floor || status === "proven")
+    ? resumeThrough(state, floor || "proven") : null;
+  if (through && operation && (floor || through === "archived"))
+    return `claude-foundation advance ${id} --through ${through}`;
   const [name, ...args] = operation ? operation.split(" ") : [];
   return operation
     ? `claude-foundation ${name} ${id}${args.length ? ` ${args.join(" ")}` : ""}`
@@ -37,8 +54,8 @@ export function nextCommand(status, id) {
 // `validate` has just performed the operation the canonical map recommends for
 // a change still in `change` status, so echoing it back sends the reader in a
 // circle at exactly the moment they asked what comes next.
-export function nextAfterValidate(status, id) {
-  return status === "change" ? `/build ${id}` : nextCommand(status, id);
+export function nextAfterValidate(status, id, state = null) {
+  return status === "change" ? `/build ${id}` : nextCommand(status, id, state);
 }
 
 export const LIFECYCLE_STATUSES = Object.keys(NEXT_BY_STATUS);

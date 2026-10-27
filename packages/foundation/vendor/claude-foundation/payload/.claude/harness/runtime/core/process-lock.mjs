@@ -23,7 +23,8 @@ export function isProcessAlive(pid) {
 export function acquireProcessLock(path, {
   now = () => new Date().toISOString(),
   residueMs = 10_000,
-  reaperStaleMs = 60_000
+  reaperStaleMs = 60_000,
+  isAlive = isProcessAlive
 } = {}) {
   mkdirSync(dirname(path), { recursive: true });
   const token = randomBytes(16).toString("hex");
@@ -50,7 +51,12 @@ export function acquireProcessLock(path, {
       } catch {
         return true;
       }
-      if (residue || (current?.token && !isProcessAlive(Number(current.pid)))) {
+      if (residue || (current?.token && !isAlive(Number(current.pid)))) {
+        // The dead holder may have released, and a live contender acquired a
+        // new descriptor, after the read above. Removing that one put two
+        // writers in the critical section and lost an update. Only the dead
+        // descriptor itself is removed; while it exists no one can replace it.
+        if ((safeReadJson(path)?.token ?? null) !== (current?.token ?? null)) return false;
         rmSync(path, { force: true });
         return true;
       }

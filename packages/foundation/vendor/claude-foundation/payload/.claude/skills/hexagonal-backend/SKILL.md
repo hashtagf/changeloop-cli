@@ -1,9 +1,12 @@
 ---
 name: hexagonal-backend
-description: Structure one backend service with ports and adapters when business logic must remain independent of frameworks, storage, brokers, or external APIs. Use for dependency direction, use-case ownership, driving/driven ports, boundary mapping, and layer-focused tests. Skip trivial CRUD with no domain policy or replacement/test-isolation pressure.
+description: "Design dependency direction and use-case ownership inside one backend service using narrow ports and adapters. Use when domain policy needs framework/storage isolation. Record consequential boundaries in OpenSpec; skip trivial CRUD and cross-service architecture."
 ---
 
 # Hexagonal backend
+
+Avoid pass-through abstractions. Exercise real adapter serialization; mock
+only at a genuine external seam.
 
 Use this as the primary skill when the difficult decision is dependency
 direction or use-case ownership.

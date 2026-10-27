@@ -1,12 +1,12 @@
 ---
 name: land
-description: Land and archive a proven Foundation change after explicit authority. Use when the user invokes land or explicitly asks Codex to apply a proven change, commit, publish, or prepare its reviewed delivery.
+description: "Apply and archive a proven Change Loop change with explicit Land authority through advance. Preserve target HEAD/index and recover the same transaction. Route standalone Git requests to git-workflow and deployment or publication to delivery-engineering."
 ---
 
 Treat the text after `$land` as the command arguments. Read
 `../../commands/land.md` completely and follow it as the canonical workflow.
-Do not treat skill invocation alone as authority for commit, push, PR, merge,
-or archive actions that the command contract keeps gated.
+An explicit user instruction to Land supplies Land authority; automatic skill
+selection does not. Land never grants commit, push, PR, or merge authority.
 
 Obey the packet's convergent gate contract. Execute every safe automatic
 recovery batch, rerun only invalidated checks, and continue without a

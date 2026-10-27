@@ -1,88 +1,52 @@
-# Running and evaluating test cases
+# Running and evaluating skill cases
 
-Companion to the "Running and evaluating test cases" phase of [[skill-creator]]. This section is one continuous sequence — don't stop partway through. Do NOT use `/skill-test` or any other testing skill.
+[skill-evaluation](../../skill-evaluation/SKILL.md) and its
+[procedure](../../skill-evaluation/references/procedure.md) own experiments.
+Use these resources for formats and presentation, not another execution loop.
 
-Put results in `<skill-name>-workspace/` as a sibling to the skill directory. Within the workspace, organize results by iteration (`iteration-1/`, `iteration-2/`, etc.) and within that, each test case gets a directory (`eval-0/`, `eval-1/`, etc.). Don't create all of this upfront — just create directories as you go.
+## Prepare
 
-## Step 1: Spawn all runs (with-skill AND baseline) in the same turn
+Pin the original version before editing; a new skill uses a no-skill baseline.
+Select discriminating cases, including near-misses and authority failures.
+Define expected actions/artifacts independently of the candidate. Keep variant
+labels and grading instructions out of candidate inputs.
 
-For each test case, spawn two subagents in the same turn — one with the skill, one without. This is important: don't spawn the with-skill runs first and then come back for baselines later. Launch everything at once so it all finishes around the same time.
+Use an approved scratch directory inside the returned workspace or a
+host-provided evaluation scope. Keep runs outside the managed skill catalog.
+Read-only baseline snapshots do not authorize writes to installed skills.
+Retain completed artifacts; never reset another writer's outputs.
 
-**With-skill run:**
+## Execute
 
-```
-Execute this task:
-- Skill path: <path-to-skill>
-- Task: <eval prompt>
-- Input files: <eval files if any, or "none">
-- Save outputs to: <workspace>/iteration-<N>/eval-<ID>/with_skill/outputs/
-- Outputs to save: <what the user cares about — e.g., "the .docx file", "the final CSV">
-```
+Confirm a real runner, model identity, concurrency limit, budget, isolation,
+and any external/paid authority before execution. Use matched inputs/settings
+for candidate and baseline. Sequential runs are valid; parallel runs require
+available capacity and permission. Do not launch all cases automatically.
 
-**Baseline run** (same prompt, but the baseline depends on context):
-- **Creating a new skill**: no skill at all. Same prompt, no skill path, save to `without_skill/outputs/`.
-- **Improving an existing skill**: the old version. Before editing, snapshot the skill (`cp -r <skill-path> <workspace>/skill-snapshot/`), then point the baseline subagent at the snapshot. Save to `old_skill/outputs/`.
+Capture actual transcripts, source identity, commands, outputs, elapsed time,
+and usage when reported. Missing usage/cost stays null. If the host cannot run
+independent variants, report not-run; inline author interpretation is not a
+baseline experiment or independent grade.
 
-Write an `eval_metadata.json` for each test case (assertions can be empty for now). Give each eval a descriptive name based on what it's testing — not just "eval-0". Use this name for the directory too. If this iteration uses new or modified eval prompts, create these files for each new eval directory — don't assume they carry over from previous iterations. See `references/schemas.md` for the `eval_metadata.json` shape.
+## Grade and present
 
-## Step 2: While runs are in progress, draft assertions
+Use deterministic checks for objective outcomes. A blind judge may evaluate
+subjective output; required independence cannot be replaced by author grading.
+Existing grader/comparator/analyzer prompts are optional rubrics, not dispatch
+instructions. Read [schemas](schemas.md) for artifact fields: viewer grades use
+an expectations array with text, passed, and evidence.
 
-Draft quantitative assertions for each test case and explain them to the user. If assertions already exist in `evals/evals.json`, review and explain them.
+Use bundled aggregation/viewer scripts only when their required input data is
+available. Do not fill missing metrics with zero to satisfy a script. Report
+unavailable metrics separately instead of producing a misleading aggregate.
 
-Good assertions are objectively verifiable with descriptive names. Subjective skills (writing style, design quality) are better evaluated qualitatively — don't force assertions onto things that need human judgment.
+For review, a static HTML viewer is sufficient. Run generate_review.py with
+--static and an output path within the permitted scratch scope; inspect its
+actual output before sharing the link. Start a server only when supported and
+authorized by host policy, manage its lifetime, and stop it after review.
+No viewer is required to finish static validation.
 
-Update `eval_metadata.json` and `evals/evals.json` with the assertions. Explain to the user what they'll see in the viewer.
-
-## Step 3: As runs complete, capture timing data
-
-When each subagent task completes, you receive `total_tokens` and `duration_ms` in the notification. Save immediately to `timing.json` — this is the only opportunity (see `references/schemas.md` for the `timing.json` shape).
-
-Process each notification as it arrives; don't batch them.
-
-## Step 4: Grade, aggregate, and launch the viewer
-
-Once all runs are done:
-
-1. **Grade each run** — spawn a grader subagent (or grade inline) that reads `agents/grader.md` and evaluates each assertion against the outputs. Save results to `grading.json` in each run directory. The grading.json expectations array must use the fields `text`, `passed`, and `evidence` (not `name`/`met`/`details` or other variants) — the viewer depends on these exact field names. For assertions that can be checked programmatically, write and run a script rather than eyeballing it — scripts are faster, more reliable, and can be reused across iterations.
-
-2. **Aggregate into benchmark** — run the aggregation script from the skill-creator directory:
-   ```bash
-   python -m scripts.aggregate_benchmark <workspace>/iteration-N --skill-name <name>
-   ```
-   This produces `benchmark.json` and `benchmark.md` with pass_rate, time, and tokens for each configuration, with mean ± stddev and the delta. If generating benchmark.json manually, see `references/schemas.md` for the exact schema the viewer expects.
-Put each with_skill version before its baseline counterpart.
-
-3. **Do an analyst pass** — read the benchmark data and surface patterns the aggregate stats might hide. See `agents/analyzer.md` (the "Analyzing Benchmark Results" section) for what to look for — things like assertions that always pass regardless of skill (non-discriminating), high-variance evals (possibly flaky), and time/token tradeoffs.
-
-4. **Launch the viewer** with both qualitative outputs and quantitative data:
-   ```bash
-   nohup python <skill-creator-path>/eval-viewer/generate_review.py \
-     <workspace>/iteration-N \
-     --skill-name "my-skill" \
-     --benchmark <workspace>/iteration-N/benchmark.json \
-     > /dev/null 2>&1 &
-   VIEWER_PID=$!
-   ```
-   For iteration 2+, also pass `--previous-workspace <workspace>/iteration-<N-1>`.
-
-   **Cowork / headless environments:** If `webbrowser.open()` is not available or the environment has no display, use `--static <output_path>` to write a standalone HTML file instead of starting a server. Feedback will be downloaded as a `feedback.json` file when the user clicks "Submit All Reviews". After download, copy `feedback.json` into the workspace directory for the next iteration to pick up.
-
-   Note: please use generate_review.py to create the viewer; there's no need to write custom HTML.
-
-5. **Tell the user** something like: "I've opened the results in your browser. There are two tabs — 'Outputs' lets you click through each test case and leave feedback, 'Benchmark' shows the quantitative comparison. When you're done, come back here and let me know."
-
-## What the user sees in the viewer
-
-**Outputs** tab: one test case at a time — prompt, output (rendered inline), previous output (iteration 2+), formal grades, feedback textbox with auto-save. **Benchmark** tab: pass rates, timing, token usage per configuration with per-eval breakdowns. Navigation via prev/next or arrow keys; "Submit All Reviews" saves to `feedback.json`.
-
-## Step 5: Read the feedback
-
-When the user tells you they're done, read `feedback.json` (see `references/schemas.md` for the shape).
-
-Empty feedback means the user thought it was fine. Focus your improvements on the test cases where the user had specific complaints.
-
-Kill the viewer server when you're done with it:
-
-```bash
-kill $VIEWER_PID 2>/dev/null
-```
+Read feedback from the user or the exact selected artifact; do not scan private
+Downloads for a guessed file. Empty or absent feedback is not approval.
+Summarize per-case pass/fail/not-run and uncertainty, then resume the active
+Change Loop action. Evaluation output alone does not establish harness proof.

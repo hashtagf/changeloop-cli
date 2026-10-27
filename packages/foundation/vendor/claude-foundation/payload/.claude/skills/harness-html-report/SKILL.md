@@ -1,6 +1,6 @@
 ---
 name: harness-html-report
-description: Publish a self-contained HTML report of Change Loop state (gates, evidence, receipts, tasks) as an Artifact. Use when the user asks for a harness, change, or evidence HTML report.
+description: "Render a read-only HTML artifact explaining Change Loop state, tasks, gates, and evidence. Use for requested harness/change reports. Preserve report language and evidence freshness; never mutate runtime state or claim the report is proof."
 ---
 
 # Harness HTML report

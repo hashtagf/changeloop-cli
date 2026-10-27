@@ -9,10 +9,6 @@ import { nextCommand } from "./next-step.mjs";
 import { deriveChangeProjection } from "./state-projections.mjs";
 import { upgradeCompatibilityDiagnostics } from "./update-advisory.mjs";
 
-export function changeReadiness(state, proof, current) {
-  return deriveChangeProjection({ state, proof, currentHash: current }).readiness;
-}
-
 export function shouldReportOutOfBandDelivery(state, delivery) {
   return ["change", "building", "waiting", "proven"].includes(state?.status) &&
     state?.workspace?.applied !== true &&
@@ -47,7 +43,7 @@ export function changeListingRow(id, {
   }
 
   const view = deriveChangeProjection({ state, proof, currentHash: current });
-  return `${id}\t${view.readiness}\t${view.schema}\t${nextCommand(view.readiness, id)}`;
+  return `${id}\t${view.readiness}\t${view.schema}\t${nextCommand(view.readiness, id, state)}`;
 }
 
 export function createDiagnosticsRuntime({
@@ -106,6 +102,7 @@ export function createDiagnosticsRuntime({
   deliveryObservation = null,
   authorityPreflight = () => ({ status: "READY", blockers: [] }),
   executionContract = null,
+  evidenceDetection = null,
   parseFlags,
   parseStrictCommandFlags,
   fail
@@ -170,6 +167,24 @@ export function createDiagnosticsRuntime({
       }));
     for (const orphan of orphans)
       console.log(`${orphan.id}\torphan-runtime\t${orphan.schema}\t${orphan.reason}`);
+  }
+
+  // The one active change as `id readiness schema next-command`. None or
+  // several is a refusal that lists the candidates, so an agent that lost the
+  // id never has to guess it.
+  function showCurrent() {
+    const ids = activeChanges();
+    if (ids.length === 1) {
+      console.log(changeListingRow(ids[0], {
+        runtimePath, proofPath, readJson, readJsonOrNull, relevantHash
+      }));
+      return;
+    }
+    if (!ids.length) fail("no active change; start one with `claude-foundation change start`");
+    fail(`${ids.length} active changes; pass one explicitly:\n` +
+      ids.map((id) => `  ${changeListingRow(id, {
+        runtimePath, proofPath, readJson, readJsonOrNull, relevantHash
+      })}`).join("\n"));
   }
 
   function showProviders() {
@@ -304,7 +319,11 @@ export function createDiagnosticsRuntime({
       level: openspec.level === "error" && !flags["require-archive"]
         ? "warn" : openspec.level,
       name: "openspec",
-      detail: openspec.detail
+      detail: openspec.level === "error"
+        ? `${openspec.detail}; the harness installs it under .foundation/tools before ` +
+          "Build, Prove, and Land when npm is reachable; otherwise install " +
+          "@fission-ai/openspec@1.7 in node_modules/.bin or on PATH"
+        : openspec.detail
     });
     }
     collectFoundationChecks();
@@ -436,6 +455,18 @@ export function createDiagnosticsRuntime({
       }
       }
       collectProviderChecks();
+      // A required test capability with no runnable script cannot be proven;
+      // name the missing script here rather than at the Prove failure.
+      function collectEvidenceWiringChecks() {
+      if (stage !== "prove" || !evidenceDetection) return;
+      for (const row of evidenceDetection(requestedChange).candidates)
+        if (row.confidence === "none") checks.push({
+          level: "warn",
+          name: `evidence-wiring:${row.provider}`,
+          detail: `${row.detail} (${row.source}, repository ${row.repository})`
+        });
+      }
+      collectEvidenceWiringChecks();
       function collectTopologyAndApplyChecks() {
       for (const issue of topologyIssues(requestedChange))
         checks.push({
@@ -487,7 +518,7 @@ export function createDiagnosticsRuntime({
       // the capability a change under time pressure omits, and its absence looks
       // identical to a change that considered it and decided against. Naming it
       // is not the same as requiring it — the contract stays the author's.
-      const qualityMode = foundationPolicy().quality?.changeGate || "warn";
+      const qualityMode = foundationPolicy().quality?.changeGate || "off";
       const highRisk = state.impact === "high" ||
         (state.securityTriggers || []).length > 0;
       const executableSurface = (state.declaredSurface || []).some((path) =>
@@ -650,8 +681,9 @@ Commands:
   authority-abort <change> --request <id> --reason <reason>
   authority-record <change> --request <id> --response <file>
   handoff-status <change>
+  handoff-list [--open] [--owner <team>] [--environment <env>] [--json]
   handoff-packet <change> [--id <operation-id>]
-  handoff-record <change> --id <operation-id> --status accepted|completed|rejected --actor <name> --reference <ref> [--evidence <refs> --reason <why>]
+  handoff-record <change> --id <operation-id> --status accepted|completed|rejected|cancelled|superseded --actor <name> --reference <ref> [--evidence <refs> --reason <why>]
   run-provider <change> <provider> -- <command> [args...]
   prove <change>
   land-check <change>
@@ -670,5 +702,5 @@ Commands:
   migrate [legacy-id] [--apply]`);
   }
 
-  return { doctor, migrate, showChanges, showProviders, usage };
+  return { doctor, migrate, showChanges, showCurrent, showProviders, usage };
 }

@@ -1,17 +1,18 @@
 import { existsSync } from "node:fs";
 import { join, resolve as resolvePath } from "node:path";
-import { spawnSync } from "node:child_process";
 import { validateSignedCiEnvelope } from "../evidence/signed-ci.mjs";
 import { validityRecovery } from "../evidence/receipt-validity.mjs";
-import { targetHeadMovedDecision } from "./apply-recovery.mjs";
+import { MANUAL_APPLY_STATUS, targetHeadMovedDecision } from "./apply-recovery.mjs";
 import {
   compileLandPreparation, landPreparationMatches
 } from "../core/graph-execution.mjs";
 import {
   outOfBandDeliveryDriftValue, riskRequiresCi
 } from "../core/authority-policy.mjs";
-import { transitionLifecycleState } from "../core/lifecycle-reducer.mjs";
+import { normalizeLifecycleStatus, transitionLifecycleState } from "../core/lifecycle-reducer.mjs";
+import * as stateRuntime from "../core/state-runtime.mjs";
 import { compositeRepositorySelection } from "../core/repository-binding.mjs";
+import { probeOpenSpecVersion } from "../core/tool-identity.mjs";
 
 export { riskRequiresCi } from "../core/authority-policy.mjs";
 
@@ -63,34 +64,65 @@ const OPENSPEC_REQUIRED_MAJOR = 1;
 const OPENSPEC_TESTED_MINOR = 7;
 const OPENSPEC_PACKAGE = "@fission-ai/openspec@^1.7";
 
+export function landTransactionStarted(state) {
+  if (state?.workspace?.applied === true) return true;
+  if (state?.workspace?.apply?.transactionId) return true;
+  if (Object.values(state?.repositories || {}).some((runtime) =>
+    runtime?.delivery?.transactionId)) return true;
+  return [
+    "evidence-snapshotted", "code-applied", "archive-prepared",
+    "specs-archived", "archive-audited", "sandbox-cleaned"
+  ].includes(state?.land?.status);
+}
+
 export async function advanceLandOperation({
   loadRuntime, landCheck, archive, resumeLand, landPlanValue,
   selectedRepositories, prepareExecution = null
 }, id) {
-  if (prepareExecution) await prepareExecution(id, { stage: "land" });
-  const state = loadRuntime(id);
-  const multiRepository = compositeRepositorySelection(selectedRepositories(id, state));
-  if (!multiRepository) {
-    const check = await landCheck(id);
+  const initial = loadRuntime(id);
+  if (initial.status === "archived" || [
+    "archive-prepared", "specs-archived", "archive-audited", "sandbox-cleaned"
+  ].includes(initial.land?.status)) {
     const archived = await archive(id);
-    return archived || { status: "ARCHIVED", archived: true, check };
+    return archived || { status: "ARCHIVED", archived: true };
+  }
+  const multiRepository = compositeRepositorySelection(selectedRepositories(id, initial));
+  const legacyTransaction = multiRepository && legacyRepositoryLandTransaction(initial);
+  if (prepareExecution && !legacyTransaction) await prepareExecution(id, { stage: "land" });
+  const converge = async () => {
+    try {
+      return await archive(id);
+    } catch (firstError) {
+      // Once a journaled Land transaction has begun, its recovery mechanics
+      // belong to the Harness. Re-enter the idempotent archive composition once
+      // so pending Apply rollback or archive finalization can settle without
+      // surfacing a low-level recovery command to the caller. A repeated error
+      // remains a truthful boundary for the outer convergence policy.
+      if (!landTransactionStarted(loadRuntime(id))) throw firstError;
+      return archive(id);
+    }
+  };
+  const state = initial;
+  if (!multiRepository) {
+    const archived = await converge();
+    return archived || { status: "ARCHIVED", archived: true };
   }
   const currentPlan = landPlanValue(id);
   if (currentPlan.strategy === "workspace-uncommitted") {
-    const archived = await archive(id);
+    const archived = await converge();
     return archived || { status: "ARCHIVED", archived: true, plan: currentPlan };
   }
   const resumed = await resumeLand(id);
   const refreshed = loadRuntime(id);
-  if (refreshed.status === "building") return resumed || {
-    status: "PENDING",
-    reason: "repository delivery changed the composite workspace; proof must converge again"
-  };
   const plan = landPlanValue(id);
   if (plan.readyToArchive) {
-    const archived = await archive(id);
+    const archived = await converge();
     return archived || { status: "ARCHIVED", archived: true, plan };
   }
+  if (refreshed.status === "building") return resumed || {
+    status: "PENDING",
+    reason: "repository delivery changed the composite workspace; Land will resume the transaction"
+  };
   return {
     status: plan.waitingExternal ? "WAITING_EXTERNAL" : "PENDING",
     reason: plan.reason || "repository delivery is not ready to archive",
@@ -104,6 +136,15 @@ export function legacyRepositoryLandTransaction(state) {
     id !== "root" && Boolean(runtime?.land?.commit ||
       ["child-landed", "awaiting-explicit-commit", "awaiting-explicit-branch-land",
         "awaiting-root-pointer"].includes(runtime?.land?.status)));
+}
+
+// Only a change the retired commit-based flow already took into its saga may
+// keep recording child commits. A current change delivers uncommitted
+// workspaces; letting `land record` bind a commit would switch it into the
+// legacy saga, and Land never commits.
+export function legacyLandSagaStarted(state) {
+  return legacyRepositoryLandTransaction(state) ||
+    state?.land?.strategy === "ordered-resumable-saga";
 }
 
 // Layered policy rather than a pinned string: a wrong major cannot sync specs,
@@ -138,7 +179,8 @@ export function openSpecVersionStatus(stdout) {
 }
 
 export function openSpecCliStatus(root) {
-  const probe = spawnSync("openspec", ["--version"], { cwd: root, encoding: "utf8" });
+  // Reused per process while the resolved CLI is byte-identical.
+  const probe = probeOpenSpecVersion({ cwd: root });
   if (probe.error?.code === "ENOENT")
     return {
       level: "error", version: null,
@@ -258,17 +300,19 @@ export function rootPointerLandState(state, entries, signature, now) {
   };
 }
 
-export function controlHeadMovedStageDecision(state, currentHead) {
+export function controlHeadMovedStageDecision(state, currentHead, id = state.id) {
   return {
     kind: "control-head-moved",
     summary: "The control repository moved to a different commit after this change's sandbox was created, so staging submodule pointers now could bind them to a base nobody proved.",
     options: [
+      { id: "sync", outcome: `Replay every moved repository sandbox onto the current control commit and re-prove it: 'claude-foundation sandbox sync ${id}'.` },
       { id: "inspect", outcome: "Compare the recorded base with the current control repository history before choosing." },
-      { id: "recreate-sandbox", outcome: "Re-create the sandbox on the current control commit and re-prove the change against it." },
-      { id: "abandon", outcome: "Retire this change and reopen it against the current control commit." },
       { id: "pause", outcome: "Stage nothing and leave both repositories as they are." }
     ],
-    recommended: "inspect",
+    recommended: "sync",
+    // Same deterministic replay as the single-repository stop; a moved base
+    // never forces a recreated sandbox or a retired change.
+    automaticRecovery: "sync",
     recordedBase: state.workspace?.baseHead || null,
     currentHead
   };
@@ -305,7 +349,7 @@ export function stageRootPointersOperation(context, id) {
   const currentHead = gitHead(root);
   if (currentHead !== state.workspace?.baseHead)
     blockWithDecision(id, "control-head-moved",
-      controlHeadMovedStageDecision(state, currentHead));
+      controlHeadMovedStageDecision(state, currentHead, id));
   const entries = eligibleRootPointerEntries(context, id, state);
   if (!entries.length) {
     log(`ROOT POINTERS ${id}: no submodule pointers required`);
@@ -414,6 +458,33 @@ export function landPreparationBindings(proof, graph) {
   };
 }
 
+// Prove records protected-path edits and sandbox deletions instead of
+// refusing them; Land is where the user sees them. Paths only, never contents.
+function surfaceEntryKey(entry) {
+  return { repositoryId: entry.repositoryId ?? null, path: String(entry.path) };
+}
+
+export function landSurfaceReport(state) {
+  const report = typeof stateRuntime.surfaceAdditionReport === "function"
+    ? stateRuntime.surfaceAdditionReport(state) : null;
+  const entries = report?.entries || (Array.isArray(state?.surfaceAdditions)
+    ? state.surfaceAdditions : []).filter((entry) =>
+    entry && typeof entry === "object" && typeof entry.path === "string");
+  const protectedEntries = report?.protected || entries.filter((entry) => entry.protected === true);
+  const deleted = report?.deleted || entries.filter((entry) => entry.deleted === true);
+  return {
+    protected: protectedEntries.map(surfaceEntryKey),
+    deleted: deleted.map(surfaceEntryKey),
+    requiresPresentation: report ? Boolean(report.requiresPresentation)
+      : protectedEntries.length > 0 || deleted.length > 0
+  };
+}
+
+function surfacePathList(entries) {
+  return entries.map((entry) => entry.repositoryId && entry.repositoryId !== "root"
+    ? `${entry.repositoryId}:${entry.path}` : entry.path).join(", ");
+}
+
 export function createLandRuntime({
   root,
   transactions,
@@ -432,6 +503,7 @@ export function createLandRuntime({
   clearSnapshotCache,
   relevantHash,
   workspaceIsolationIssues = () => [],
+  targetEditNotices = () => [],
   reviewPolicy = () => null,
   requiredProviders,
   receiptValidity,
@@ -451,14 +523,62 @@ export function createLandRuntime({
   now,
   blockWithDecision,
   deliveryObservation = null,
+  // Land's pre-mutation projection checks (apply planning, repository
+  // delivery, landed-projection binding, spec sync). `inspect` keeps it
+  // read-only for `land check`; Land runs it with recording allowed.
+  landPreflight = null,
+  // Required, not defaulted: Land re-checks spec approval itself so a Land
+  // grant can never stand in for the user's consent to the agreement.
+  assertApproval,
   fail
 }) {
+  if (typeof assertApproval !== "function")
+    throw new Error("createLandRuntime requires assertApproval");
+
+  // Land is the single hard gate: it never accepts missing, failed,
+  // inconclusive, invalid, or stale proof. Recovery is the normal lifecycle
+  // route, which proves the current workspace before it reaches Land again.
+  function assertLandAssurance(id, assurance, state) {
+    // The lifecycle must agree with the proof: a change returned to `building`
+    // (an amendment, staged root pointers) is unproven even when its proof hash
+    // still matches, and the reducer would refuse its archive only after the
+    // destructive OpenSpec step.
+    const status = normalizeLifecycleStatus(state?.status);
+    if (!["proven", "applied"].includes(status))
+      fail(`Land requires current passing proof for '${id}' (assurance: ${
+        assurance?.status || "unknown"}; lifecycle is '${status}', not proven)\n` +
+        `  next: claude-foundation advance ${id} --through archived`);
+    if (assurance?.status === "passed" && assurance.proofWorkspaceHash &&
+        assurance.proofWorkspaceHash === assurance.workspaceHash) return;
+    fail(`Land requires current passing proof for '${id}' (assurance: ${
+      assurance?.status || "unknown"}${assurance?.reason ? `; ${assurance.reason}` : ""})\n` +
+      `  next: claude-foundation advance ${id} --through archived`);
+  }
+
   function assertLandTargetReady(id, state) {
+    // Kept target content must reach the sandbox and be proven again. That is
+    // the harness's own sync, never a command handed to the agent.
     if (state.workspace?.recovery?.requiresSync)
-      fail(`the target was preserved during manual recovery; run 'claude-foundation sandbox sync ${
-        id}' before proving and landing again`);
+      blockWithDecision(id, "recovery-sync-required", {
+        kind: "recovery-sync-required",
+        summary: "The target was preserved during manual recovery; the sandbox is synchronized " +
+          "onto it and proved again before Land continues.",
+        automaticRecovery: "sync",
+        options: [
+          { id: "sync", outcome: "Synchronize the sandbox onto the preserved target and prove it again." },
+          { id: "pause", outcome: "Leave both workspaces as they are." }
+        ],
+        recommended: "sync"
+      });
     const pending = pendingApplyTransactions(id);
-    if (pending.length)
+    if (pending.length) {
+      // Both automatic resolutions are non-destructive: settle only finishes
+      // or reverses bytes Land itself wrote (divergent content turns the
+      // journal into a manual recovery instead), and keep-current overwrites
+      // nothing. `advance --through archived` applies them itself; restoring
+      // a backup over divergent content stays the user's explicit choice.
+      const manual = pending.some((transaction) => MANUAL_APPLY_STATUS.includes(transaction.status));
+      const resolution = manual ? "keep-current" : "settle";
       blockWithDecision(id, "apply-pending-recovery", {
         kind: "apply-pending-recovery",
         summary: `An earlier apply for '${id}' is unresolved. Land check changes nothing while it is pending.`,
@@ -470,13 +590,24 @@ export function createLandRuntime({
           create: transaction.counts.create,
           delete: transaction.counts.delete
         })),
-        options: [
-          { id: "inspect", outcome: "Inspect the transaction journal and the working tree before recovering." },
-          { id: "recover", outcome: `Settle it with 'claude-foundation land recover ${id} --decision-ref <ref>'.` },
+        divergentPaths: [...new Set(pending.flatMap((transaction) =>
+          transaction.divergentPaths || []))].slice(0, 50),
+        options: manual ? [
+          { id: "keep-current", outcome: "Keep the current target files (nothing is overwritten), " +
+            "then synchronize the sandbox onto them and prove again before Land continues." },
+          { id: "restore-backup", outcome: "Replace the divergent target files with the recorded " +
+            `pre-apply backup: 'claude-foundation advance ${id} --through archived --recover-apply ` +
+            "restore-backup --decision-ref <user-decision>'." },
+          { id: "pause", outcome: "Leave the transaction pending and make no change." }
+        ] : [
+          { id: "settle", outcome: "Finish or reverse the interrupted apply from its journal, touching " +
+            "only bytes Land itself wrote, then continue Land." },
           { id: "pause", outcome: "Leave the transaction pending and make no change." }
         ],
-        recommended: "inspect"
+        recommended: resolution,
+        automaticRecovery: resolution
       });
+    }
     assertNoDroppedScenarios(id);
     assertOpenSpecCli(root, fail);
     if (state.workspace?.mode === "worktree" && !state.workspace.applied &&
@@ -508,7 +639,9 @@ export function createLandRuntime({
       if (repository.mode !== "read") continue;
       const runtime = state.repositories?.[repository.id] || {};
       if (runtime.mode !== "worktree")
-        fail(`read-only dependency '${repository.id}' is not isolated; recreate the sandbox before Land`);
+        fail(`read-only dependency '${repository.id}' is not isolated in a Git worktree, so Land cannot ` +
+          `prove it unchanged; run claude-foundation doctor --stage build --change ${id} to see why, ` +
+          `then resume with claude-foundation advance ${id} --through archived`);
       const dirty = git(["status", "--porcelain"], runtime.path);
       if (dirty.status !== 0 || dirty.stdout.trim())
         fail(`read-only dependency '${repository.id}' changed inside its sandbox: ${
@@ -524,31 +657,76 @@ export function createLandRuntime({
     if (!graph) return;
     const aggregate = proof.aggregateGraphProof;
     if (!aggregate || aggregate.status !== "pass")
-      fail(`aggregate graph proof is missing; finalize one fresh proof for graph ${graph.revision}`);
+      throw new Error(`aggregate graph proof is missing; finalize one fresh proof for graph ${graph.revision}`);
     if (aggregate.graphIdentity !== graph.identity ||
         aggregate.graphRevision !== graph.revision || aggregate.workspaceHash !== hash)
-      fail(`aggregate graph proof is stale for ${graph.revision}; run one fresh prove`);
+      throw new Error(`aggregate graph proof is stale for ${graph.revision}; run one fresh prove`);
     const missingNodes = (aggregate.requiredNodes || []).filter((node) =>
       !(aggregate.coveredNodes || []).includes(node));
     const missingEdges = (aggregate.requiredEdges || []).filter((edge) =>
       !(aggregate.coveredEdges || []).includes(edge));
     if (missingNodes.length || missingEdges.length)
-      fail(`aggregate graph proof is incomplete: nodes ${missingNodes.join(", ") || "none"}; edges ${
+      throw new Error(`aggregate graph proof is incomplete: nodes ${missingNodes.join(", ") || "none"}; edges ${
         missingEdges.join(", ") || "none"}`);
   }
 
-  function validatedLandProof(id) {
-    const proof = existsSync(proofPath(id)) ? readJson(proofPath(id)) : null;
-    if (!proof || proof.status !== "pass") fail(`change '${id}' has no passing proof`);
-    const audit = proofAudit(id, true);
-    if (!audit.valid) fail(`proof audit failed: ${audit.reason}`);
+  function landAssuranceSnapshot(id, state, multiRepository) {
+    let proof = null;
+    let proofReadIssue = null;
+    if (existsSync(proofPath(id))) {
+      try { proof = readJson(proofPath(id)); }
+      catch (error) { proofReadIssue = error.message; }
+    }
     clearSnapshotCache(id);
     const hash = relevantHash(id, null, true);
-    if (proof.workspaceHash !== hash)
-      fail(`proof is stale (${proof.workspaceHash.slice(0, 8)} != ${hash.slice(0, 8)}) — the workspace changed after Prove; finish contract and code edits first, sync, then run one fresh prove: claude-foundation proof run ${id}. When only the base moved and the change's diff is unchanged, that run rebinds the review verdict instead of dispatching a new one`);
     const graph = agentPlanValue?.(id)?.graph || null;
-    assertAggregateLandProof(graph, proof, hash);
-    return { proof, graph, hash };
+    if (proofReadIssue) return {
+      proof: null, graph, hash,
+      assurance: { status: "invalid", proofRunId: null, proofWorkspaceHash: null,
+        workspaceHash: hash, reason: `proof-unreadable: ${proofReadIssue}`,
+        acceptedBy: "explicit-land-authority" }
+    };
+    if (!proof) return {
+      proof: null, graph, hash,
+      assurance: { status: "missing", proofRunId: null, proofWorkspaceHash: null,
+        workspaceHash: hash, reason: "no-proof", acceptedBy: "explicit-land-authority" }
+    };
+    let audit;
+    try { audit = proofAudit(id, true); }
+    catch (error) { audit = { valid: false, reason: error.message }; }
+    let status = "passed";
+    let reason = null;
+    if (proof.status !== "pass") {
+      status = ["fail", "failed"].includes(proof.status) ? "failed"
+        : proof.status === "inconclusive" ? "inconclusive" : "invalid";
+      reason = `proof-${proof.status || "invalid"}`;
+    } else if (!audit.valid) {
+      status = "invalid";
+      reason = audit.reason;
+    } else if (proof.workspaceHash !== hash) {
+      status = "stale";
+      reason = "workspace-changed-after-proof";
+    } else {
+      try {
+        assertAggregateLandProof(graph, proof, hash);
+        assertLandEvidence(id, state, proof, hash, multiRepository);
+      } catch (error) {
+        status = "invalid";
+        reason = error.message;
+      }
+      if (status === "passed" && blockingDrift(id).length) {
+        status = "failed";
+        reason = "model-tier-drift";
+      }
+    }
+    return {
+      proof, graph, hash,
+      assurance: {
+        status, proofRunId: proof.proofRunId || null,
+        proofWorkspaceHash: proof.workspaceHash || null,
+        workspaceHash: hash, reason, acceptedBy: "explicit-land-authority"
+      }
+    };
   }
 
   function assertLandEvidence(id, state, proof, hash, multiRepository) {
@@ -556,96 +734,102 @@ export function createLandRuntime({
     const currentProviders = requiredProviders(id);
     const providers = compiled?.evidence?.providers || currentProviders;
     if (compiled && JSON.stringify(providers) !== JSON.stringify([...currentProviders].sort()))
-      fail("execution contract provider projection disagrees with current Land evidence policy");
+      throw new Error("execution contract provider projection disagrees with current Land evidence policy");
     for (const provider of providers) {
       const check = receiptValidity(id, provider, hash);
       if (check.validity !== "valid")
-        fail(`${provider} evidence is ${check.validity}\n  ${
+        throw new Error(`${provider} evidence is ${check.validity}\n  ${
           validityRecovery(check.validity, id, provider)}`);
       const manifestEntry = (proof.receipts || []).find((entry) => entry.provider === provider);
       if (!manifestEntry || fileDigest(receiptPath(id, provider)) !== manifestEntry.sha256)
-        fail(`${provider} live receipt differs from the proven receipt manifest`);
+        throw new Error(`${provider} live receipt differs from the proven receipt manifest`);
     }
     const independentlyRequiredCi = riskRequiresCi(state, reviewPolicy(id, state));
     const requiredCi = compiled?.land?.signedCiRequired ?? independentlyRequiredCi;
     if (compiled && requiredCi !== independentlyRequiredCi)
-      fail("execution contract signed-CI projection disagrees with current Land risk policy");
+      throw new Error("execution contract signed-CI projection disagrees with current Land risk policy");
     if (requiredCi && !multiRepository) {
       const ciProvider = signedCiProvider(providers,
         (provider) => receiptPath(id, provider), readJson);
       if (!ciProvider)
-        fail(`risk policy requires signed CI evidence before Land. Configure an external ` +
+        throw new Error(`risk policy requires signed CI evidence before Land. Configure an external ` +
           `provider with ci.issuer and ci.publicKey, then run: claude-foundation evidence ` +
           `verify-ci ${id} <provider> <signed.json>`);
     }
   }
 
-  function assertLandOperationalGates(id, state, externalOperations) {
-    if (externalOperations.blocking.length) {
-      const blocked = externalOperations.operations
-        .filter((row) => row.landBlocking)
-        .map((row) => `  ${row.id}: ${row.owner} (${row.environment}) — ${row.operation}; ${
-          row.validity}/${row.status}, ${row.timing}/${row.activation}`)
-        .join("\n");
-      fail(`WAITING_EXTERNAL ${id}\n${blocked}\n  next: claude-foundation handoff packet ${id}`);
-    }
+  function assertLandOperationalSafety(_id, state) {
     if (state.workspace?.applied) {
       const applied = verifyAppliedProjection(state);
       if (!applied.valid) fail(`applied projection is invalid: ${applied.reason}`);
     }
-    const drift = blockingDrift(id);
-    if (drift.length)
-      fail(`model tier downgrade on risk-sensitive task(s):\n${drift
-        .map((row) => `  ${row.taskId || (row.blockingTasks || []).join("|") || "?"} (${
-          row.taskKind || "ambiguous"}): requested ${row.requestedTier}, ran ${
-          row.actualModel || "unreported"} — ${row.reason}`).join("\n")}`);
   }
 
-  function reportLandReady(id, state, hash, externalOperations, multiRepository) {
+  function reportLandReady(id, state, hash, assurance, externalOperations, surface) {
     const waived = (state.waivers || []).map((row) =>
       `${row.capability} (${row.authority?.reference || "user decision"})`);
     const rootBranch = targetBranch(root);
     const branchLine = rootBranch && ["main", "master"].includes(rootBranch)
       ? `\n  branch: ${rootBranch} (default branch — branch-first policy suggests a feature branch)` : "";
-    const tracked = externalOperations.operations
-      .filter((row) => row.landDisposition === "tracked-post-land")
-      .map((row) => `${row.id} (${row.owner}: ${row.reference})`);
+    const postLand = externalOperations.operations
+      .filter((row) => ["declared-post-land", "tracked-post-land"]
+        .includes(row.landDisposition))
+      .map((row) => `${row.id} (${row.owner}${row.reference ? `: ${row.reference}` : ""})`);
     const telemetry = telemetryReadiness?.(id) || null;
     const hasMeasuredUsage = telemetry && (
       ["measured", "no-usage"].includes(telemetry.classification) ||
       Object.values(telemetry.measuredDimensions || {}).some(Boolean));
     const telemetryRecovery = hasMeasuredUsage
       ? null : telemetry?.recoveryActions?.[0]?.command || null;
-    console.log(`LAND READY ${id}\n  workspace: ${hash}${
-      tracked.length ? `\n  tracked post-Land handoff: ${tracked.join(", ")}` : ""}${
-      waived.length ? `\n  waived: ${waived.join(", ")}` : ""}${branchLine}\n  next: claude-foundation land ${
-      multiRepository ? "resume" : "archive"} ${id}${telemetry
+    const surfaceLines = surface?.requiresPresentation
+      ? `${surface.protected.length ? `\n  protected paths changed: ${surfacePathList(surface.protected)}` : ""}${
+        surface.deleted.length ? `\n  paths deleted: ${surfacePathList(surface.deleted)}` : ""}` : "";
+    console.log(`LAND READY ${id}\n  workspace: ${hash}\n  assurance: ${assurance.status}${surfaceLines}${
+      postLand.length ? `\n  declared post-Land obligation: ${postLand.join(", ")}` : ""}${
+      waived.length ? `\n  waived: ${waived.join(", ")}` : ""}${branchLine}\n  next: /land ${id}${telemetry
         ? `\n  telemetry: ${telemetry.classification}${telemetryRecovery
           ? `; recovery: ${telemetryRecovery}` : ""}` : ""}`);
     return telemetry;
   }
 
-  function landCheck(id) {
+  // `preflight` selects Land's full pre-mutation check: "inspect" for the
+  // read-only `land check` command, "apply" for Land itself. Both run the one
+  // shared preflight, so `land check` stops on every code Land stops on before
+  // it writes. Internal readiness callers (Land authority, root pointers,
+  // the legacy saga) keep the readiness-only check.
+  function landCheck(id, { preflight = null } = {}) {
     const state = loadRuntime(id);
     if (state.status === "archived") {
-      const audit = proofAudit(id, true);
-      if (!audit.valid) fail(`archived proof audit failed: ${audit.reason}`);
       console.log(`ALREADY ARCHIVED ${id}\n  archived: ${state.archivedAt || "unknown"}`);
       return { archived: true, state };
     }
+    // A Land grant is authority to apply, never consent to the agreement:
+    // stale or missing spec approval refuses here, so grant issue and archive
+    // (both of which run this check) refuse too.
+    assertApproval(id, state, { workspace: false });
     const multiRepository = compositeRepositorySelection(selectedRepositories(id, state));
     assertLandTargetReady(id, state);
     const isolationIssues = workspaceIsolationIssues(id);
     if (isolationIssues.length) fail(isolationIssues.join("; "));
+    for (const notice of targetEditNotices(state)) console.error(`NOTICE: ${notice}`);
     assertReadOnlyLandDependencies(id, state);
-    const { proof, graph, hash } = validatedLandProof(id);
-    assertLandEvidence(id, state, proof, hash, multiRepository);
+    const { proof, graph, hash, assurance } = landAssuranceSnapshot(
+      id, state, multiRepository);
     const externalOperations = handoffReadiness(id);
-    assertLandOperationalGates(id, state, externalOperations);
+    if (assurance.status === "passed" && externalOperations.blocking.length) {
+      assurance.status = "inconclusive";
+      assurance.reason = "external-operation-pending";
+    }
+    // `land check` stops on every code Land stops on, so it refuses unproven
+    // work as well instead of reporting it LAND READY.
+    assertLandAssurance(id, assurance, state);
+    assertLandOperationalSafety(id, state);
+    if (preflight && landPreflight)
+      landPreflight(id, state, { inspect: preflight !== "apply" });
     if (multiRepository) persistLandPreparation(id, state, proof, graph, hash);
-    const telemetry = reportLandReady(
-      id, state, hash, externalOperations, multiRepository);
-    return { archived: false, state, hash, externalOperations, telemetry };
+    const surface = landSurfaceReport(state);
+    const telemetry = reportLandReady(id, state, hash, assurance, externalOperations, surface);
+    return { archived: false, state, hash, assurance, externalOperations, telemetry, surface };
   }
 
   // The explicit half of the split. Recovery replays or reverses filesystem
@@ -654,7 +838,8 @@ export function createLandRuntime({
   function recoverLand(id, flags = {}) {
     const decisionRef = String(flags["decision-ref"] || "").trim();
     if (!decisionRef)
-      fail("land recover requires --decision-ref <host-user-decision>; ask the user to authorize settling the interrupted apply before running it");
+      fail("settling an interrupted apply requires --decision-ref <user-decision>; ask the user, then run " +
+        `'claude-foundation advance ${id} --through archived --recover-apply settle --decision-ref <user-decision>'`);
     const pending = pendingApplyTransactions(id);
     if (!pending.length) {
       console.log(`NOTHING TO RECOVER ${id}\n  no unresolved apply transaction`);
@@ -665,7 +850,9 @@ export function createLandRuntime({
         .includes(transaction.status));
     const resolution = String(flags.resolution || "").trim();
     if (manual && !["keep-current", "restore-backup"].includes(resolution))
-      fail("land recover requires --resolution keep-current|restore-backup for a manual recovery");
+      fail("this interrupted apply needs a manual resolution: ask the user, then run " +
+        `'claude-foundation advance ${id} --through archived --recover-apply keep-current|restore-backup ` +
+        "--decision-ref <user-decision>'");
     for (const transaction of pending)
       console.log(`RECOVERING ${transaction.transactionId}\n  status: ${
         transaction.status}\n  update: ${transaction.counts.update}; create: ${
@@ -673,7 +860,7 @@ export function createLandRuntime({
     recoverPendingApply(id, loadRuntime(id), { resolution, decisionRef });
     const remaining = pendingApplyTransactions(id);
     console.log(`RECOVERED ${id}\n  settled: ${
-      pending.length - remaining.length}/${pending.length}\n  next: claude-foundation land check ${id}`);
+      pending.length - remaining.length}/${pending.length}\n  next: claude-foundation advance ${id} --through archived`);
   }
 
   function orderedRepositories(id, state = loadRuntime(id)) {
@@ -812,7 +999,8 @@ export function createLandRuntime({
     const path = join(transactions, id, "land-preparation.json");
     const prepared = existsSync(path) ? readJson(path, {}) : null;
     if (!landPreparationMatches(prepared, current))
-      fail(`Land preparation changed before mutation (${current.incomplete.join(", ") || "identity drift"}); re-run land check after resolving it`);
+      fail(`Land preparation changed before mutation (${current.incomplete.join(", ") || "identity drift"}); ` +
+        `resolve it, then resume with claude-foundation advance ${id} --through archived`);
     return current;
   }
 
@@ -899,6 +1087,10 @@ export function createLandRuntime({
       fail("land record requires --decision-ref <host-user-decision>; ask the user to authorize binding this child commit before recording it");
     landCheck(id);
     const state = loadRuntime(id);
+    if (!legacyLandSagaStarted(state))
+      fail(`land record applies only to a change already in the legacy commit-based Land saga; ` +
+        `'${id}' delivers uncommitted workspaces and Land never commits. ` +
+        `Resume with 'claude-foundation advance ${id} --through archived'.`);
     const repository = repositoryById(id, repositoryId, state);
     if (repository.id === "root" || repository.mode !== "write")
       fail(`repository '${repositoryId}' is not a writable child repository`);

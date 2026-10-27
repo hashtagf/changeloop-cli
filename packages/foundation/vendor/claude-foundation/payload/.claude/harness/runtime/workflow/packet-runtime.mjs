@@ -5,6 +5,7 @@ import {
 } from "../core/update-advisory.mjs";
 import { verificationPlanValue } from "./verification-plan.mjs";
 import { authorityPreflightValue } from "../core/authority-policy.mjs";
+import { scopeAllowsPath } from "../core/graph-execution.mjs";
 import { repositoryBaseHead } from "../core/repository-binding.mjs";
 import { archivedResumeSource, resumePacketValue } from "./resume-packet.mjs";
 
@@ -85,10 +86,15 @@ export function reviewChangedSurface(context, id, state, surfaceRows) {
     return groups;
   }, new Map())].map(([repositoryId, repositoryPaths]) => {
     const repository = context.repositoryById(id, repositoryId, state);
+    // A submodule's location under root lets a finding named through root
+    // (`root/<submodule>/file`) bind to the repository that owns the file.
+    const nested = repositoryId !== "root" && typeof repository?.relativePath === "string" &&
+      repository.relativePath !== "." && !repository.relativePath.startsWith("../");
     return {
       repositoryId,
       workspacePath: reviewSurfaceWorkspace(context, id, state, repositoryId),
       baseHead: repositoryBaseHead(repository, state),
+      ...(nested ? { relativePath: repository.relativePath } : {}),
       paths: repositoryPaths
     };
   });
@@ -211,6 +217,15 @@ export function createPacketRuntime({
 }) {
   const die = fail;
 
+  // The budget watchdog is opt-in (`execution.budgetWatchdog`). Off, usage is
+  // still recorded in runtime state for metrics, but the packet carries no
+  // spend-mode directive or limit for the agent to act on.
+  function packetBudget(state) {
+    if (foundationPolicy?.().execution?.budgetWatchdog !== true)
+      return { budgetDecision: { watchdog: "off", status: "CONTINUE", userActionRequired: false } };
+    return { budget: ensureBudgetState(state), budgetDecision: budgetDecision(state) };
+  }
+
   function packetScope(id, state, allTasks, repositoryId, taskId) {
     const selectedTask = taskId
       ? allTasks.find((task) => task.id === String(taskId).toUpperCase())
@@ -271,10 +286,8 @@ export function createPacketRuntime({
       .map((row) => repository || !multiRepository
         ? row.path : `${row.repositoryId}/${row.path}`);
     if (selectedTask?.paths.length)
-      paths = paths.filter((path) => selectedTask.paths.some((scope) => {
-        const normalized = scope.replace(/\/\*\*?$/, "").replace(/\/$/, "");
-        return scope === "*" || path === normalized || path.startsWith(`${normalized}/`);
-      }));
+      paths = paths.filter((path) => selectedTask.paths.some((scope) =>
+        scopeAllowsPath(scope, path)));
     return paths;
   }
 
@@ -367,6 +380,13 @@ export function createPacketRuntime({
 
   function taskExecutionContext(id, selectedTask) {
     if (!selectedTask) return {};
+    if (selectedTask.done) return {
+      executionAuthority: {
+        status: "completed",
+        readOnly: true,
+        instruction: "Task is complete in tasks.md; use this packet as read-only context and do not re-execute it."
+      }
+    };
     const leasePath = leasesRoot
       ? join(leasesRoot, "tasks", id, `${selectedTask.id}.json`) : null;
     const leaseValue = leasePath && existsSync(leasePath) ? readJson(leasePath, {}) : null;
@@ -450,6 +470,7 @@ export function createPacketRuntime({
       impact: state.impact,
       coupling: state.coupling,
       reviewRequired: Boolean(state.reviewRequired),
+      ...(state.reviewRequired && state.reviewKeywordOnly ? { reviewKeywordOnly: true } : {}),
       changePath: relative(ROOT, activePath) || ".",
       repository: repository ? {
         id: repository.id, type: repository.type, mode: repository.mode,
@@ -500,6 +521,7 @@ export function createPacketRuntime({
     const artifactReferences = packetArtifactReferences(activePath);
     const providers = compactList(providerRows, 30);
     const claimPayload = packetClaimRows(claims, packetType);
+    const reviewTier = reviewPolicy(id, state, contract).tier || null;
     const packet = {
       version: Number(PACKET_SCHEMA_VERSION),
       packetType, changeId: id, intent: state.intent, schema: state.schema,
@@ -507,6 +529,7 @@ export function createPacketRuntime({
       externalOperations: handoffReadiness(id),
       ...packetMetadata(state, activePath, repository, compositeSnapshot.workspaceHash),
       workspaceHash: hash,
+      ...(reviewTier ? { reviewTier } : {}),
       pendingTaskCount: scopedTasks.filter((task) => !task.done).length,
       tasks: taskPayload,
       claims: claimPayload,
@@ -514,8 +537,7 @@ export function createPacketRuntime({
       invariants: packetInvariants(contract, packetType),
       references: artifactReferences,
       ...taskExecutionContext(id, selectedTask),
-      budget: ensureBudgetState(state),
-      budgetDecision: budgetDecision(state)
+      ...packetBudget(state)
     };
     if (packetType !== "task") {
       packet.authorityPreflight = authorityPreflight(id);
@@ -752,6 +774,8 @@ export function createPacketRuntime({
     }
     validatePacketRequest(id, flags);
     const value = packetForRequest(id, flags);
+    if (flags.completedTask && value.executionAuthority?.status !== "completed")
+      die(`unknown pending task '${flags.task}'`);
     const manifest = addPacketInstruction(id, flags, value);
     addPacketGraphIdentity(flags, value);
     refreshPacketDigest(value, manifest);

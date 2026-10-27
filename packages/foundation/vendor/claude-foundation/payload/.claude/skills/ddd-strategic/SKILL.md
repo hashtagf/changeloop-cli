@@ -1,9 +1,12 @@
 ---
 name: ddd-strategic
-description: Decide business meaning, model ownership, and bounded contexts before choosing runtime architecture. Use for subdomain investment, ubiquitous language, context maps, domain discovery, aggregate sizing, or separating domain from integration events. Use architecture-fundamentals afterward for service/process communication and failure design. Skip generic CRUD, single-context implementation, and work without meaningful domain rules.
+description: "Resolve business meaning, ubiquitous language, bounded contexts, aggregate invariants, and model ownership. Use before runtime architecture when domain semantics are unclear. Record changed terms in OpenSpec; skip generic CRUD and settled single-context implementation."
 ---
 
 # Strategic DDD
+
+Keep changed vocabulary inside the active design, not a standalone glossary
+or ADR store.
 
 Use this as the primary skill when the hard question is what a business concept
 means, where that model is valid, or who owns it. Keep semantic boundaries

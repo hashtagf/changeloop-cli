@@ -1,6 +1,6 @@
 # Hexagonal backend — TypeScript / Node examples
 
-Runnable companions to `SKILL.md`. Read this when implementing the patterns in TypeScript; the concepts, the dependency rule, pitfalls, and the workflow live in `SKILL.md`. The Go equivalents are in [`go.md`](./go.md). These TypeScript examples **call the concrete use case** (no driving port); the Go set uses a driving port — both are correct (`SKILL.md > Two kinds of ports`).
+Read these examples when implementing hexagonal patterns in TypeScript. [The skill](../SKILL.md) owns the dependency rules and scope; [patterns and pitfalls](patterns-and-pitfalls.md) covers transactions, errors, and testing. The [Go examples](go.md) use a driving port; these TypeScript examples **call the concrete use case**. Both follow the port roles in [Boundary](../SKILL.md#boundary).
 
 ## Folder structure
 

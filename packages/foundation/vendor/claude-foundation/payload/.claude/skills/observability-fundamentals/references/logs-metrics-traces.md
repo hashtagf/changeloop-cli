@@ -1,5 +1,22 @@
 # Logs, Metrics & Traces
 
+## Contents
+
+- [Principle 1: Know the three pillars and what each is for](#principle-1-from-skillmd-know-the-three-pillars-and-what-each-is-for)
+- [Principle 2: Logs are structured and leveled — key-value, not string-concat](#principle-2-from-skillmd-logs-are-structured-and-leveled-key-value-not-string-concat)
+- [Principle 3: Correlate — one id threaded through every log and across every boundary](#principle-3-from-skillmd-correlate-one-id-threaded-through-every-log-and-across-every-boundary)
+- [Principle 4: Metrics that answer questions — RED for services, USE for resources, percentiles not averages](#principle-4-from-skillmd-metrics-that-answer-questions-red-for-services-use-for-resources-percentiles-not-averages)
+- [Principle 6: Alert on symptoms users feel, not on causes — and make every alert actionable](#principle-6-from-skillmd-alert-on-symptoms-users-feel-not-on-causes-and-make-every-alert-actionable)
+- [Principle 5: Define SLI/SLO/error budgets — measure "healthy" before you alert on it](#principle-5-from-skillmd-define-slisloerror-budgets-measure-healthy-before-you-alert-on-it)
+- [Principle 7: Cost and cardinality discipline — sample and budget, or the bill and the noise bury you](#principle-7-from-skillmd-cost-and-cardinality-discipline-sample-and-budget-or-the-bill-and-the-noise-bury-you)
+- [Structured logging: field conventions](#structured-logging-field-conventions)
+- [Log levels: the action each one demands](#log-levels-the-action-each-one-demands)
+- [Metrics: RED and USE recipes](#metrics-red-and-use-recipes)
+- [Traces & spans: following one request](#traces-spans-following-one-request)
+- [Correlation: propagating the id across boundaries](#correlation-propagating-the-id-across-boundaries)
+- [SLI / SLO / error budget: a worked example](#sli-slo-error-budget-a-worked-example)
+- [Cardinality & cost pitfalls](#cardinality-cost-pitfalls)
+
 Concrete recipes for the three pillars. The SKILL gives the principles; this is the field manual — field names, level semantics, metric shapes, propagation code, a worked SLO, and the cardinality traps.
 
 Moved from `SKILL.md` — principles 1-7's full rule/why/how-to-apply/example, ahead of the field-manual detail below.

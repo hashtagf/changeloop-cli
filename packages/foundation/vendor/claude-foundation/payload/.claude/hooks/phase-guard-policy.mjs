@@ -3,6 +3,7 @@
 export {
   looksMutatingShellCommand,
   mutatingShellOperations,
+  normalizeHarnessCliInvocations,
   pinShellAnchor,
   shellMutationViolation,
 } from "../harness/runtime/core/shell-mutation-policy.mjs";

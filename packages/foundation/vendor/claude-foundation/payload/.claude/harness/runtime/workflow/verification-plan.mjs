@@ -2,8 +2,15 @@ export function verificationRisk(packet) {
   const providerRows = Array.isArray(packet.providers) ? packet.providers : [];
   const repositories = new Set(providerRows.flatMap((provider) =>
     Array.isArray(provider.repositories) ? provider.repositories : []));
+  // A declared review (`--review`, impact, coupling, security triggers) or a
+  // high review tier raises verification risk. A review required only by an
+  // intent keyword (reviewKeywordOnly) follows its resolved tier. Packets
+  // without a tier (legacy routing) keep reviewRequired as high.
+  const declaredReview = Boolean(packet.reviewRequired) && !packet.reviewKeywordOnly;
+  const reviewHigh = packet.reviewTier
+    ? packet.reviewTier === "high" || declaredReview : Boolean(packet.reviewRequired);
   if (packet.impact === "high" || packet.coupling === "coupled" ||
-      packet.reviewRequired || repositories.size > 1) return "high";
+      reviewHigh || repositories.size > 1) return "high";
   if (packet.schema === "foundation-rapid" && packet.impact === "low") return "rapid";
   return "standard";
 }
@@ -59,7 +66,7 @@ function phasePlan(changeId, phase, pendingTaskCount) {
   };
   if (phase === "land") return {
     boundary: "land",
-    command: `claude-foundation land advance ${changeId}`,
+    command: `claude-foundation advance ${changeId} --through archived`,
     includes: ["proof-freshness", "handoffs", "apply-recovery", "archive"],
     avoidBefore: [
       `claude-foundation land check ${changeId}`,

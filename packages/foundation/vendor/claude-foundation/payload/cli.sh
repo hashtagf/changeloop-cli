@@ -15,7 +15,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXPECTED_RUNTIME_API=33
+EXPECTED_RUNTIME_API=42
 PROJECT_START="${CLAUDE_FOUNDATION_PROJECT:-$PWD}"
 
 fail() { printf 'claude-foundation: %s\n' "$*" >&2; exit 1; }
@@ -30,7 +30,7 @@ installed_version() {
 }
 
 find_project_root() {
-  local cursor="$PROJECT_START"
+  local cursor="$PROJECT_START" skipped="" owner=""
   [ -d "$cursor" ] || cursor="$(dirname "$cursor")"
   cursor="$(cd "$cursor" 2>/dev/null && pwd)" ||
     fail "cannot access project path: $PROJECT_START"
@@ -40,16 +40,25 @@ find_project_root() {
       # A Build sandbox is a full copy of the project, marker files included.
       # Resolving to the copy would split runtime state between the sandbox's
       # .foundation/ and the project's, so resolution walks past a sandbox
-      # unless CLAUDE_FOUNDATION_PROJECT deliberately pins one.
+      # unless CLAUDE_FOUNDATION_PROJECT deliberately pins one. Walking past
+      # the copy to the project that owns it is the ordinary Build case and
+      # stays silent; only a different resolved root is worth a warning.
       case "${CLAUDE_FOUNDATION_PROJECT:+pinned}:$cursor" in
         pinned:*)
           printf '%s\n' "$cursor"
           return
           ;;
         *:*/.foundation/sandboxes/*|*:*/.foundation/repository-sandboxes/*)
-          warn "ignoring sandbox copy at $cursor; resolving the project root"
+          if [ -z "$skipped" ]; then
+            skipped="$cursor"
+            owner="${cursor%%/.foundation/sandboxes/*}"
+            owner="${owner%%/.foundation/repository-sandboxes/*}"
+          fi
           ;;
         *)
+          if [ -n "$skipped" ] && [ "$cursor" != "$owner" ]; then
+            warn "ignoring sandbox copy at $skipped; resolved project root $cursor is not its owner $owner"
+          fi
           printf '%s\n' "$cursor"
           return
           ;;
@@ -63,7 +72,8 @@ find_project_root() {
 
 run_runtime() {
   local access="$1"; shift
-  local root runtime actual_api telemetry
+  local root runtime actual_api telemetry caller_cwd
+  caller_cwd="$PWD"
   root="$(find_project_root)"
   runtime="$root/.claude/harness/foundation.mjs"
   command -v node >/dev/null 2>&1 || fail "Node.js is required to run the project harness"
@@ -78,14 +88,19 @@ run_runtime() {
   fi
   local phase=""
   case "${1:-}" in
-    new|start|resolve|amend|validate|audit-change|abandon|waive|evidence-detect|evidence-init|evidence-doctor|evidence-upgrade|quality-discover|quality-init|quality-doctor) phase="change" ;;
+    investigate) phase="investigate" ;;
+    new|start|resolve|amend|revise|validate|audit-change|abandon|waive|evidence-detect|evidence-init|evidence-doctor|evidence-upgrade|quality-discover|quality-init|quality-doctor|preview) phase="change" ;;
     sandbox|agent-plan|agent-dispatch|agent-acquire|agent-release) phase="build" ;;
-    proof-plan|proof-readiness|proof-advance|proof-run|proof-collect|proof-preflight|proof-execute|proof-audit|prove|receipt|run-provider|evidence-verify-ci|authority-request|authority-dispatch|authority-run|authority-abort|authority-status|authority-record|authority-reset-infra|authority-reset-base-move|quality-run|quality-report|quality-baseline|quality-debt) phase="prove" ;;
-    handoff-status|handoff-packet|handoff-record|land-check|land-advance|land-recover|land-plan|land-record|land-pointers|land-resume|archive) phase="land" ;;
+    proof-plan|proof-readiness|proof-advance|proof-run|proof-collect|proof-preflight|proof-execute|proof-audit|prove|receipt|run-provider|evidence-verify-ci|authority-request|authority-dispatch|authority-run|authority-abort|authority-status|authority-record|authority-reset-infra|authority-reset-base-move|authority-extend-review|quality-run|quality-report|quality-baseline|quality-debt) phase="prove" ;;
+    handoff-list|handoff-status|handoff-packet|handoff-record|land-check|land-advance|land-recover|land-plan|land-record|land-pointers|land-resume|archive) phase="land" ;;
+    delivery-advance) phase="deliver" ;;
   esac
   telemetry=1
   [ "$access" != "inspect" ] || telemetry=0
+  # The runtime starts at the project root; `exec` maps the caller's directory
+  # into the matching sandbox, so it receives where the caller stood.
   FOUNDATION_TELEMETRY="$telemetry" FOUNDATION_PUBLIC_OPERATION="$phase" \
+    FOUNDATION_CALLER_CWD="$caller_cwd" \
     FOUNDATION_INSTALLED_CLI_VERSION="$(installed_version)" exec node "$runtime" "$@"
 }
 
@@ -132,13 +147,16 @@ const showAll = process.argv[3] === "--all";
 const groups = [["Workflow", "agent"], ["Conditional recovery", "conditional"],
   ["Administration", "admin"], ["Host integration", "host"],
   ["Internal compatibility", "internal"]];
-const primary = new Set([
-  "advance", "change start", "change amend", "changes", "doctor", "describe"
-]);
+// The agent's normal path: start (or amend) a change, then advance it. Everything else
+// is recovery or operator surface behind `help --all`.
+const primaryOrder = ["change start", "change amend", "advance", "changes"];
+const primary = new Set(primaryOrder);
 console.log("claude-foundation — OpenSpec-native software-change harness\n");
 for (const [title, audience] of groups) {
   const rows = registry.commands.filter((command) => command.audience === audience &&
     (showAll || primary.has(command.name)));
+  if (!showAll) rows.sort((left, right) =>
+    primaryOrder.indexOf(left.name) - primaryOrder.indexOf(right.name));
   if (!rows.length) continue;
   console.log(`${title}:`);
   for (const command of rows) {
@@ -149,7 +167,7 @@ for (const [title, audience] of groups) {
   console.log("");
 }
 console.log("Global options: --project <path>, -C <path>");
-console.log("Workflow: /investigate → /change → /build → /prove → /land");
+console.log("Workflow: /investigate → /change → /build → /prove → /land; optional: /deliver");
 console.log("Normal use: describe the outcome to your coding agent; it runs recovery and CLI details for you.");
 if (!showAll) console.log("Run `claude-foundation help --all` for primitive, recovery, host, and compatibility commands.");
 NODE
@@ -287,17 +305,35 @@ case "${1:-}" in
   changes)
     shift; [ "$#" -eq 0 ] || fail "changes takes no arguments"
     run_runtime read changes ;;
+  current)
+    shift; [ "$#" -eq 0 ] || fail "current takes no arguments"
+    run_runtime read current ;;
   packet)
-    shift; need_arg "packet" "${1:-}"
+    shift
     run_runtime read packet "$@" ;;
   metrics)
-    shift; need_arg "metrics" "${1:-}"
+    shift
     run_runtime read metrics "$@" ;;
   feedback)
-    shift; need_arg "feedback" "${1:-}"
+    shift
     run_runtime read feedback "$@" ;;
+  outcomes)
+    shift
+    run_runtime read outcomes "$@" ;;
+  lessons)
+    shift
+    run_runtime read lessons "$@" ;;
+  package)
+    shift
+    run_runtime read package "$@" ;;
+  preview)
+    shift; need_arg "preview" "${1:-}"
+    run_runtime write preview "$@" ;;
+  investigate)
+    shift; need_arg "investigate" "${1:-}"
+    run_runtime write investigate "$@" ;;
   advance)
-    shift; need_arg "advance" "${1:-}"
+    shift
     run_runtime write advance "$@" ;;
   exec)
     shift; need_arg "exec" "${1:-}"
@@ -344,8 +380,12 @@ case "${1:-}" in
         [ "$#" -ge 1 ] || fail "change resolve requires <change>"
         run_runtime write resolve "$@" ;;
       amend)
-        [ "$#" -ge 2 ] || fail "change amend requires <change> <amendment.json>"
+        [ "$#" -ge 2 ] || [ "${1:-}" = "--template" ] ||
+          fail "change amend requires --template or <change> <amendment.json>"
         run_runtime write amend "$@" ;;
+      revise)
+        [ "$#" -ge 2 ] || fail "change revise requires <change> <draft.json>"
+        run_runtime write revise "$@" ;;
       validate)
         need_arg "change validate" "${1:-}"
         run_runtime write validate "$@" ;;
@@ -358,7 +398,7 @@ case "${1:-}" in
       waive)
         need_arg "change waive" "${1:-}"
         run_runtime write waive "$@" ;;
-      *) fail "change requires 'new', 'start', 'resolve', 'amend', 'validate', 'audit', 'abandon', or 'waive'" ;;
+      *) fail "change requires 'new', 'start', 'resolve', 'amend', 'revise', 'validate', 'audit', 'abandon', or 'waive'" ;;
     esac ;;
   validate)
     warn "'validate' is deprecated; use 'change validate'"
@@ -441,17 +481,22 @@ case "${1:-}" in
       record) run_runtime write authority-record "$@" ;;
       reset-infra) run_runtime write authority-reset-infra "$@" ;;
       reset-base-move) run_runtime write authority-reset-base-move "$@" ;;
-      *) fail "authority requires 'request', 'dispatch', 'run', 'abort', 'status', 'record', 'reset-infra', or 'reset-base-move'" ;;
+      extend-review) run_runtime write authority-extend-review "$@" ;;
+      *) fail "authority requires 'request', 'dispatch', 'run', 'abort', 'status', 'record', 'reset-infra', 'reset-base-move', or 'extend-review'" ;;
     esac ;;
   handoff)
     shift
     sub="${1:-}"; [ "$#" -gt 0 ] && shift
-    need_arg "handoff ${sub:-<status|packet|record>}" "${1:-}"
     case "$sub" in
-      status) run_runtime read handoff-status "$@" ;;
-      packet) run_runtime read handoff-packet "$@" ;;
-      record) run_runtime write handoff-record "$@" ;;
-      *) fail "handoff requires 'status', 'packet', or 'record'" ;;
+      list) run_runtime read handoff-list "$@" ;;
+      status|packet|record)
+        need_arg "handoff $sub" "${1:-}"
+        case "$sub" in
+          status) run_runtime read handoff-status "$@" ;;
+          packet) run_runtime read handoff-packet "$@" ;;
+          record) run_runtime write handoff-record "$@" ;;
+        esac ;;
+      *) fail "handoff requires 'list', 'status', 'packet', or 'record'" ;;
     esac ;;
   sandbox)
     shift
@@ -478,6 +523,18 @@ case "${1:-}" in
       archive) run_runtime write archive "$@" ;;
       *) fail "land requires 'advance', 'check', 'recover', 'plan', 'record', 'pointers', 'resume', or 'archive'" ;;
     esac ;;
+  deliver)
+    shift
+    sub="${1:-}"
+    if [ "$sub" = "advance" ]; then
+      shift
+    elif [ -n "$sub" ]; then
+      # Public convenience form: `claude-foundation deliver <change>`.
+      :
+    fi
+    need_arg "deliver" "${1:-}"
+    [ "$#" -eq 1 ] || fail "deliver requires exactly one change id"
+    run_runtime write delivery-advance "$@" ;;
   migrate)
     shift
     access=read
@@ -487,7 +544,7 @@ case "${1:-}" in
     shift
     [ "$#" -gt 0 ] || fail "runtime requires an internal harness command"
     warn "'runtime' is an internal compatibility namespace; use canonical public commands"
-    case "$1" in version|api-version|hash|doctor|packet|metrics|feedback) access=read ;; *) access=write ;; esac
+    case "$1" in version|api-version|hash|doctor|packet|metrics|feedback|outcomes|lessons|package) access=read ;; *) access=write ;; esac
     run_runtime "$access" "$@" ;;
   dashboard|dashboard-up|dashboard-down|dashboard-status)
     sub="$1"; shift

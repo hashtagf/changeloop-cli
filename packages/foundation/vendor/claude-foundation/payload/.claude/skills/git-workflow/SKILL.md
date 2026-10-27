@@ -1,9 +1,12 @@
 ---
 name: git-workflow
-description: "Safely perform Git or pull-request mutations: branch, stage, commit, amend, rebase, merge, force update, destructive cleanup, or PR creation/update. Covers fresh bases, atomic commits, intent-carrying messages, shared-history safety, reviewable PRs, and reflog-first recovery. Skip read-only status/log/diff/show. Never treat this skill as authority to commit, push, open a PR, or Land without the user's explicit authorization."
+description: "Perform authorized branch, stage, commit, rebase, merge, push, cleanup, or PR operations safely. Use for Git mutations and reviewability; skip read-only inspection. Change Loop Land preserves HEAD/index and grants no commit, push, or PR authority."
 ---
 
 # Git workflow
+
+For authorized history cleanup, compare original/resulting tree identity.
+Reviewer guidance can improve reviewability without rewriting history.
 
 Use this for Git mechanics after authorization. Foundation Land guards and user
 authority take precedence over convenience or customary workflow.
@@ -31,11 +34,10 @@ authority take precedence over convenience or customary workflow.
 ## Authority and handoff
 
 - Read-only Git inspection needs no workflow mutation authority.
-- Branching/staging/local commits require the user's request or workflow phase.
-- Push, force update, PR creation, merge, and Foundation Land each require the
-  applicable explicit authority; one does not imply another.
-- Never bypass hooks or checks unless the user explicitly approves the specific
-  bypass and its risk.
+- Commit/push only via `/deliver` or a direct user instruction; Land never
+  commits (WORKFLOW.md "Authority from the user's words").
+- Branching, staging, force update, merge, and Land each need explicit authority.
+- Bypass hooks or checks only with explicit approval of that bypass and risk.
 
 References: read `commit-messages.md`, `branching-and-rebasing.md`,
 `pull-requests.md`, or `recovery.md` only for the active operation.

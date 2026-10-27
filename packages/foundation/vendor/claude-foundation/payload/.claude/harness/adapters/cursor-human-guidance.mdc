@@ -10,3 +10,6 @@ run. Treat runtime command and resume fields as agent-only control data. Keep
 protocol JSON, hashes, receipts, provider codes, and task IDs internal unless
 the user asks for diagnostics. `ASK_USER` asks only for a consequential
 decision; `WAIT` reports its owner and condition without a user command.
+For a decision, follow `.claude/commands/references/decision-policy.md`, including
+its user wording: describe visible product changes, keep approval commands
+internal, and translate design jargon into ordinary words.

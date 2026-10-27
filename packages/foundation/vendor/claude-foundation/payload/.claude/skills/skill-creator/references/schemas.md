@@ -1,5 +1,14 @@
 # JSON Schemas
 
+## Contents
+
+- [evals.json](#evalsjson)
+- [timing.json](#timingjson)
+- [benchmark.json](#benchmarkjson)
+- [comparison.json](#comparisonjson)
+- [analysis.json](#analysisjson)
+- [feedback.json](#feedbackjson)
+
 ## evals.json
 
 Located at `evals/evals.json` within the skill directory.
@@ -178,7 +187,7 @@ Output from the executor agent. Located at `<run-dir>/outputs/metrics.json`.
 
 Wall clock timing for a run. Located at `<run-dir>/timing.json`.
 
-**How to capture:** The task notification includes `total_tokens` and `duration_ms`. Save immediately — not persisted elsewhere.
+**How to capture:** Save `total_tokens` and `duration_ms` when the actual runner or host reports them. Host notifications differ; do not infer missing fields. Missing usage/timing stays null in experiment records. Use numeric-only aggregation/viewer formats only when the required observations exist; never substitute zero for unavailable data.
 
 ```json
 {
@@ -266,11 +275,12 @@ Output from Benchmark mode. Located at `benchmarks/<timestamp>/benchmark.json`.
 ```
 
 **Fields:**
-- `runs[].configuration`: Must be `"with_skill"` or `"without_skill"` — the viewer uses this exact string for grouping and color coding
+- `runs[].configuration`: Configuration name, usually `"with_skill"` / `"without_skill"` or `"new_skill"` / `"old_skill"`; summary columns are discovered dynamically.
 - `runs[].eval_name`: Used as section header in the viewer
 - `runs[].result`: Nested object with `pass_rate`, `passed`, `total`, `time_seconds`, `tokens`, `errors`
-- `run_summary.with_skill` / `run_summary.without_skill`: Each has `pass_rate`, `time_seconds`, `tokens` with `mean` and `stddev`
-- `run_summary.delta`: Difference strings like `"+0.50"`, `"+13.0"`, `"+1700"`
+- Configuration summaries contain `pass_rate`, `time_seconds`, and `tokens` statistics with observed `count`. Missing measurements have null statistics; a single observation has null sample `stddev`. Observed zero remains zero. Output characters are not tokens.
+- `run_summary.delta`: Candidate-minus-baseline difference strings from matched eval/run identities, or null when no valid pair exists. Recognized pairs are with/without skill, with/old skill, and new/old skill.
+- `metadata.run_counts`: Actual counts by configuration and eval. `runs_per_configuration` is null for unequal or unavailable counts. Unreported model identity remains null.
 
 **Important:** The viewer reads these field names exactly. Using `config` instead of `configuration`, or putting `pass_rate` at the top level of a run instead of nested under `result`, will cause the viewer to show empty/zero values. Always reference this schema when generating benchmark.json manually.
 
@@ -416,4 +426,4 @@ Downloaded when the user clicks "Submit All Reviews" in the eval viewer. In head
 }
 ```
 
-**Fields:** empty `feedback` means the user thought that run was fine — focus improvements on runs with non-empty feedback.
+**Fields:** empty or absent `feedback` records no textual comment. It does not prove review occurred, approval, or success; preserve that uncertainty.

@@ -1,11 +1,16 @@
 ---
 name: investigate
-description: Investigate an unclear problem before committing to a Foundation change. Use when the user invokes investigate or asks Codex to explore evidence, causes, repository facts, or options without implementing a solution yet.
+description: "Investigate feature feasibility, requirements, bugs, code mechanics, or competing options before Change. Retain user intent and corrections, ask only unresolved material questions, and continue independent research without product edits. Follow harness source binding and resume routes."
 ---
 
 Treat the text after `$investigate` as the command arguments. Read
-`../../commands/investigate.md` completely and follow it as the canonical
-workflow. Preserve the investigation-only boundary.
+`references/workflow.md` completely and follow it as the canonical workflow.
+Preserve the investigation-only boundary.
+
+For mechanics, rationale, recall, or comparisons, read [source reconstruction](references/source-reconstruction.md).
+
+Trace runtime mechanics separately from historical rationale. Cite original
+sources, preserve scoped human decisions, and label missing history or inference.
 
 At each investigation gate, gather all independent available facts before
 revising conclusions. Reconcile falsified hypotheses as one batch and continue

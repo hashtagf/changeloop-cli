@@ -1,8 +1,19 @@
 # Hexagonal backend — Go examples (`core` / `port` / `adapter` idiom)
 
+## Contents
+
+- [Folder structure](#folder-structure)
+- [Domain entity](#domain-entity)
+- [Port definition](#port-definition)
+- [Driven adapter — repository](#driven-adapter-repository)
+- [Use case / service](#use-case-service)
+- [Driving adapter (HTTP handler)](#driving-adapter-http-handler)
+- [Composition root](#composition-root)
+- [Testing — fakes vs generated mocks](#testing-fakes-vs-generated-mocks)
+
 Runnable companions to `SKILL.md`. Read this when implementing the patterns in Go; the concepts, the dependency rule, pitfalls, and the workflow live in `SKILL.md`. The TypeScript equivalents are in [`typescript.md`](./typescript.md).
 
-Go uses the community `core/ port/ adapter/` idiom (all ports in one `core/port` package). Same logical rule as the TS layout, different names — the physical layout is a style choice (`SKILL.md > Relation to Vertical Slice Architecture`). These Go examples **use a driving port** (`port.OrderService`); the TS set calls the concrete use case — both are correct (`SKILL.md > Two kinds of ports`).
+These Go examples place ports in `core/port` and **use a driving port** (`port.OrderService`); the TypeScript set calls the concrete use case. Both follow the dependency direction and port roles in [Boundary](../SKILL.md#boundary). Folder layout is a style choice; see [Relation to Vertical Slice Architecture](patterns-and-pitfalls.md#relation-to-vertical-slice-architecture).
 
 ## Folder structure
 

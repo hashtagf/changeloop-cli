@@ -113,7 +113,9 @@ export function createProviderScheduler({
   resourcesConflict,
   executeAdapter,
   fail,
-  log = console.log,
+  // Resolved per call: `advance` silences console.log around quiet proof,
+  // and a reference captured at construction leaked into its JSON output.
+  log = (...args) => console.log(...args),
   logError = console.error,
   maxParallelProviders,
   recordScheduler,
@@ -138,7 +140,10 @@ export function createProviderScheduler({
     return result;
   }
 
-  async function runExecutionDag(id, nodes, proofRunId) {
+  // `onProgress` sees each wave start and each provider finish, so a caller
+  // can persist where a long proof is; it never changes what runs.
+  async function runExecutionDag(id, nodes, proofRunId, { onProgress = null } = {}) {
+    const report = (event) => { try { onProgress?.(event); } catch { /* progress is advisory */ } };
     const pending = new Map(nodes.map((node) => [node.provider, node]));
     const completed = new Set();
     const failedOutputs = new Set();
@@ -193,21 +198,33 @@ export function createProviderScheduler({
         peakConcurrency: batch.length
       });
       log(`EXECUTION ${proofRunId}: ${batch.map((node) => node.provider).join(", ")}`);
-      const results = await Promise.all(batch.map((node) =>
-        executeAdapter(id, node.provider, node.config, proofRunId, commandCache)));
+      report({ event: "wave", wave, providers: batch.map((node) => node.provider),
+        startedAt: new Date(timestamp()).toISOString() });
+      const results = await Promise.all(batch.map(async (node) => {
+        const started = timestamp();
+        const result = await executeAdapter(id, node.provider, node.config, proofRunId, commandCache);
+        report({ event: "provider", provider: node.provider, status: result.status,
+          durationMs: Math.max(0, timestamp() - started) });
+        return result;
+      }));
       for (let index = 0; index < batch.length; index += 1) {
         pending.delete(batch[index].provider);
         outcomes.push({
           provider: batch[index].provider,
           status: results[index].status,
-          observations: results[index].observations || []
+          observations: results[index].observations || [],
+          ...(results[index].detail ? { detail: results[index].detail } : {})
         });
         if (results[index].status === "pass") {
           for (const covered of batch[index].covers) completed.add(covered);
         } else {
           failedOutputs.add(batch[index].provider);
           for (const covered of batch[index].covers) failedOutputs.add(covered);
-          logError(`PROVIDER ${batch[index].provider}: ${results[index].status}`);
+          // Name the command so a missing or broken provider script is
+          // actionable without reading the receipt.
+          const command = Array.isArray(batch[index].config?.command)
+            ? ` (${batch[index].config.command.join(" ")})` : "";
+          logError(`PROVIDER ${batch[index].provider}: ${results[index].status}${command}`);
         }
       }
     }

@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "vendor-release-pin-vendor-claude-foundation-manifest-json",
+      "requirementKey": "vendor-release-pin",
+      "scenario": "manifest ตรงรุ่น",
+      "impact": "low",
+      "capabilities": [
+        "static-analysis"
+      ]
+    },
+    {
+      "id": "vendor-release-pin-payload-claude-harness-protocol-json",
+      "requirementKey": "vendor-release-pin",
+      "scenario": "protocol ของ payload",
+      "impact": "low",
+      "capabilities": [
+        "static-analysis"
+      ]
+    },
+    {
+      "id": "vendor-integrity-createembeddedfoundationbundle-vendor",
+      "requirementKey": "vendor-integrity",
+      "scenario": "vendor ผ่านการตรวจ",
+      "impact": "low",
+      "capabilities": [
+        "static-analysis"
+      ]
+    },
+    {
+      "id": "vendor-integrity-payload-checksum",
+      "requirementKey": "vendor-integrity",
+      "scenario": "payload ถูกแก้",
+      "impact": "low",
+      "capabilities": [
+        "static-analysis"
+      ]
+    },
+    {
+      "id": "vendor-excludes-harness-tests-manifest-json-vendor",
+      "requirementKey": "vendor-excludes-harness-tests",
+      "scenario": "manifest ไม่มี tests",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "vendor-excludes-harness-tests-packages-foundation-vendor-repo",
+      "requirementKey": "vendor-excludes-harness-tests",
+      "scenario": "ความลึกไม่เกินกำหนด",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "vendor-excludes-harness-tests-sync-foundation-ts",
+      "requirementKey": "vendor-excludes-harness-tests",
+      "scenario": "sync กรองอย่างชัดเจน",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "static-analysis": {
+      "adapter": "command",
+      "capability": "static-analysis",
+      "command": [
+        "sh",
+        "-c",
+        "bun test --cwd packages/foundation test/foundation-bundle.test.ts"
+      ],
+      "claims": "declared"
+    },
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(bun test --cwd packages/foundation test/foundation-bundle.test.ts) && (bun test --cwd packages/foundation test/foundation-bundle.test.ts test/foundation-runtime.test.ts)"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}

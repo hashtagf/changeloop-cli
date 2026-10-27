@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
+import { APPROVAL_ROLES } from "../contracts/scratch-router.mjs";
 
 const DEFAULT_POLICY = {
   version: 1,
@@ -7,14 +8,20 @@ const DEFAULT_POLICY = {
     maxParallelAgents: 3,
     maxParallelProviders: 4,
     maxParallelSetups: 3,
-    packetBytes: { task: 8192, review: 8192, repository: 12288, global: 16384 },
+    packetBytes: { task: 20480, review: 20480, repository: 24576, global: 32768 },
     tokenBudgets: { rapid: 800000, standard: 1600000 },
     requestBudgets: { rapid: 100, standard: 200 },
     maxContinuationWindows: 3,
     planSummaryBytes: 4096,
-    leaseMinutes: 45
+    leaseMinutes: 45,
+    // Opt-in: when false, usage is still recorded for metrics but packets
+    // carry no spend-mode directives or limits.
+    budgetWatchdog: false
   },
   models: {
+    // Opt-in: when false, every task uses the single standard tier unless the
+    // task itself requests a tier.
+    routing: false,
     fast: { family: "haiku", fallbackTier: "standard", purposes: ["inventory", "logs", "mechanical-docs"] },
     standard: { family: "sonnet", fallbackTier: "deep", purposes: ["implementation", "tests", "focused-investigation"] },
     deep: { family: "opus", fallbackTier: null, purposes: ["architecture", "security", "migration", "independent-review"] }
@@ -29,8 +36,10 @@ const DEFAULT_POLICY = {
     fallbackReviewers: [], infraFailureThreshold: 1
   },
   telemetry: { requireUsage: false },
-  quality: { changeGate: "warn" },
+  quality: { changeGate: "off" },
   land: { riskBasedCi: false },
+  // Per-role spec approval lanes; empty keeps the single approval.
+  approval: { roles: [] },
   sandbox: { setupCommand: null, setupTimeoutMs: 600000 },
   workflow: {
     grounding: "optional",
@@ -39,6 +48,20 @@ const DEFAULT_POLICY = {
     handoffDefaultOwner: "devops-team"
   }
 };
+
+// A malformed approval block must refuse, not silently become "no lanes".
+export function approvalPolicyIssue(configured = {}) {
+  const approval = configured.approval;
+  if (approval === undefined) return null;
+  if (!approval || typeof approval !== "object" || Array.isArray(approval))
+    return "foundation.json approval must be an object such as {\"roles\": [\"tech-lead\"]}";
+  if (approval.roles !== undefined && !Array.isArray(approval.roles))
+    return `foundation.json approval.roles must be an array of ${APPROVAL_ROLES.join("|")}`;
+  const roles = approval.roles || [];
+  if (roles.some((role) => !APPROVAL_ROLES.includes(role)) || new Set(roles).size !== roles.length)
+    return `foundation.json approval.roles must be unique values from ${APPROVAL_ROLES.join("|")}`;
+  return null;
+}
 
 export function policyExecutionLimit(policy, field) {
   return policy().execution[field];
@@ -144,12 +167,17 @@ export function createRuntimeEnvironment({
   });
 
   function mergePolicy(configured) {
+    const approvalIssue = approvalPolicyIssue(configured);
+    if (approvalIssue) fail(approvalIssue);
     return {
       ...DEFAULT_POLICY, ...configured,
       execution: { ...DEFAULT_POLICY.execution, ...(configured.execution || {}) },
-      models: Object.fromEntries(["fast", "standard", "deep"].map((tier) => [
-        tier, { ...DEFAULT_POLICY.models[tier], ...(configured.models?.[tier] || {}) }
-      ])),
+      models: {
+        routing: configured.models?.routing ?? DEFAULT_POLICY.models.routing,
+        ...Object.fromEntries(["fast", "standard", "deep"].map((tier) => [
+          tier, { ...DEFAULT_POLICY.models[tier], ...(configured.models?.[tier] || {}) }
+        ]))
+      },
       review: {
         ...DEFAULT_POLICY.review, ...(configured.review || {}),
         reviewers: {
@@ -160,6 +188,7 @@ export function createRuntimeEnvironment({
       telemetry: { ...DEFAULT_POLICY.telemetry, ...(configured.telemetry || {}) },
       quality: { ...DEFAULT_POLICY.quality, ...(configured.quality || {}) },
       land: { ...DEFAULT_POLICY.land, ...(configured.land || {}) },
+      approval: { ...DEFAULT_POLICY.approval, ...(configured.approval || {}) },
       sandbox: { ...DEFAULT_POLICY.sandbox, ...(configured.sandbox || {}) },
       workflow: { ...DEFAULT_POLICY.workflow, ...(configured.workflow || {}) }
     };
@@ -233,15 +262,22 @@ export function createRuntimeEnvironment({
     validatePacketPolicy(policy);
     validateBudgetPolicy(policy);
     validateExecutionLimits(policy);
+    if (typeof policy.execution.budgetWatchdog !== "boolean")
+      fail("foundation.json execution.budgetWatchdog must be boolean");
   }
 
   function validateWorkflowPolicy(policy) {
     if (!["off", "warn", "enforce-high-risk"].includes(policy.quality.changeGate))
       fail("foundation.json quality.changeGate must be off|warn|enforce-high-risk");
+    const approvalIssue = approvalPolicyIssue(policy);
+    if (approvalIssue) fail(approvalIssue);
     const setupCommand = policy.sandbox.setupCommand;
     if (setupCommand !== null && setupCommand !== undefined &&
         (typeof setupCommand !== "string" || setupCommand.trim() === ""))
       fail("foundation.json sandbox.setupCommand must be a non-empty string");
+    const installDependencies = policy.sandbox.installDependencies;
+    if (installDependencies !== undefined && typeof installDependencies !== "boolean")
+      fail("foundation.json sandbox.installDependencies must be boolean");
     const setupTimeoutMs = Number(policy.sandbox.setupTimeoutMs);
     if (!Number.isInteger(setupTimeoutMs) || setupTimeoutMs < 1000 || setupTimeoutMs > 3600000)
       fail("foundation.json sandbox.setupTimeoutMs must be 1000..3600000");
@@ -317,15 +353,39 @@ export function createRuntimeEnvironment({
       fail(`foundation.json review.reviewers.${name}.reasoningEffort must be high`);
     if (reviewer.sandbox !== "read-only" || reviewer.ephemeral !== true)
       fail(`foundation.json review.reviewers.${name} must use read-only sandbox and ephemeral true`);
+    if (reviewer.auth !== undefined && reviewer.auth !== "skip")
+      fail(`foundation.json review.reviewers.${name}.auth must be "skip" when set`);
+    for (const field of ["fastModelId", "fastModelFamily", "standardModelId", "standardModelFamily"])
+      if (reviewer[field] !== undefined &&
+          (typeof reviewer[field] !== "string" || !reviewer[field].trim()))
+        fail(`foundation.json review.reviewers.${name}.${field} must be a non-empty string`);
   }
 
   function validateReviewPolicy(policy, configured) {
+    if (policy.review.lowRiskModel !== undefined &&
+        !["fast", "configured"].includes(policy.review.lowRiskModel))
+      fail("foundation.json review.lowRiskModel must be fast|configured");
+    const byTier = policy.review.modelByTier;
+    if (byTier !== undefined) {
+      if (!byTier || typeof byTier !== "object" || Array.isArray(byTier))
+        fail("foundation.json review.modelByTier must be an object mapping low|medium to fast|standard|configured");
+      for (const [tier, value] of Object.entries(byTier)) {
+        if (tier === "high")
+          fail("foundation.json review.modelByTier.high is not configurable: high-tier review always runs the configured model");
+        if (!["low", "medium"].includes(tier))
+          fail(`foundation.json review.modelByTier.${tier} is not a risk tier; use low|medium`);
+        if (!["fast", "standard", "configured"].includes(value))
+          fail(`foundation.json review.modelByTier.${tier} must be fast|standard|configured`);
+      }
+    }
     normalizeReviewFallbacks(policy, configured);
     for (const [name, reviewer] of Object.entries(policy.review.reviewers))
       validateReviewer(name, reviewer);
   }
 
   function validateModelPolicy(policy) {
+    if (typeof policy.models.routing !== "boolean")
+      fail("foundation.json models.routing must be boolean");
     for (const tier of ["fast", "standard", "deep"])
       if (!policy.models[tier] || typeof policy.models[tier].family !== "string")
         fail(`foundation.json models.${tier}.family is required`);

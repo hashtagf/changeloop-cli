@@ -72,6 +72,24 @@
         "explicitLand": "runtime-enforced"
       },
       "unattendedWrites": { "mode": "blocked-without-equivalent-boundary", "requires": "signed host attestation for an isolated workspace" }
+    },
+    "gemini": {
+      "nativeDispatch": "unavailable",
+      "liveMutationGuards": {
+        "coverage": "unavailable",
+        "phase": "unavailable",
+        "secrets": "unavailable",
+        "lint": "unavailable",
+        "sessionDigest": "unavailable"
+      },
+      "finalEnforcement": "Land gates",
+      "workflowGuarantees": {
+        "terminalTruth": "runtime-enforced",
+        "phaseIsolation": "final-audit-only",
+        "staleProof": "runtime-enforced",
+        "explicitLand": "runtime-enforced"
+      },
+      "unattendedWrites": { "mode": "blocked-without-equivalent-boundary", "requires": "host-proven sandbox boundary" }
     }
   }
 }

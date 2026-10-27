@@ -165,15 +165,20 @@ export async function startSpawnedService({
   child.on("close", (status) => { closed = true; exitStatus = status; });
   let spawnError = null;
   child.on("error", (error) => { spawnError = error; closed = true; });
-  const deadline = Date.now() + Number(config.timeoutMs || 30000);
-  while (Date.now() < deadline) {
+  const failure = () => {
     if (spawnError)
-      throw new Error(`service '${name}' could not start: ${spawnError.message}`);
+      return new Error(`service '${name}' could not start: ${spawnError.message}`);
     if (closed)
-      throw new Error(
+      return new Error(
         `service '${name}' exited before readiness (status ${exitStatus}): ` +
         `${stderr.trim() || stdout.trim() || "no output"}`
       );
+    return null;
+  };
+  const deadline = Date.now() + Number(config.timeoutMs || 30000);
+  while (Date.now() < deadline) {
+    const early = failure();
+    if (early) throw early;
     if (await readinessCheck(config.readiness)) {
       return {
         name, child, startedAt: now(),
@@ -188,6 +193,8 @@ export async function startSpawnedService({
     }
     await wait();
   }
+  const late = failure();
+  if (late) throw late;
   if (!closed) child.kill("SIGTERM");
   throw new Error(`service '${name}' readiness timed out`);
 }

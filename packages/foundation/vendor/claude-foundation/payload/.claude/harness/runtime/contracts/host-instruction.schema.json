@@ -12,7 +12,7 @@
       "required": ["protocol", "command", "description", "instruction", "argumentMode", "foundationVersion"],
       "properties": {
         "protocol": { "const": 1 },
-        "command": { "enum": ["investigate", "change", "build", "prove", "land", "changes", "feature", "dev"] },
+        "command": { "enum": ["investigate", "change", "build", "prove", "land", "deliver", "changes", "feature", "dev"] },
         "description": { "type": "string", "minLength": 1 },
         "instruction": { "type": "string", "minLength": 1 },
         "argumentMode": { "enum": ["required", "none"] },

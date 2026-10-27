@@ -1,6 +1,0 @@
-{
-  "name": "quality-fixture-frontend",
-  "private": true,
-  "dependencies": { "mongodb": "fixture" },
-  "scripts": { "test": "node --test", "typecheck": "tsc --noEmit" }
-}

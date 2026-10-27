@@ -33,6 +33,26 @@ test('gold-tier orders over $100 get 10% off', () => {
 })
 ```
 
+## Judge a test by two edits
+
+Imagine two edits to the code under test before trusting a test:
+
+1. **Break the behavior** — return the wrong value, skip the write, drop the
+   check. The test must fail. If it still passes, it pins nothing.
+2. **Change the internals while keeping behavior** — rename a helper, reorder
+   independent steps, swap the algorithm. The test must pass. If it fails, it
+   pins the implementation.
+
+A test that survives the first edit is hollow. Common causes:
+
+- **Expected value computed by the code under test** — `expect(total(x)).toBe(total(x))`, or a helper that reuses production logic to build the expectation. Derive expected values by hand or from an independent oracle.
+- **Restated constant** — asserting `RATE === 0.1` repeats the source; assert the outcome the constant produces.
+- **"Not called" without a positive case** — `expect(send).not.toHaveBeenCalled()` passes when the whole path is dead. Pair it with a test where the same setup, changed in one input, does call it.
+
+For idempotent behavior, do the effect twice: apply the operation, apply it
+again, and assert the state, rows, or emitted events equal the single-run
+result. Breaking idempotency must make that test fail.
+
 ## Principle 3 (from SKILL.md): Test the contract, the boundaries, the error paths — and the bug you just fixed
 
 **Rule:** Spend test effort where bugs live: the contract a caller depends on, the edges of every input range, the failure paths, and any bug that has shipped once. Don't spend it on getters, DTOs, or framework code.

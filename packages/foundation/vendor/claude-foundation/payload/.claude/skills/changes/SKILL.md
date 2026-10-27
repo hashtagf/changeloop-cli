@@ -1,6 +1,6 @@
 ---
 name: changes
-description: Show and explain active Foundation changes and their next actions. Use when the user invokes changes or asks Codex for repository workflow status without requesting implementation.
+description: "Read and explain active Change Loop changes, readiness, blockers, and next actions. Use for workflow status or changes requests. Follow the canonical command; do not start implementation, grant authority, or infer delivery from proven."
 ---
 
 Treat the text after `$changes` as the command arguments. Read

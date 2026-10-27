@@ -11,6 +11,18 @@ export function compositeRepositorySelection(repositories = []) {
   return repositories.some((repository) => repository.id !== "root");
 }
 
+// Root-relative paths of every non-root repository the topology declares
+// inside the control root (submodules and nested Git repositories). Their
+// location in the root workspace is that repository's own pointer, never root
+// task content. A missing catalog contributes nothing.
+export function nestedRepositoryRelativePaths(catalogValue) {
+  return [...new Set((catalogValue?.repositories || [])
+    .filter((repository) => repository?.id !== "root")
+    .map((repository) => String(repository?.relativePath || "")
+      .replaceAll("\\", "/").replace(/\/+$/, ""))
+    .filter((path) => path && path !== "." && path !== ".." && !path.startsWith("../")))];
+}
+
 export function repositoryBaseHead(repository, state) {
   const recorded = state.repositories?.[repository.id]?.baseHead ||
     (repository.id === "root" ? state.workspace?.baseHead : null);

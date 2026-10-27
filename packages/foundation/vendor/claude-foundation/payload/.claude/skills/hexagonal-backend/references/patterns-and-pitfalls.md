@@ -4,7 +4,7 @@ Companion to `SKILL.md` (language-agnostic; runnable code stays in `typescript.m
 
 ## Patterns
 
-Each pattern's full runnable implementation is in the reference files (TypeScript: [`references/typescript.md`](references/typescript.md); Go: [`references/go.md`](references/go.md)). The hexagonal point of each:
+Each pattern's full runnable implementation is in the reference files (TypeScript: [`typescript.md`](typescript.md); Go: [`go.md`](go.md)). The hexagonal point of each:
 
 - **Domain entity** — a *rich* entity: private/unexported fields, state changes only through invariant-enforcing methods (`order.markPaid()`, not a setter), and **no** `json`/`bson`/ORM tags or infra imports. Split construction into `NewX` (the only way to build a valid new instance — enforces invariants) vs `Rehydrate` (rebuilds already-valid storage state, skips checks; adapters use it). Aggregate boundaries and how rich the entity should be: [[ddd-strategic]].
 - **Port definition** — driven ports declare what the app needs; the optional driving port is the use-case surface. Keep them narrow (Interface Segregation). In Go, all ports sit in one `core/port` package so the dependency arrows are visible in one place; a compile-time check (`var _ port.OrderRepository = (*OrderRepository)(nil)`) catches drift at build, not runtime.
@@ -17,7 +17,7 @@ Each pattern's full runnable implementation is in the reference files (TypeScrip
 
 The hexagonal concern here is *where the transaction boundary lives*: passing a raw `db.Tx` into the use case re-couples application to infrastructure. (Isolation levels, locking, and atomicity mechanics are [[database-fundamentals]].)
 
-**Unit of Work pattern** — expose a transaction port; the use case hands it a function; the adapter runs that function in a transaction, and repositories inside pick up the same transaction. The use case knows transactions exist; it doesn't know Postgres, Mongo sessions, or savepoints. Runnable `UnitOfWork` port + `TransferFunds` use case: [`references/typescript.md`](references/typescript.md).
+**Unit of Work pattern** — expose a transaction port; the use case hands it a function; the adapter runs that function in a transaction, and repositories inside pick up the same transaction. The use case knows transactions exist; it doesn't know Postgres, Mongo sessions, or savepoints. Runnable `UnitOfWork` port + `TransferFunds` use case: [`typescript.md`](typescript.md).
 
 **Crossing systems (DB + message broker)** — don't dual-write; use a transactional outbox. The hexagonal framing: the outbox table is an adapter concern, so the use case still sees only `orders.save(order)`. Outbox/relay mechanics and delivery semantics: [[queue-fundamentals]].
 
@@ -29,11 +29,11 @@ The hexagonal concern is the *layered translation* — each layer translates the
 - **Application errors** — broken use-case preconditions: `OrderNotFound`, `Unauthorized`, `IdempotencyConflict`. Live in the application layer.
 - **Infrastructure errors** — leakage from external systems. Adapters catch those with domain meaning and re-raise as domain/application errors (unique constraint on `email` → `EmailAlreadyTaken`). Anything else propagates as a generic infra failure.
 
-Driving adapters translate at the edge — domain/application errors become HTTP status codes, gRPC codes, or CLI exit codes. Keep that map in the driving adapter, not in the use case: the use case throws; HTTP decides the status. Runnable `toHttp` translator: [`references/typescript.md`](references/typescript.md); the Go `writeError` switch is inside the HTTP handler in [`references/go.md`](references/go.md).
+Driving adapters translate at the edge — domain/application errors become HTTP status codes, gRPC codes, or CLI exit codes. Keep that map in the driving adapter, not in the use case: the use case throws; HTTP decides the status. Runnable `toHttp` translator: [`typescript.md`](typescript.md); the Go `writeError` switch is inside the HTTP handler in [`go.md`](go.md).
 
 ## Queries that don't fit save/findById
 
-The repository is shaped for the *write* path. When the read path needs pagination, projections, joins, or aggregate stats, forcing it through a repository creates a god object. Introduce a separate **query port** that returns plain DTOs; the adapter issues whatever SQL or denormalized read it needs without dragging the domain in. The DTO lives in the application layer but carries no behavior. This is the CQRS seam: writes through repositories and domain; reads through query ports. Start with the repository; add a query port when it grows read-only methods the domain never uses. Example query port: [`references/typescript.md`](references/typescript.md).
+The repository is shaped for the *write* path. When the read path needs pagination, projections, joins, or aggregate stats, forcing it through a repository creates a god object. Introduce a separate **query port** that returns plain DTOs; the adapter issues whatever SQL or denormalized read it needs without dragging the domain in. The DTO lives in the application layer but carries no behavior. This is the CQRS seam: writes through repositories and domain; reads through query ports. Start with the repository; add a query port when it grows read-only methods the domain never uses. Example query port: [`typescript.md`](typescript.md).
 
 ## Testing strategy
 
@@ -73,9 +73,8 @@ The **logical layering rule** (domain has zero external dependencies; ports defi
 
 ## Conversation guidance
 
-Always-on for backend work with real domain logic (per `.claude/rules/fundamentals.md`). If the task matches *When NOT to apply strictly* in `SKILL.md`, say so in one sentence and proceed without hexagonal.
+Use this skill when dependency direction or use-case ownership is the active decision, following [the skill rules](../SKILL.md#rules) and [construction routing](../../../rules/fundamentals.md#construction-skills). Use a simpler vertical slice for trivial CRUD; introduce ports only where policy, replacement risk, or test isolation justifies them.
 
 - **Starting fresh** — propose folder structure first, then sketch domain entities and ports before code.
 - **Refactoring** — classify existing code into domain/application/infrastructure; migrate one use case at a time.
 - **Writing code** — follow the patterns above and the runnable reference for the stack in use. On a non-obvious call (a `Clock` port, unit-of-work, query port), say *why* in one sentence. Cite relevant pitfalls.
-

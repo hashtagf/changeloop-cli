@@ -12,7 +12,3 @@ export function measuredNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed + 0 : null;
 }
-
-export function isMeasuredNumber(value) {
-  return measuredNumber(value) !== null;
-}

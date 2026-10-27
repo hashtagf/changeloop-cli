@@ -5,10 +5,10 @@
     "maxParallelProviders": 4,
     "maxParallelSetups": 3,
     "packetBytes": {
-      "task": 8192,
-      "review": 8192,
-      "repository": 12288,
-      "global": 16384
+      "task": 20480,
+      "review": 20480,
+      "repository": 24576,
+      "global": 32768
     },
     "tokenBudgets": {
       "rapid": 800000,
@@ -20,9 +20,11 @@
     },
     "maxContinuationWindows": 3,
     "planSummaryBytes": 4096,
-    "leaseMinutes": 45
+    "leaseMinutes": 45,
+    "budgetWatchdog": false
   },
   "models": {
+    "routing": false,
     "fast": {
       "family": "haiku",
       "fallbackTier": "standard",
@@ -82,10 +84,20 @@
     "requireUsage": true
   },
   "quality": {
-    "changeGate": "warn"
+    "changeGate": "off"
   },
   "land": {
     "riskBasedCi": false
+  },
+  "deliver": {
+    "provider": "auto",
+    "remote": "origin",
+    "defaultBaseBranch": "main",
+    "branchPattern": "change/{changeId}",
+    "missingPresentationEvidence": "draft",
+    "missingRequiredEvidence": "block",
+    "updateOwnedPullRequest": true,
+    "allowedHosts": ["github.com"]
   },
   "workflow": {
     "grounding": "optional",

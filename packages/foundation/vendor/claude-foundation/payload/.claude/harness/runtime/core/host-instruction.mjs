@@ -7,7 +7,7 @@ import {
 
 export const HOST_INSTRUCTION_PROTOCOL = 1;
 export const HOST_COMMANDS = Object.freeze([
-  "investigate", "change", "build", "prove", "land", "changes", "feature", "dev"
+  "investigate", "change", "build", "prove", "land", "deliver", "changes", "feature", "dev"
 ]);
 
 const COMMAND_FILES = new Map(HOST_COMMANDS.map((name) => [name, `${name}.md`]));
@@ -117,26 +117,6 @@ export function parseHostInstructionArguments(argv) {
   if (options.format !== "json")
     throw new HostInstructionError("unsupported_format", "Only JSON output is supported.");
   return { command, options };
-}
-
-export function hostInstructionResponse(argv, options = {}) {
-  try {
-    const parsed = parseHostInstructionArguments(argv);
-    return { status: 0, body: resolveHostInstruction(parsed.command,
-      { ...parsed.options, packageRoot: options.packageRoot }) };
-  } catch (error) {
-    const known = error instanceof HostInstructionError;
-    return {
-      status: 1,
-      body: {
-        protocol: HOST_INSTRUCTION_PROTOCOL,
-        error: {
-          code: known ? error.code : "instruction_unavailable",
-          message: known ? error.message : "The installed Foundation instruction is unavailable."
-        }
-      }
-    };
-  }
 }
 
 export async function hostInstructionResponseWithUpdate(argv, options = {}) {

@@ -52,11 +52,17 @@ const roots = [
   ".foundation/.gitignore",
   ".foundation/README.md",
 ]
-const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: source, dot: true, onlyFiles: true })))
+// Mirrors UNSHIPPED in the source install.sh: repository-only suites the runtime
+// never reads. Skipping them also keeps every vendored path within the harness
+// scan depth limit.
+const unshipped = [".claude/harness/tests", ".claude/harness/fixtures"]
+const under = (file: string, root: string) => file === root || file.startsWith(`${root}/`)
+const candidates = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: source, dot: true, onlyFiles: true })))
   .map((file) => file.replaceAll("\\", "/"))
-  .filter((file) => roots.some((root) => file === root || file.startsWith(`${root}/`)))
-  .sort()
+  .filter((file) => roots.some((root) => under(file, root)))
+const files = candidates.filter((file) => !unshipped.some((root) => under(file, root))).sort()
 if (files.length === 0) throw new Error("Foundation release payload is empty")
+console.log(`skipped ${candidates.length - files.length} unshipped files (${unshipped.join(", ")})`)
 
 await rm(vendor, { recursive: true, force: true })
 await Promise.all(

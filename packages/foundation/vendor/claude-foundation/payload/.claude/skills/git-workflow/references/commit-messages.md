@@ -151,20 +151,15 @@ Changelog tools key off the `!` *and* the `BREAKING CHANGE:` footer; the redunda
 | Pasted error message as the entire body | The diff probably already shows what; this hides the why | Translate: "X failed because Y, fixed by Z" |
 | 500-character subject because "it didn't fit" | Truncated everywhere — log, PR title, blame view | The commit is two commits. Split. |
 
-## Project-specific conventions
+## Change Loop provenance
 
-This project's `/dev` workflow types directly map to commit types — when a `/dev` run produces a commit, the type comes from the spec's `Type:` slot. That's the source of truth for whether a change is a `feat`, `fix`, `refactor`, etc.
+/dev delivers through Change, Build, Prove, and authorized Land. It produces
+an uncommitted target diff, not a commit. For separately authorized Git or
+/deliver work, choose the commit type from actual behavior and the repository
+convention; do not invent a spec Type field or a legacy workflow directory.
 
-The engineer agent's ship step references the run ID in the body, e.g.:
+Reference the archived OpenSpec change and actual evidence when useful.
+Never create plan/review/retro artifacts just to fill a commit message.
+See installed WORKFLOW.md for Deliver authority and retained provenance.
 
-```
-feat(audit): record user_id on every audit row
-
-Adds nullable user_id column populated from the request session.
-Falls back to "system" for callback-driven writes (cron, webhooks).
-
-Run: 0007-feat-audit-actor
-Change: openspec/changes/add-audit-actor/
-```
-
-That gives `git log` a one-way link back into the workflow folder where the spec, plan, review, and retro live forever.
+Prose style: [writing](../../init-project-docs/references/writing.md).

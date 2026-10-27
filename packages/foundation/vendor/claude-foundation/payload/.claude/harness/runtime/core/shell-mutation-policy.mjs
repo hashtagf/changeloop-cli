@@ -160,6 +160,33 @@ function operandText(command) {
   return maskSingleQuoted(withoutHeredocBodies(command));
 }
 
+// A sed script is program text, not a path: an address such as
+// `'/\*\*T005\*\*/s#a#b#'` starts with `/` and was refused as a write outside
+// the workspace. Only the script operands are exempt; the edited files are
+// still read as operands. BSD `-i ''` takes a separate empty suffix word.
+// Quoted words are consumed whole: `s|a|b|` must not end the invocation.
+const SED_INVOCATION = new RegExp(String.raw`(?:^|[;&|()]|\b(?:then|do)\b)\s*(?:sudo\s+|env\s+)*(?:[^\s;&|()]+\/)*sed\b((?:${QUOTED_WORD}|[^;&|\n'"])*)`, "gm");
+
+function sedScriptWords(commandLine) {
+  const scripts = new Set();
+  for (const match of commandLine.matchAll(SED_INVOCATION)) {
+    const words = shellWords(match[1]);
+    let explicit = false;
+    let positional = null;
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      if (word === "-e" || word === "--expression") {
+        explicit = true;
+        if (words[i + 1] !== undefined) scripts.add(words[++i]);
+      } else if (word === "-f" || word === "--file") i++;
+      else if (word === "-i" && /^(?:''|"")$/.test(words[i + 1] || "")) i++;
+      else if (!word.startsWith("-") && positional === null) positional = word;
+    }
+    if (!explicit && positional !== null) scripts.add(positional);
+  }
+  return scripts;
+}
+
 // Return every path that a recognized filesystem command may mutate. Reading
 // an extra source path is harmless to containment, while omitting a destination
 // is not, so multi-path commands deliberately inspect all operands.
@@ -185,7 +212,10 @@ function filesystemMutationTargets(command) {
   // the command carries code that resolves paths itself.
   const scoped = operandText(command);
   const executableRanges = absoluteExecutableRanges(scoped);
+  const sedScripts = sedScriptWords(commandLine);
   for (const match of scoped.matchAll(LITERAL_ABSOLUTE)) {
+    if (match[1] !== undefined && sedScripts.has(`"${match[1]}"`) ||
+        match[2] !== undefined && sedScripts.has(`'${match[2]}'`)) continue;
     const raw = match[1] ?? match[2] ?? match[3];
     const start = match.index + match[0].indexOf(raw);
     if (executableRanges.some(([from, to]) => start >= from && start < to)) continue;
@@ -194,7 +224,8 @@ function filesystemMutationTargets(command) {
   }
   if (scoped !== command)
     for (const match of commandLine.matchAll(QUOTED_REGION))
-      if (match[0].startsWith("'/")) targets.push(shellUnquote(match[0]));
+      if (match[0].startsWith("'/") && !sedScripts.has(match[0]))
+        targets.push(shellUnquote(match[0]));
   return [...new Set(targets)].filter((target) => target && target !== "/dev/null");
 }
 
@@ -219,24 +250,59 @@ function copySourceOperands(command) {
   return sources;
 }
 
-function targetEscapes(target, workspace, inspection) {
+// A relative target resolves from the workspace the command is anchored in;
+// any target may land in any of the change's writable workspace roots.
+function targetEscapes(target, workspace, inspection, roots = [workspace]) {
   const absolute = isAbsolute(target) ? resolve(target) : resolve(workspace, target);
-  if (!within(workspace, absolute)) return true;
+  if (!roots.some((root) => within(root, absolute))) return true;
   if (!inspection?.canonicalTarget || !inspection?.contains) return false;
   const canonical = inspection.canonicalTarget(absolute);
-  return !canonical || !inspection.contains(canonical, workspace);
+  return !canonical || !roots.some((root) => inspection.contains(canonical, root));
 }
 
 // Returns the first fragment that leaves the workspace, or null. Naming it is
 // what lets an agent repair the command instead of retrying it unchanged.
-function obviousWorkspaceEscape(command, workspace, inspection = null) {
+function obviousWorkspaceEscape(command, workspace, inspection = null, roots = [workspace]) {
   const parent = /(?:^|[\s'"=])(\.\.(?:\/[^\s'";&|]*|$))/.exec(operandText(command));
   if (parent) return parent[1];
   // A second popd can return to the checkout that preceded the required
   // workspace anchor. Its resulting cwd cannot be proven from the command.
   if (/\bpopd\b/.test(command)) return "popd";
   return filesystemMutationTargets(command)
-    .find((target) => targetEscapes(target, workspace, inspection)) ?? null;
+    .find((target) => targetEscapes(target, workspace, inspection, roots)) ?? null;
+}
+
+// A multi-repository change edits each selected writable repository in its own
+// sandbox (`.foundation/repository-sandboxes/<change>/<repository>`). Those
+// sandboxes are workspace roots with the same strictness as the shared one;
+// the shared sandbox's mirror of such a repository (an empty or missing
+// submodule directory) is not where its work lives. Malformed input grants
+// nothing.
+export function repositoryWorkspaces(environment) {
+  let rows;
+  try { rows = JSON.parse(environment?.FOUNDATION_REPOSITORY_WORKSPACES_JSON || "[]"); }
+  catch { return []; }
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => row && typeof row.path === "string" && isAbsolute(row.path))
+    .map((row) => ({
+      repository: String(row.repository || "repository"),
+      path: resolve(row.path),
+      mirror: typeof row.mirror === "string" && isAbsolute(row.mirror) ? resolve(row.mirror) : null
+    }));
+}
+
+function mirroredRepository(paths, repositories) {
+  for (const path of paths)
+    for (const repository of repositories)
+      if (repository.mirror && isAbsolute(path) && within(repository.mirror, path))
+        return repository;
+  return null;
+}
+
+function mirrorRefusal(repository) {
+  return `repository '${repository.repository}' is edited in its repository sandbox, not in ` +
+    `the shared sandbox's copy of it; start the command with \`cd ${
+      shellDisplayArgument(repository.path)} && \``;
 }
 
 // A `$name` after `/` is a path segment (`/workspace/$X`), not a quoted argument
@@ -261,19 +327,38 @@ function dynamicPathToken(command) {
 }
 
 const INTERPRETER = /\b(?:python(?:3(?:\.\d+)?)?|node|ruby|perl)\b/i;
-const INTERPRETER_WRITE = /(?:\bopen\s*\([^\n)]*,\s*['"][wax+]|\.write(?:_text|_bytes)?\s*\(|\b(?:writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|renameSync|rmSync|unlinkSync|mkdirSync|copyFileSync)\s*\()/i;
+// `process.stdout.write(` and `sys.stderr.write(` print; they write no file.
+const INTERPRETER_WRITE = /(?:\bopen\s*\([^\n)]*,\s*['"][wax+]|(?<!std(?:out|err))\.write(?:_text|_bytes)?\s*\(|\b(?:writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|renameSync|rmSync|unlinkSync|mkdirSync|copyFileSync)\s*\()/i;
 const FORMATTER_WRITE = /(^|[;&|`()]|\b(?:then|do)\b)\s*(?:sudo\s+|env\s+)*(?:(?:npx|pnpm\s+(?:exec|dlx)|yarn\s+dlx|bunx)\s+)?(?:prettier\b[^\n;&|]*\s--write\b|eslint\b[^\n;&|]*\s--fix\b|ruff\b[^\n;&|]*\s(?:format|check\b[^\n;&|]*\s--fix\b)|black\b|gofmt\b[^\n;&|]*\s-w\b|cargo\s+fmt\b)/m;
-const MUTATING_WORD = /(?:^|[;&|`()]|\b(?:then|do)\b)\s*(?:sudo\s+|env\s+)*(?:[^\s;&|()]+\/)*(rm|mv|cp|ln|install|mkdir|rmdir|touch|truncate|tee|chmod|chown|patch|git\s+(?:add|tag|commit|push|merge|rebase|checkout|switch|restore|reset|clean|apply|rm|mv|cherry-pick|revert|stash|am|pull|worktree|submodule)|npm\s+(?:install|publish|run|exec)|npx|pnpm\s+(?:install|publish|run|exec|dlx)|yarn\s+(?:add|install|publish|run|dlx)|bun\s+(?:install|run)|bunx|sh\s+\S+|bash\s+\S+|zsh\s+\S+)\b/gm;
-const IN_PLACE_EDIT = /(^|[;&|`()]|\b(?:then|do)\b)\s*(?:sudo\s+|env\s+)*(?:sed|perl|ruby)\s+(?:-\S+\s+)*-\S*i/m;
-const REDIRECT = /(?:^|[^<])(?:>>?|2>>?)\s*(?!&)(?!\/dev\/null(?:[\s;&|)]|$))\S/m;
+const MUTATING_WORD = /(?:^|[;&|`()]|\b(?:then|do)\b)\s*(?:sudo\s+|env\s+)*(?:[^\s;&|()]+\/)*(rm|mv|cp|ln|install|mkdir|rmdir|touch|truncate|tee|chmod|chown|patch|git\s+(?:add|tag|commit|push|merge|rebase|checkout|switch|restore|reset|clean|apply|rm|mv|cherry-pick|revert|stash(?!\s+(?:list|show)\b)|am|pull|worktree(?!\s+list\b)|submodule(?!\s+(?:status|summary)\b))|npm\s+(?:install|publish|run|exec)|npx|pnpm\s+(?:install|publish|run|exec|dlx)|yarn\s+(?:add|install|publish|run|dlx)|bun\s+(?:install|run)|bunx|sh\s+\S+|bash\s+\S+|zsh\s+\S+)\b/gm;
+// `-M`/`-I` take a module or include path (`perl -Mstrict`), not switches.
+const IN_PLACE_EDIT = /(^|[;&|`()]|\b(?:then|do)\b)\s*(?:sudo\s+|env\s+)*(?:sed|perl|ruby)\s+(?:-\S+\s+)*-(?![MI])\S*i/m;
+// Output sent to the terminal's own streams is not a file write.
+const REDIRECT = /(?:^|[^<])(?:>>?|2>>?)\s*(?!&)(?!\/dev\/(?:null|stdout|stderr)(?:[\s;&|)]|$))\S/m;
+
+// The harness CLI is one program however the host spells it: through `npx`
+// (optionally `--no-install`, `--no`, `-y`, `--yes`) or by a path to its bin.
+// Every spelling at a command position is rewritten to bare `claude-foundation`
+// so classification — including authority patterns — cannot differ by spelling.
+const HARNESS_CLI_SPELLING = /((?:^|[;&|`()]|\b(?:then|do)\b)\s*(?:sudo\s+|env\s+)*)(?:npx(?:\s+(?:--no-install|--no|--yes|-y))*\s+|[^\s;&|()`'"<>]*\/)claude-foundation(?=[\s;&|()`]|$)/gm;
+
+export function normalizeHarnessCliInvocations(command) {
+  return String(command || "").replace(HARNESS_CLI_SPELLING, "$1claude-foundation");
+}
 
 // The matched command words, not merely whether one exists: a phase rule that
 // permits some operations and refuses others has to name the ones it refused.
 export function mutatingShellOperations(command) {
   const value = String(command || "");
+  // A quoted heredoc body is data: `a => b` or a line starting with `install`
+  // in a script fed to `node` is neither a redirect nor a command. Bodies the
+  // shell expands stay screened. The interpreter screen below still reads the
+  // whole command, because that code is what the interpreter runs.
+  const commandLine = withoutHeredocBodies(value, (body) => !body.literal);
   // Quoted text is opaque to the word screens, but it is still an operand:
   // erasing it entirely made `> "/etc/x"` read as a redirect with no target.
-  const stripped = value.replace(/(['"])(?:\\.|(?!\1).)*\1/g, " _ ");
+  const stripped = normalizeHarnessCliInvocations(
+    commandLine.replace(/(['"])(?:\\.|(?!\1).)*\1/g, " _ "));
   const operations = [];
   if (INTERPRETER.test(value) && INTERPRETER_WRITE.test(value))
     operations.push("interpreter write");
@@ -313,10 +398,14 @@ export function pinShellAnchor(command, ...directories) {
 export function shellMutationViolation(phase, environment, command = null, inspection = null) {
   const operations = command === null ? null : mutatingShellOperations(command);
   if (operations !== null && operations.length === 0) return null;
-  if (phase === "prove" || phase === "change")
-    return `${phase === "prove" ? "Prove" : "Change"} cannot run mutating shell commands`;
+  if (phase === "prove" || phase === "change" || phase === "investigate")
+    return `${phase === "prove" ? "Prove" : phase === "change" ? "Change" : "Investigate"} cannot run mutating shell commands`;
+  // An opaque script runner can write anywhere in the target, and Land only
+  // restores paths in its own projection, so it needs the transaction too.
+  // Read-only test commands (`node --test`) are not mutations and still run.
   if (phase === "land" && environment.FOUNDATION_LAND_TRANSACTION !== "1")
-    return "Land shell mutations require the runtime transaction marker";
+    return "Land shell mutations require the runtime transaction marker; Land writes the " +
+      "target itself, and Prove already ran the checks in the isolated workspace";
   if (phase === "build") {
     const workspace = environment.FOUNDATION_WORKSPACE_ROOT;
     if (!workspace) return "Build shell mutations require an isolated workspace";
@@ -325,15 +414,29 @@ export function shellMutationViolation(phase, environment, command = null, inspe
     // exact workspace, and the shape the command must take. A bare rule name
     // sent agents into unchanged retries.
     const text = String(command);
-    const root = shellDisplayArgument(workspace);
+    const repositories = repositoryWorkspaces(environment);
+    const roots = [workspace, ...repositories.map((repository) => repository.path)];
     const anchor = shellAnchor(text);
     const dynamic = anchor ? dynamicPathToken(anchor.target) : null;
-    if (dynamic === null && (!anchor || !isAbsolute(anchor.target) ||
-        !within(workspace, anchor.target)))
+    // The workspace the command is anchored in: the shared sandbox or one of
+    // the change's repository sandboxes, whichever holds the anchor.
+    const home = anchor && dynamic === null && isAbsolute(anchor.target)
+      ? roots.filter((candidate) => within(candidate, anchor.target))
+        .sort((left, right) => resolve(right).length - resolve(left).length)[0] || null
+      : workspace;
+    const root = shellDisplayArgument(home || workspace);
+    const mirrored = dynamic === null && mirroredRepository([
+      ...(anchor && isAbsolute(anchor.target) ? [anchor.target] : []),
+      ...filesystemMutationTargets(text).filter((target) => isAbsolute(target))
+        .map((target) => resolve(target))
+    ], repositories);
+    if (mirrored) return `Build shell mutation targets the wrong copy (refused: ${
+      operations.join(", ")}); ${mirrorRefusal(mirrored)}`;
+    if (dynamic === null && (!anchor || !isAbsolute(anchor.target) || !home))
       return "Build shell mutations must start inside the isolated workspace " +
         `(refused: ${operations.join(", ")}); ` +
-        `start the command with \`cd ${root} && \` or \`cd ${hintPath(workspace, "/<subdir>")} && \``;
-    if (dynamic === null && anchor.separator === ";" && !sameDirectory(workspace, anchor.target))
+        `run \`cd ${root}\` as its own call first (the shell keeps it), or start the command with \`cd ${hintPath(workspace, "/<subdir>")} && \``;
+    if (dynamic === null && anchor.separator === ";" && !sameDirectory(home, anchor.target))
       return "Build shell mutations must start inside the isolated workspace " +
         `(\`${anchor.word};\` continues even when the directory change fails); ` +
         `start the command with \`cd ${shellDisplayArgument(anchor.target)} && \``;
@@ -345,12 +448,12 @@ export function shellMutationViolation(phase, environment, command = null, inspe
     if (dynamicToken !== null)
       return "Build shell mutation contains a dynamic path that cannot be proven isolated " +
         `(\`${dynamicToken}\`); use literal paths inside ${root}`;
-    const escape = obviousWorkspaceEscape(text, workspace, inspection);
+    const escape = obviousWorkspaceEscape(text, home || workspace, inspection, roots);
     if (escape !== null && copySourceOperands(text).includes(escape))
       return "Build shell mutation copies or links from outside the isolated workspace " +
         `(\`${escape}\`); a workspace never borrows the checkout's files or dependencies. ` +
-        "Declare sandbox.setupCommand in foundation.json (for example \"npm ci\") so the " +
-        `harness prepares every workspace, or run that install once after \`cd ${root} && \``;
+        "To change dependencies, edit the manifest or lockfile; the harness reruns the " +
+        `workspace install before the next check, or run that install once after \`cd ${root} && \``;
     if (escape !== null)
       return "Build shell mutation contains an obvious path outside the isolated workspace " +
         `(\`${escape}\`); keep every mutation target inside ${root}`;

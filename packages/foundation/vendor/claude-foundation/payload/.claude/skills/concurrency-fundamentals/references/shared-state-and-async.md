@@ -1,5 +1,21 @@
 # Shared state, locking, and async
 
+## Contents
+
+- [Principle 1: Don't share mutable state — the easiest concurrency bug is the one you designed out](#principle-1-from-skillmd-dont-share-mutable-state-the-easiest-concurrency-bug-is-the-one-you-designed-out)
+- [Principle 2: When you must share, make access atomic](#principle-2-from-skillmd-when-you-must-share-make-access-atomic)
+- [Principle 3: Prevent deadlock by design](#principle-3-from-skillmd-prevent-deadlock-by-design)
+- [Principle 4: async/await is concurrency too](#principle-4-from-skillmd-asyncawait-is-concurrency-too)
+- [Principle 5: Make operations idempotent and cancellable](#principle-5-from-skillmd-make-operations-idempotent-and-cancellable)
+- [Principle 6: Bound your concurrency](#principle-6-from-skillmd-bound-your-concurrency)
+- [Principle 7: Test the races you can — but design so correctness doesn't depend on timing](#principle-7-from-skillmd-test-the-races-you-can-but-design-so-correctness-doesnt-depend-on-timing)
+- [1. Escape hatches: avoid the sharing entirely](#1-escape-hatches-avoid-the-sharing-entirely)
+- [2. When you must share: lock vs atomic vs CAS vs optimistic version](#2-when-you-must-share-lock-vs-atomic-vs-cas-vs-optimistic-version)
+- [3. Deadlock-avoidance recipes](#3-deadlock-avoidance-recipes)
+- [4. async/await pitfalls](#4-asyncawait-pitfalls)
+- [5. Bounded concurrency patterns](#5-bounded-concurrency-patterns)
+- [Quick reference](#quick-reference)
+
 Moved from `SKILL.md` — principles 1-7's full rule/why/how-to-apply/example, ahead of the topic-organized recipes below.
 
 ## Principle 1 (from SKILL.md): Don't share mutable state — the easiest concurrency bug is the one you designed out
@@ -140,6 +156,10 @@ const out = await Promise.all(ids.map(fetchUser))   // concurrent — but bound 
 - **Make the in-flight state single.** Collapse concurrent identical requests into one shared promise (request coalescing / single-flight) so ten callers asking for the same thing trigger one operation, not ten.
 - **Cancellation must clean up.** Plumb an `AbortSignal` / cancellation token through. On cancel, release locks, close handles, roll back partial writes — in a `finally`, so it runs whether the task completed, threw, or was cancelled.
 - **Timeouts are cancellation.** A timeout that abandons a task without cancelling its underlying work leaks the work (and any resources it holds). Wire the timeout to the same cancellation path.
+- **Answer the three rerun questions** for every state-mutating step: *What if it runs twice? What if the previous run crashed halfway? What if two runs overlap?* "It depends on what was left behind" means the step needs reconciliation.
+- **Derive each step from current state.** Read what exists, compare it with the goal, and apply only the difference; a repeat then finds nothing to do. Do not replay what the previous run intended.
+- **Write to a temp file, then rename.** Build output at a temporary path in the same directory and rename it into place, so a reader sees the old file or the complete new one, never a torn write.
+- **Judge staleness by evidence valid at every crash point.** A leftover lock, temp file, partial record, or claimed job must be recognizable as stale wherever the prior run stopped (owner liveness, content digest, completed marker), not by timestamp order or the common-case path.
 
 **Example:**
 ```ts

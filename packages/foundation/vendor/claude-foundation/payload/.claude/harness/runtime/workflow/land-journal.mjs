@@ -4,6 +4,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { deriveApplyProjection } from "../core/state-projections.mjs";
+import { manualRecoveryDecision } from "./apply-recovery.mjs";
 
 export function transactionJournals(transactions, id, readJson) {
   const root = join(transactions, id);
@@ -174,6 +175,19 @@ export function restoreLandJournalEntry(context, journal, entry) {
     throw new Error(`rollback verification failed at '${entry.path}'`);
 }
 
+// Paths whose current target content is neither what Land found nor what it
+// wrote: someone else's bytes. Reported to the agent, never overwritten.
+export function divergentJournalPaths(context, journal) {
+  try {
+    return (journal.entries || []).filter((entry) => {
+      const target = context.safeRootPath(entry.path);
+      return !context.matches(target, entry, "before") && !context.matches(target, entry, "after");
+    }).map((entry) => entry.path);
+  } catch {
+    return [];
+  }
+}
+
 export function rollbackLandJournalOperation(context, journal, reason) {
   journal.status = "rolling-back";
   journal.failure = String(reason?.message || reason);
@@ -188,31 +202,32 @@ export function rollbackLandJournalOperation(context, journal, reason) {
   } catch (error) {
     journal.status = "manual-recovery";
     journal.recoveryError = error.message;
-    journal.decision = {
-      kind: "manual-recovery",
-      summary: "The target changed during rollback, so Foundation stopped without overwriting the divergent content.",
-      options: [
-        { id: "inspect", outcome: "Inspect the target and transaction backup before choosing a recovery." },
-        { id: "keep-current", outcome: "Preserve the current target and abandon automatic rollback." },
-        { id: "restore-backup", outcome: "Restore the recorded backup after explicitly resolving the divergence." },
-        { id: "pause", outcome: "Leave the journal pending and make no further changes." }
-      ],
-      recommended: "inspect",
-      transactionRoot: context.transactionRoot(journal.changeId, journal.transactionId)
-    };
+    journal.divergentPaths = divergentJournalPaths(context, journal);
+    journal.decision = manualRecoveryDecision(
+      context.transactionRoot(journal.changeId, journal.transactionId), {
+        changeId: journal.changeId,
+        summary: "The target changed during rollback, so Foundation stopped without overwriting the divergent content.",
+        divergentPaths: journal.divergentPaths,
+        recoveryError: error.message
+      });
     context.save(journal);
     throw error;
   }
 }
 
-export function verifyLandJournalOperation(context, state) {
+export function verifyLandJournalOperation(context, state, { archivedChangePath = null } = {}) {
   const transactionId = state.workspace?.apply?.transactionId;
   if (!transactionId) return { valid: false, reason: "missing-apply-transaction" };
   const path = context.journalPath(state.id, transactionId);
   if (!context.exists(path)) return { valid: false, reason: "missing-apply-journal" };
   const journal = context.readJson(path);
+  if (archivedChangePath && (!archivedChangePath.startsWith("openspec/changes/archive/") ||
+      archivedChangePath.split(/[\\/]/).some((part) => !part || part === "." || part === "..")))
+    return { valid: false, reason: "invalid-archive-projection-path" };
   for (const entry of journal.entries) {
-    if (!context.matches(context.safeRootPath(entry.path), entry, "after"))
+    const observedPath = archivedChangePath && entry.path === `openspec/changes/${state.id}`
+      ? archivedChangePath : entry.path;
+    if (!context.matches(context.safeRootPath(observedPath), entry, "after"))
       return { valid: false, reason: `projection-mismatch:${entry.path}` };
   }
   const projection = deriveApplyProjection(state, journal);
@@ -225,7 +240,9 @@ export function cleanupLandJournalOperation(context, state) {
   if (!transactionId) return { status: "not-needed" };
   const transactionPath = context.transactionRoot(state.id, transactionId);
   try {
-    for (const name of ["backup", "stage"]) {
+    // The backup of the pre-Land bytes is retained: while the target diff is
+    // uncommitted, `advance --undo-land` restores it.
+    for (const name of ["stage"]) {
       const path = join(transactionPath, name);
       if (context.exists(path)) context.remove(path, { recursive: true });
     }
@@ -322,7 +339,7 @@ export function createLandJournal({
     safeRootPath, pathIdentity, matches, remove: rmSync, copyPath, transactionRoot
   });
   const rollback = rollbackLandJournalOperation.bind(null, {
-    restoreEntry, save, now, transactionRoot
+    restoreEntry, save, now, transactionRoot, safeRootPath, matches
   });
 
   const settle = settleLandJournalOperation.bind(null, {

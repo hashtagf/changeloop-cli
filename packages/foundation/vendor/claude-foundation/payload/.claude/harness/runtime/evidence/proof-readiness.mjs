@@ -1,11 +1,45 @@
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { blockingConflictRows, dependentClosure } from "../core/graph-execution.mjs";
+import {
+  blockingConflictRows, dependentClosure, scopeAllowsPath
+} from "../core/graph-execution.mjs";
 import { worktreeOwnedByTarget } from "../core/repository-binding.mjs";
-import { declaredPathMatcher } from "../core/workspace-surface.mjs";
+import {
+  declaredPathMatcher, mergeSurfaceAdditions, surfaceAdditionEntries
+} from "../core/workspace-surface.mjs";
+import { blockedOutcomeStop } from "../core/blocked-decision.mjs";
 
 const PREFLIGHT_SCAN_MAX_FILES = 20000;
 const PREFLIGHT_SCAN_MAX_BYTES = 1024 * 1024;
+// More out-of-scope paths than this is almost always generated output that
+// belongs in .gitignore, not work the change means to land.
+const SURFACE_ADDITION_LIMIT = 100;
+// Control-plane, CI, and secret paths are never recorded silently: an edit
+// outside every task's `[paths:]` is recorded with `protected: true`, reported
+// in readiness, and carried to Land, which presents it before applying. Only
+// the path is ever reported; a secret file's contents are never read here.
+const PROTECTED_SURFACE = [
+  /^\.claude\//, /^\.codex\//, /^\.github\//, /^\.gitlab-ci\.yml$/,
+  /^foundation\.json$/, /^openspec\/[^/]+\.ya?ml$/, /^openspec\/schemas\//,
+  /(^|\/)\.env(\.(?!example$|sample$|template$)[^/]+)?$/, /\.(pem|key|p12|pfx)$/,
+  /(^|\/)id_(rsa|ed25519|ecdsa)[^/]*$/
+];
+export function protectedSurfacePath(path) {
+  return PROTECTED_SURFACE.some((pattern) => pattern.test(path));
+}
+
+// The smallest ignore rules that cover a spill: each path's top-level
+// directory, or the file itself at the repository root.
+export function generatedOutputPatterns(paths = []) {
+  return [...new Set(paths.map((path) => {
+    const separator = path.indexOf("/");
+    return separator === -1 ? `/${path}` : `/${path.slice(0, separator)}/`;
+  }))].sort();
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
 
 export function filesystemLiteralSearch(root, literal, inputs = ["*"]) {
   const matches = declaredPathMatcher(inputs?.length ? inputs : ["*"]);
@@ -102,6 +136,9 @@ export function proofPreflightAdvisory(advisory) {
     return `  WAIVED ${advisory.capability}: withdrawn by ${
       advisory.authority?.reference || "user decision"}${
       advisory.detail ? ` — ${advisory.detail}` : ""}; not blocking`;
+  if (advisory.reason === "covered-by-review")
+    return `  COVERED BY REVIEW ${advisory.capability}: provider only repeats test provider '${
+      advisory.aliasOf}'; the required review covers it; ${advisory.next}`;
   return `  ADVISORY ${advisory.capability}: inferred from ${
     advisory.trigger || "the changed surface"} with no provider wired; not blocking`;
 }
@@ -196,16 +233,23 @@ export function acceptanceEvidenceRecovery(id, provider, acceptance = {}) {
   };
 }
 
-export function genericExternalEvidenceRecovery(provider, wiring) {
+// `aliasOf` names the test provider whose command this provider only
+// repeated; that run cannot stand in for the capability, so the summary says
+// why the provider is unwired rather than implying it never had a command.
+export function genericExternalEvidenceRecovery(provider, wiring, aliasOf = null) {
+  const repeated = aliasOf
+    ? ` Its configured command only repeats test provider '${aliasOf}', which observes nothing beyond those tests.`
+    : "";
   return {
     provider,
     kind: "user-decision",
     ...(wiring ? { wiring } : {}),
+    ...(aliasOf ? { aliasOf } : {}),
     decision: {
       kind: "external-evidence",
-      summary: wiring
+      summary: (wiring
         ? `Provider '${provider}' has no adapter yet, but this project already owns a command that can prove it (${wiring.source}).`
-        : `Provider '${provider}' needs verifiable evidence from outside the local harness.`,
+        : `Provider '${provider}' needs verifiable evidence from outside the local harness.`) + repeated,
       options: [
         ...(wiring ? [{ id: "wire-provider", outcome: `Wire the project-owned command detected at ${wiring.source}.` }] : []),
         { id: "provide-evidence", outcome: "Provide a real external result and durable reference." },
@@ -224,11 +268,13 @@ export function externalEvidenceRecoveryOperation({
   loadRuntime,
   wiringChoice
 }, id, provider) {
-  const capability = providerCapability(provider, providerConfig(id, provider));
+  const config = providerConfig(id, provider);
+  const capability = providerCapability(provider, config);
   if (capability === "review") return reviewEvidenceRecovery(id, provider);
   if (capability === "acceptance")
     return acceptanceEvidenceRecovery(id, provider, loadRuntime(id).acceptance || {});
-  return genericExternalEvidenceRecovery(provider, wiringChoice(id, provider));
+  return genericExternalEvidenceRecovery(provider, wiringChoice(id, provider),
+    config?.aliasOf || null);
 }
 
 export function repositoryRuntimeState(state, repository) {
@@ -543,14 +589,22 @@ export function proofReadinessValueOperation(context, id, stage = "prove", optio
     ? context.repositoryInfrastructureIssues(id) : [];
   let issues;
   let surfaceFixits;
+  const surfaceRecorded = [];
   let hash;
   let unconfigured;
   let unavailable;
   try {
-    context.validate(id, "active", { quiet: true, inspect: options.inspect === true });
+    context.validate(id, "active", {
+      quiet: true, inspect: options.inspect === true,
+      requireOpenSpec: stage === "prove" && options.inspect !== true
+    });
     issues = context.topologyIssues(id);
     surfaceFixits = [];
-    if (stage === "prove") issues.push(...context.changedSurfaceIssues(id, surfaceFixits));
+    if (stage === "prove")
+      issues.push(...context.changedSurfaceIssues(id, surfaceFixits, surfaceRecorded, {
+        persist: options.inspect !== true &&
+          process.env.FOUNDATION_READ_ONLY_INSPECTION !== "1"
+      }));
     if (stage === "prove") issues.push(...context.criticalCaseIssues(id));
     hash = context.relevantHash(id);
     ({ unconfigured, unavailable } = context.executionNodes(id, hash));
@@ -560,8 +614,9 @@ export function proofReadinessValueOperation(context, id, stage = "prove", optio
         context, id, stage, repositoryIssues, error);
     throw error;
   }
-  const pending = context.pendingTasks(id);
   const plan = context.agentPlanValue?.(id, options) || null;
+  const authoredPending = context.pendingTasks(id);
+  const pending = Array.isArray(plan?.tasks) ? plan.tasks : authoredPending;
   const externalOperations = context.handoffReadiness(id);
   const leases = stage === "prove" ? context.activeChangeLeases(id) : [];
   // Another change's live proof run blocks this one only over a declared
@@ -598,6 +653,9 @@ export function proofReadinessValueOperation(context, id, stage = "prove", optio
     repositoryConflicts,
     graph: readinessGraph(plan, pending),
     issues,
+    // Edits outside every task's `[paths:]`, recorded into the change surface
+    // rather than refused; they land with the rest of the sandbox.
+    surfaceAdditions: surfaceRecorded,
     advisories: context.advisoryCapabilities(id),
     budget: context.readinessBudgetPolicy(status),
     authorityPreflight,
@@ -674,6 +732,8 @@ export function createProofReadinessRuntime({
   saveRuntime,
   authorityPreflight = () => ({ status: "READY", blockers: [], decision: null }),
   executionContract = null,
+  targetEditIssues = () => [],
+  clearSnapshotCache = () => {},
   root = null,
   fail
 }) {
@@ -693,14 +753,30 @@ export function createProofReadinessRuntime({
 
   function workspaceIsolationIssues(id) {
     const state = loadRuntime(id);
-    return workspaceIsolationIssuesValue(state, canonicalChangedSurface(id, state));
+    return [...workspaceIsolationIssuesValue(state, canonicalChangedSurface(id, state)),
+      ...targetEditIssues(state)];
   }
 
   // `details`, when supplied, collects `{ repositoryId, paths }` per blocked
   // repository so the recovery can render a paste-ready annotation. The string
   // return stays as-is — proof-runtime consumes it verbatim.
-  function changedSurfaceIssues(id, details = null) {
+  //
+  // `[paths:]` is bookkeeping inside the isolated sandbox, so an edit outside
+  // it no longer blocks Prove. The path is recorded in `surfaceAdditions`,
+  // which puts it in the proven hash and the Land projection, and `recorded`
+  // (when supplied) collects it for the readiness output. Land is the single
+  // hard gate, so a control-plane, CI, or secret path is recorded with
+  // `protected: true` and a path the sandbox removed with `deleted: true`;
+  // both stay visible in readiness and in the Land projection. A deletion is
+  // recorded only as the exact path the sandbox's own change surface reports
+  // removed, so Land's deletion guard still never deletes an unrelated target
+  // path. A misplaced sandbox and an implausibly large spill still raise an
+  // issue, with `details` naming the concrete repair (`reason`).
+  // Read-only inspection reports additions without persisting them.
+  function changedSurfaceIssues(id, details = null, recorded = null, { persist = true } = {}) {
     const state = loadRuntime(id);
+    const additions = surfaceAdditionEntries(state.surfaceAdditions);
+    const recordedEntries = [];
     const tasks = taskBlocks(readFileSync(join(activeChangePath(id), "tasks.md"), "utf8"))
       .map(taskMetadata);
     const generatedReports = Object.keys(evidence(id).providers || {}).map((provider) => {
@@ -719,10 +795,7 @@ export function createProofReadinessRuntime({
         .map((row) => row.path);
       const outside = repositoryWide ? [] : changed.filter((path) =>
         !generatedReports.some((report) => report.repository === repository.id &&
-          report.path === path) && !allowed.some((scope) => {
-        const normalized = scope.replace(/\/\*\*?$/, "").replace(/\/$/, "");
-        return scope === "*" || path === normalized || path.startsWith(`${normalized}/`);
-      }));
+          report.path === path) && !allowed.some((scope) => scopeAllowsPath(scope, path)));
       if (outside.length) {
         // Work landing in the root workspace while every implementation task
         // targets a child repository is almost always a misplaced sandbox:
@@ -739,10 +812,48 @@ export function createProofReadinessRuntime({
             ".foundation/repository-sandboxes/<change>/<repository> (the root " +
             "workspace under .foundation/sandboxes/ is a different checkout)"
           : "";
+        const workspace = repository.workspacePath;
+        const oversized = outside.length > SURFACE_ADDITION_LIMIT;
+        if (!misplacedHint && !oversized) {
+          const protectedPaths = outside.filter(protectedSurfacePath);
+          // Without a known workspace the removal cannot be observed, so the
+          // path is recorded without a deletion claim.
+          const deletedPaths = workspace
+            ? outside.filter((path) => !existsSync(join(workspace, path))) : [];
+          for (const path of outside)
+            recordedEntries.push({
+              repositoryId: repository.id, path,
+              ...(protectedPaths.includes(path) ? { protected: true } : {}),
+              ...(workspace ? { deleted: deletedPaths.includes(path) } : {})
+            });
+          recorded?.push({
+            repositoryId: repository.id, paths: outside,
+            ...(protectedPaths.length ? { protected: protectedPaths } : {}),
+            ...(deletedPaths.length ? { deleted: deletedPaths } : {})
+          });
+          continue;
+        }
         issues.push(`repository '${repository.id}' changed outside task paths: ${
-          outside.join(", ")}${misplacedHint}`);
-        details?.push({ repositoryId: repository.id, paths: outside });
+          outside.join(", ")}${misplacedHint}${oversized && !misplacedHint
+          ? `; ${outside.length} paths exceed the ${SURFACE_ADDITION_LIMIT}-path ` +
+            "recording limit — ignore generated output in .gitignore" : ""}`);
+        details?.push({
+          repositoryId: repository.id, paths: outside,
+          reason: misplacedHint ? "misplaced-sandbox" : "oversized-spill",
+          workspacePath: workspace || null,
+          ...(misplacedHint ? {
+            targets: selectedRepositories(id, state)
+              .filter((row) => childTaskIds.includes(row.id))
+              .map((row) => ({ repositoryId: row.id, workspacePath: row.workspacePath || null }))
+          } : {})
+        });
       }
+    }
+    const merged = mergeSurfaceAdditions(additions, recordedEntries);
+    if (persist && JSON.stringify(merged) !== JSON.stringify(additions)) {
+      state.surfaceAdditions = merged;
+      saveRuntime?.(state);
+      clearSnapshotCache(id);
     }
     return issues;
   }
@@ -877,15 +988,59 @@ export function createProofReadinessRuntime({
     }];
   }
 
+  function surfaceRepair(id, fixit) {
+    const verify = `claude-foundation proof readiness ${id}`;
+    if (fixit.reason === "misplaced-sandbox") {
+      const targets = fixit.targets || [];
+      const destination = targets.length
+        ? targets.map((row) => `'${row.repositoryId}' at ${
+          row.workspacePath || `.foundation/repository-sandboxes/${id}/${row.repositoryId}`}`)
+          .join(" or ")
+        : `.foundation/repository-sandboxes/${id}/<repository>`;
+      return {
+        kind: "move-to-repository-sandbox",
+        reason: `the root workspace${fixit.workspacePath ? ` (${fixit.workspacePath})` : ""
+        } carries work that every implementation task assigns to a child repository`,
+        repositoryId: fixit.repositoryId,
+        paths: fixit.paths,
+        targets,
+        instruction: `Move each listed path out of the root workspace into the owning repository sandbox ${
+          destination} (same path relative to that repository), restore the root workspace copy, then rerun readiness.`,
+        command: verify,
+        verify
+      };
+    }
+    const patterns = generatedOutputPatterns(fixit.paths);
+    const gitignore = fixit.workspacePath ? join(fixit.workspacePath, ".gitignore") : ".gitignore";
+    return {
+      kind: "ignore-generated-output",
+      reason: `${fixit.paths.length} paths changed outside task paths in repository '${
+        fixit.repositoryId}', over the ${SURFACE_ADDITION_LIMIT}-path recording limit; this is almost always generated output`,
+      repositoryId: fixit.repositoryId,
+      paths: fixit.paths,
+      patterns,
+      instruction: `Add the generated-output patterns to ${gitignore} (or stop the step that writes them), then rerun readiness. If these paths are intended work, amend the change scope with /change ${id} instead.`,
+      command: `printf '%s\\n' ${patterns.map(shellQuote).join(" ")} >> ${shellQuote(gitignore)}`,
+      agentCommand: `/change ${id}`,
+      verify
+    };
+  }
+
   function configurationRecovery(id, issues, surfaceFixits = []) {
+    const declared = surfaceFixits.filter((fixit) => !fixit.reason);
     return [
+      // A misplaced sandbox or an oversized spill is agent work with a
+      // concrete repair, never a bare diagnosis: name the exact move or the
+      // exact ignore rule, plus the readiness rerun that confirms it.
+      ...surfaceFixits.filter((fixit) => fixit.reason)
+        .map((fixit) => surfaceRepair(id, fixit)),
       // The changed-surface blocker already names every offending path; this
       // entry restates them in the exact form `tasks.md` accepts, so clearing
       // the block is a paste instead of a reconstruction.
-      ...(surfaceFixits.length ? [{
+      ...(declared.length ? [{
         kind: "declare-surface",
         reason: `append each listed annotation to the owning task's [paths:] in openspec/changes/${id}/tasks.md, then rerun readiness`,
-        choices: surfaceFixits.map((fixit) => ({
+        choices: declared.map((fixit) => ({
           instruction: `repository '${fixit.repositoryId}': [paths:${fixit.paths.join(",")}]`
         }))
       }] : []),
@@ -1003,7 +1158,10 @@ export function createProofReadinessRuntime({
     console.log(JSON.stringify(value, null, 2));
     // A non-ready readiness is a typed lifecycle stop, so it says so rather
     // than leaving the exit handler to infer it from the exit code.
-    if (value.status !== "READY") { markBlocked(); process.exitCode = 2; }
+    if (value.status !== "READY") {
+      markBlocked(blockedOutcomeStop(value));
+      process.exitCode = 2;
+    }
     return value;
   }
 
