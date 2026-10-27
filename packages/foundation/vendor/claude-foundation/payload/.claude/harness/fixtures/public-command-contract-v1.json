@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "protocol": "foundation-public-command-golden-v1",
+  "hostCommands": {
+    "count": 8,
+    "sha256": "6147ee3e9a26ef0b4aa853116733904a439f46adff58250c73ec08aafae2bf20"
+  },
+  "cliCommands": {
+    "count": 75,
+    "sha256": "e32512237a250b6ae7334d41e780762a1f50923a96f8780f80cb28b062e67630"
+  },
+  "observableOutcomeCoverage": {
+    "invalidFlags": ".claude/tests/harness/contracts/change-policy.sh",
+    "blockedDecision": ".claude/tests/harness/run-changeloop-seam-tests.sh",
+    "resumableFailure": ".claude/harness/tests/budget-continuation.test.mjs",
+    "successAndRuntimeFiles": ".claude/tests/harness/run-harness-tests.sh",
+    "stdoutStderrAndExitStatus": ".claude/tests/harness/run-installer-tests.sh",
+    "recoveryCommand": ".claude/harness/tests/land-journal-recovery-helpers.test.mjs"
+  }
+}

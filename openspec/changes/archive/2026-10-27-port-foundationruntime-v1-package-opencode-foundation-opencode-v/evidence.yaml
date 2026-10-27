@@ -1,0 +1,193 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "bundle-verification-payload-manifest",
+      "requirementKey": "bundle-verification",
+      "scenario": "payload ถูกต้อง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "bundle-verification-payload-checksum",
+      "requirementKey": "bundle-verification",
+      "scenario": "checksum ไม่ตรง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "bundle-verification-manifest-tagged-false-release-tag",
+      "requirementKey": "bundle-verification",
+      "scenario": "ไม่ใช่ release ที่ tag",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "materialize-cache-materialize-bundle",
+      "requirementKey": "materialize-cache",
+      "scenario": "materialize สำเร็จ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "materialize-cache-checksum-bundle",
+      "requirementKey": "materialize-cache",
+      "scenario": "checksum ใน bundle ไม่ตรง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "materialize-cache-cache-root-symlink",
+      "requirementKey": "materialize-cache",
+      "scenario": "cache ไม่ปลอดภัย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "materialize-cache-shim-cache",
+      "requirementKey": "materialize-cache",
+      "scenario": "shim ถูกแก้ไข",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "command-environment-mode-path",
+      "requirementKey": "command-environment",
+      "scenario": "path mode ไม่ materialize",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "command-environment-mode-bundled-environment-path",
+      "requirementKey": "command-environment",
+      "scenario": "bundled ต่อ PATH",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "status-readonly-claude-harness-protocol-json",
+      "requirementKey": "status-readonly",
+      "scenario": "ยังไม่ติดตั้ง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "status-readonly-protocol-json-runtime-runtimeapi",
+      "requirementKey": "status-readonly",
+      "scenario": "ติดตั้งแล้ว",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "status-readonly-protocol-json-json",
+      "requirementKey": "status-readonly",
+      "scenario": "protocol เสียหาย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "managed-adapter-foundation-adapter-manifests-opencode-txt",
+      "requirementKey": "managed-adapter",
+      "scenario": "ไม่มี adapter manifest",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "managed-adapter-manifest-command-checksum-bundle",
+      "requirementKey": "managed-adapter",
+      "scenario": "adapter ตรง checksum",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "managed-adapter-3",
+      "requirementKey": "managed-adapter",
+      "scenario": "adapter ถูกแก้ไข",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "install-guards-platform-win32",
+      "requirementKey": "install-guards",
+      "scenario": "platform win32",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "install-guards-path-runtime-symlink",
+      "requirementKey": "install-guards",
+      "scenario": "managed path เป็น symlink",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "install-guards-bundle-checksum",
+      "requirementKey": "install-guards",
+      "scenario": "bundle เสียหาย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "install-idempotent",
+      "requirementKey": "install-idempotent",
+      "scenario": "install ซ้ำ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(bun test --cwd packages/foundation test/foundation-bundle.test.ts) && (bun test --cwd packages/foundation test/foundation-runtime.test.ts)"
+      ],
+      "segments": [
+        "bun test --cwd packages/foundation test/foundation-bundle.test.ts",
+        "bun test --cwd packages/foundation test/foundation-runtime.test.ts"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}

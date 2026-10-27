@@ -1,0 +1,46 @@
+name: foundation-consumer-quality-nightly
+
+on:
+  schedule:
+    - cron: "17 19 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-consumer-quality-nightly
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Add the language runtimes and project-owned quality tools declared by
+      # quality/foundation-quality.json before the doctor step.
+      - name: Validate quality environment
+        run: node .claude/harness/foundation.mjs quality-doctor --enforce
+
+      - name: Run full quality inventory
+        run: node .claude/harness/foundation.mjs quality-run --full --shard-index "${{ matrix.shard }}" --shard-count 4
+
+      - name: Render debt inventory
+        run: node .claude/harness/foundation.mjs quality-debt
+
+      - name: Upload quality evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-quality-nightly-${{ github.run_id }}-${{ matrix.shard }}
+          path: .foundation/quality/results/
+          if-no-files-found: error
+          retention-days: 30

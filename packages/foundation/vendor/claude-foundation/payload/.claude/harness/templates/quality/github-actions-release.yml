@@ -1,0 +1,41 @@
+name: foundation-consumer-quality-release
+
+on:
+  workflow_call:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-consumer-quality-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Add language runtimes and project-owned tools before enforcement.
+      - name: Validate quality environment
+        run: node .claude/harness/foundation.mjs quality-doctor --enforce
+
+      - name: Enforce full release quality inventory
+        run: node .claude/harness/foundation.mjs quality-run --full --enforce
+
+      - name: Render release debt inventory
+        if: always()
+        run: node .claude/harness/foundation.mjs quality-debt
+
+      - name: Upload release quality evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-quality-release-${{ github.run_id }}
+          path: .foundation/quality/results/
+          if-no-files-found: error
+          retention-days: 90

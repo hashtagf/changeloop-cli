@@ -1,0 +1,86 @@
+{
+  "version": 2,
+  "decisionBatch": {
+    "status": "replace-with-locked",
+    "source": "replace-with-prd-backlog-user-batch-or-default",
+    "reference": "replace-with-durable-decision-reference",
+    "mode": "single-batch",
+    "lockedAt": "replace-with-ISO-8601-timestamp",
+    "decisions": [
+      {
+        "id": "replace-with-stable-decision-id",
+        "question": "replace-with-material-question-or-default-reviewed",
+        "answer": "replace-with-locked-answer",
+        "source": "replace-with-prd-backlog-user-batch-or-recommended-default"
+      }
+    ]
+  },
+  "risk": {
+    "tier": "replace-with-low-medium-or-high",
+    "classes": ["replace-with-risk-class-or-none"],
+    "rationale": "replace-with-source-grounded-rationale"
+  },
+  "productionEntry": {
+    "status": "replace-with-applicable-or-not-applicable",
+    "sourceReason": "replace-with-source-reason",
+    "paths": [{
+      "repository": "root",
+      "path": "replace-with-production-entry-file"
+    }]
+  },
+  "realWire": {
+    "status": "replace-with-applicable-or-not-applicable",
+    "sourceReason": "replace-with-source-reason",
+    "contracts": [{
+      "repository": "root",
+      "path": "replace-with-real-wire-contract-or-test-file"
+    }]
+  },
+  "activationSemantics": {
+    "status": "replace-with-applicable-or-not-applicable",
+    "sourceReason": "replace-with-source-reason",
+    "activatedPaths": [{
+      "repository": "root",
+      "path": "replace-with-existing-path-being-activated"
+    }],
+    "failureSemanticChanges": []
+  },
+  "serviceInteractions": {
+    "status": "replace-with-applicable-or-not-applicable",
+    "sourceReason": "replace-with-source-reason",
+    "rows": []
+  },
+  "observability": {
+    "status": "replace-with-applicable-or-not-applicable",
+    "sourceReason": "replace-with-source-reason",
+    "rows": []
+  },
+  "readSet": [
+    {
+      "repository": "root",
+      "path": "replace-with-relevant-file",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "replace-with-file-sha256"
+    }
+  ],
+  "claims": [
+    {
+      "id": "replace-with-stable-claim-id",
+      "productionPath": [{
+        "repository": "root",
+        "path": "replace-with-entrypoint-or-observable-surface"
+      }],
+      "failurePaths": [{
+        "repository": "root",
+        "path": "replace-with-path-containing-failure-branch",
+        "failure": "replace-with-branch-input-class-or-dependency-stage"
+      }],
+      "evidenceClass": ["test"],
+      "testDoubleGap": "none"
+    }
+  ],
+  "criticalCases": [],
+  "mutants": [],
+  "derivedFacts": []
+}

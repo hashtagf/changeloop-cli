@@ -1,0 +1,26 @@
+{
+  "skill_name": "init-project-docs",
+  "evals": [
+    {
+      "id": 0,
+      "name": "taskflow-api-express",
+      "prompt": "I recently inherited the codebase at <PROJECT>. I need to onboard new engineers onto it. Please generate a complete set of project documentation that explains what the system is, how it's architected, its data model, its tech stack, the core runtime flows, and its API surface — something a new dev can read to understand the whole system.",
+      "expected_output": "docs/ with OVERVIEW.md, ARCHITECTURE.md (mermaid component/flow diagram), TECHSTACK.md, DATAMODEL.md (mermaid erDiagram with User/Project/Task + TaskStatus enum), COREFEATURE.md (mermaid sequenceDiagram per flow: register, login, complete-task→email queue), API.md (real endpoints: POST /auth/register, /auth/login, GET/POST /projects, /tasks, PATCH /tasks/:id/complete), and a self-contained document.html. All claims grounded in the real files; no invented tables/endpoints.",
+      "files": ["/tmp/init-docs-evals/fixtures/taskflow-api"]
+    },
+    {
+      "id": 1,
+      "name": "loglens-cli-no-api-no-db",
+      "prompt": "Generate onboarding documentation for the project at <PROJECT> so a new contributor can quickly understand what it does, how it's structured, and how the pieces fit together.",
+      "expected_output": "docs/ suite for a Python CLI with NO HTTP API and NO datastore. The key test: API.md and DATAMODEL.md must honestly say 'Not applicable' (no fabricated REST endpoints or DB schema), while OVERVIEW/ARCHITECTURE/TECHSTACK/COREFEATURE are real (click CLI, parser→stats→report pipeline, analyze/stats commands with sequence diagrams). Plus document.html.",
+      "files": ["/tmp/init-docs-evals/fixtures/loglens-cli"]
+    },
+    {
+      "id": 2,
+      "name": "taskflow-api-update-stale-docs",
+      "prompt": "The docs in <PROJECT> are out of date — the code has moved on since they were written. Please bring the documentation back in sync with the current code.",
+      "expected_output": "UPDATE MODE: <PROJECT> already contains a docs/ suite (OVERVIEW/ARCHITECTURE/TECHSTACK/DATAMODEL/COREFEATURE/API.md + document.html) that is stale relative to the code — e.g. a new DELETE /tasks/:id endpoint and a new Task.priority field exist in the code but not the docs, a dependency version bumped, and a hand-written 'Local development' note was added to OVERVIEW.md. Expected: a SURGICAL update, not a regeneration — API.md gains the DELETE endpoint, DATAMODEL.md (+ erDiagram) gains Task.priority, TECHSTACK.md reflects the bumped version, any endpoint/entity removed from code is dropped from the docs, and the human-authored OVERVIEW.md note plus all still-accurate prose are preserved verbatim. document.html is rebuilt from the edited Markdown. The report leads with a changelog (fixed/added/removed/kept). No invented fields or routes; every surviving claim still traces to the code.",
+      "files": ["/tmp/init-docs-evals/fixtures/taskflow-api-stale-docs"]
+    }
+  ]
+}

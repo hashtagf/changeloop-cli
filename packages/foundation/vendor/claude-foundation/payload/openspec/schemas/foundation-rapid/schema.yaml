@@ -1,0 +1,55 @@
+name: foundation-rapid
+version: 1
+description: Low-impact isolated change with minimal artifacts
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Brief intent, scope, and rapid-lane eligibility
+    template: proposal.md
+    instruction: Explain what changes, why, and why this is low-risk and isolated.
+    requires: []
+  - id: tasks
+    generates: tasks.md
+    description: Single implementation ledger
+    template: tasks.md
+    instruction: Write a short list of independently verifiable implementation tasks.
+    requires: [proposal]
+  - id: evidence
+    generates: evidence.yaml
+    description: Stable unit or static evidence claims
+    template: evidence.yaml
+    instruction: 'Map the intended outcome to evidence. Discovery is implicit for test claims. A claim that spans repositories must list them in "repositories": ["api", "app"]; omit the field entirely for a single-repository change.'
+    requires: [proposal]
+  - id: grounding
+    generates: grounding.yaml
+    description: Conditional non-derived material decisions; legacy grounding remains compatible
+    template: grounding.yaml
+    instruction: Prefer Grounding v3 decisions-only and omit the file when no material decision exists.
+    requires: [proposal, evidence]
+  - id: repositories
+    generates: repositories.yaml
+    description: Repositories this change may touch, and their write scope
+    template: repositories.yaml
+    instruction: Create only for explicit multi-repository scope; absence means the versioned single-root default.
+    requires: [proposal]
+  - id: execution
+    generates: execution.yaml
+    description: Executable provider, report, service, and readiness wiring
+    template: execution.yaml
+    instruction: Create only for custom project-owned adapter, report, service, timeout, or readiness wiring.
+    requires: [evidence]
+  - id: handoffs
+    generates: handoffs.yaml
+    description: Permission-bound external operations and their activation-safe delivery contract
+    template: handoffs.yaml
+    instruction: Create only when permission-bound operator work exists; never materialize an empty operations placeholder.
+    requires: [proposal, tasks, evidence, grounding]
+
+apply:
+  # Runtime state applies versioned conditional-artifact requirements. Legacy
+  # packets keep their materialized files; semantic v3 packets use virtual
+  # defaults when no grounding, repository, execution, or handoff override is
+  # needed.
+  requires: [tasks, evidence]
+  tracks: tasks.md
