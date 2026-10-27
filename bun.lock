@@ -368,6 +368,20 @@
         "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
       },
     },
+    "packages/foundation": {
+      "name": "@opencode/foundation",
+      "version": "2.2.0",
+      "dependencies": {
+        "@opencode/util": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native": "catalog:",
+      },
+    },
     "packages/function": {
       "name": "@opencode/function",
       "version": "2.2.0",
@@ -2009,6 +2023,8 @@
     "@opencode/desktop": ["@opencode/desktop@workspace:packages/desktop"],
 
     "@opencode/files": ["@opencode/files@workspace:services/files"],
+
+    "@opencode/foundation": ["@opencode/foundation@workspace:packages/foundation"],
 
     "@opencode/function": ["@opencode/function@workspace:packages/function"],
 
