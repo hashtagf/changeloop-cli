@@ -1,0 +1,36 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "work-location",
+      "choice": "ทำใน worktree และ branch ใหม่ v2-port แยกจาก dev",
+      "reason": "ผู้ใช้เลือกเพื่อไม่แตะ v1 บน dev จนกว่าจะตัดสินใจสลับ"
+    },
+    {
+      "id": "rebrand-scope",
+      "choice": "เฟส 1 เปลี่ยนเฉพาะชื่อ executable และ OPENCODE_CLI_NAME ที่ build ฝังให้",
+      "reason": "literal ที่เหลือ 633 จุดใน cli/tui เป็นงานเฟสถัดไป และชื่อที่ฝังตอน build ครอบคลุม help/usage แล้ว"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:v2-port-phase1",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-27T13:00:00.000Z",
+    "decisions": [
+      {
+        "id": "work-location",
+        "question": "เฟส 1 ของ port ไป v2 ควรทำที่ไหน",
+        "answer": "worktree + branch ใหม่ v2-port แยกจาก dev",
+        "source": "user-batch"
+      },
+      {
+        "id": "rebrand-scope",
+        "question": "เฟส 1 rebrand ขอบเขตเท่าไร",
+        "answer": "เฉพาะชื่อ executable และ OPENCODE_CLI_NAME ที่ build ฝังให้ ส่วน literal อื่นเป็นเฟสถัดไป",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}
