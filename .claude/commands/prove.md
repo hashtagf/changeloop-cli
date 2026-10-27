@@ -3,22 +3,24 @@ description: Produce content-bound evidence for an OpenSpec change.
 argument-hint: <change>
 ---
 
-Prove **$ARGUMENTS** with
-`claude-foundation advance <change> --through proven`. The coordinator reuses
-fresh receipts, runs eligible deterministic providers, routes configured review
-or acceptance, and finalizes proof without asking the model to reconstruct a
-primitive command chain.
+Prove **$ARGUMENTS**. Shared rules: `.claude/harness/AGENT.md`.
 
-Follow only the returned protocol-v5 action and invoke its exact `resume`
-command yourself. Command and resume fields are agent-only control data.
-`REPAIR` and `EDIT` return a bounded invalidation/repair set; `RUN_EXTERNAL`
-names one configured external boundary; `WAIT` reports its owner and condition
-without a user command; `ASK_USER` asks only for the decision, after which the
-agent records it and resumes. Read
-`.claude/skills/prove/references/workflow.md` only for the named non-automatic
-boundary. Do not rerun unchanged deterministic checks or search for alternate
-commands.
+Run `claude-foundation advance <change> --through proven`: no-op `DONE`
+when proof is current (Build runs it). Else the coordinator reuses fresh receipts
+and refreshes stale proof.
 
-Never fabricate evidence or Land. `DONE` at `proven` is success for this command.
-Report what passed, what remains unproven, and the next action in the user's
-language.
+Execute each protocol-v6 action, then its exact `resume`; apply a `REPAIR` or
+`EDIT` set whole. Stay in-session while a review runs: ending the reply kills
+it. Never fabricate evidence or invent a checker.
+
+## Gate: no progress
+
+After repeated no-progress, report completed findings, what was tried, and
+unreviewed scope; the user chooses further work, Land with explicit risk
+acceptance, or pause. Record the answer through
+`.claude/skills/prove/references/workflow.md`, read otherwise only for a named
+non-automatic boundary.
+
+Never Land. `DONE` at `proven` is success for this command, not delivery.
+Report what passed, what remains unproven, any `reviewAdvisories.specGaps`,
+and the next action in the user's language.

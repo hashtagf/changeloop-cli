@@ -8,11 +8,23 @@ export const NODE_DATA_SCHEMA = Object.freeze({ name: "foundation.node-data", ve
 // resource. Multiple ready tasks use the planner even in one repository so
 // disjoint paths can execute concurrently under leases.
 export function singleAgentExecutionEligible(tasks = [], claims = []) {
-  return tasks.length === 1 &&
-    new Set(tasks.map((task) => task.repository)).size === 1 &&
+  return tasks.length === 1 && sessionConfined(tasks, claims);
+}
+
+function sessionConfined(tasks, claims) {
+  return new Set(tasks.map((task) => task.repository)).size === 1 &&
     !claims.some((claim) => (claim.repositories || []).length > 1) &&
     !tasks.some((task) => (task.resources || [])
       .some((resource) => !resource.startsWith("workspace:")));
+}
+
+// Pending tasks the scheduler can only run one at a time (every wave holds a
+// single task: a dependency chain or conflicting scopes) gain nothing from
+// leased workers. The same confinement as a single task lets the session take
+// the whole chain in wave order; any wave with two tasks keeps planned dispatch.
+export function sequentialSessionEligible(tasks = [], claims = [], groups = []) {
+  return tasks.length > 1 && groups.length === tasks.length &&
+    groups.every((group) => group.length === 1) && sessionConfined(tasks, claims);
 }
 
 export function criticalPathDepths(nodes = []) {
@@ -321,27 +333,25 @@ export function conflictKeysOverlap(left, right) {
   return false;
 }
 
-function pathMatches(path, scopes) {
-  if (!(scopes || []).length || (scopes || []).includes("*")) return true;
-  return (scopes || []).some((scope) => {
-    const prefix = String(scope).replace(/\/\*\*?$/, "").replace(/\/$/, "");
-    return path === prefix || path.startsWith(`${prefix}/`);
-  });
-}
-
-export function validateNodeResult(authority, result, observedWrites = []) {
-  const fields = [
-    "graphRevision", "planDigest", "contractRevision", "workspaceHash",
-    "leaseId", "fencingGeneration", "executionAttempt", "repository"
-  ];
-  const mismatches = fields.filter((field) => String(result?.[field] ?? "") !==
-    String(authority?.[field] ?? ""));
-  const allowedClaims = new Set(authority.claimIds || []);
-  const unexpectedClaims = (result?.claimIds || []).filter((claim) => !allowedClaims.has(claim));
-  const unexpectedWrites = observedWrites.filter((path) => !pathMatches(path, authority.paths || []));
-  const valid = !mismatches.length && !unexpectedClaims.length && !unexpectedWrites.length &&
-    schemasCompatible(result?.outputSchema, authority.outputSchema);
-  return { valid, mismatches, unexpectedClaims, unexpectedWrites };
+// A task scope is a directory prefix (`src`, `src/**`) or a glob with `*`,
+// `**`, or `?` — the same forms change validation accepts for `[paths:]`.
+export function scopeAllowsPath(scope, path) {
+  const raw = String(scope).replace(/^\.\//, "");
+  if (raw === "*") return true;
+  const prefix = raw.replace(/\/\*\*?$/, "").replace(/\/$/, "");
+  if (path === prefix || path.startsWith(`${prefix}/`)) return true;
+  if (!/[*?]/.test(raw)) return false;
+  let pattern = "";
+  for (let index = 0; index < raw.length; index += 1) {
+    const character = raw[index];
+    if (character === "*" && raw[index + 1] === "*") {
+      pattern += raw[index + 2] === "/" ? "(?:.*/)?" : ".*";
+      index += raw[index + 2] === "/" ? 2 : 1;
+    } else if (character === "*") pattern += "[^/]*";
+    else if (character === "?") pattern += "[^/]";
+    else pattern += character.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${pattern}$`).test(path);
 }
 
 export function compileLandPreparation({

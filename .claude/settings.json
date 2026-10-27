@@ -30,11 +30,6 @@
             "type": "command",
             "command": "\"${CLAUDE_PROJECT_DIR}\"/.claude/hooks/protect-secrets.sh",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PROJECT_DIR}\"/.claude/hooks/authoring-surface-guard.sh",
-            "timeout": 5
           }
         ]
       },
@@ -44,6 +39,11 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PROJECT_DIR}\"/.claude/hooks/no-detached-authority.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR}\"/.claude/hooks/shell-route-guard.sh",
             "timeout": 5
           }
         ]
@@ -76,7 +76,13 @@
   },
   "permissions": {
     "allow": [
-      "Bash(claude-foundation *)"
+      "Bash(claude-foundation *)",
+      "Bash(.foundation/bin/claude-foundation *)",
+      "Bash(node .claude/harness/foundation.mjs *)",
+      "Edit(/.foundation/sandboxes/**)",
+      "Edit(/.foundation/repository-sandboxes/**)",
+      "Edit(/.foundation/drafts/**)",
+      "Edit(/openspec/investigations/**)"
     ]
   }
 }

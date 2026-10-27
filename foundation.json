@@ -3,10 +3,10 @@
   "execution": {
     "maxParallelAgents": 3,
     "packetBytes": {
-      "task": 8192,
-      "review": 8192,
-      "repository": 12288,
-      "global": 16384
+      "task": 20480,
+      "review": 20480,
+      "repository": 24576,
+      "global": 32768
     },
     "tokenBudgets": {
       "rapid": 800000,
@@ -17,7 +17,8 @@
       "standard": 200
     },
     "planSummaryBytes": 4096,
-    "leaseMinutes": 45
+    "leaseMinutes": 45,
+    "budgetWatchdog": false
   },
   "models": {
     "fast": {
@@ -47,7 +48,8 @@
         "migration",
         "independent-review"
       ]
-    }
+    },
+    "routing": false
   },
   "escalation": [
     "ambiguous-contract",
@@ -100,5 +102,8 @@
   },
   "land": {
     "riskBasedCi": false
+  },
+  "quality": {
+    "changeGate": "off"
   }
 }

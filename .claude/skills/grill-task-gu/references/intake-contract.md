@@ -44,9 +44,11 @@ call path. A fixture is not evidence of production composition without parity.
 - Keep implementation in `tasks.md`. Declare every permission-bound operation
   in `handoffs.yaml` with owner, environment, required authority, timing,
   activation safety, evidence, runbook, rollback, and related task/claim IDs.
-- `post-land + safe-before-activation` requires an activation-proof claim and a
-  named accepted tracking reference before Land. All other incomplete external
-  operations remain typed `WAITING_EXTERNAL` Land blockers.
+- For external-operation timing and activation-proof requirements, follow
+  [Review, acceptance, and external authority](../../../../WORKFLOW.md#review-acceptance-and-external-authority).
+  A proven safe-before-activation post-Land obligation needs no acknowledgement
+  or accepted tracking reference before Land. Unresolved pre-Land or
+  activation-coupled operations still block Land.
 
 ## Backlog task fields
 

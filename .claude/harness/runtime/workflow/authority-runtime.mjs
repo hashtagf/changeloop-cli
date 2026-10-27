@@ -1,12 +1,17 @@
-import { REVIEW_WINDOW_MS, reviewWindowRemaining, reviewWindowError, currentWaivers } from "../core/user-decisions.mjs";
+import { REVIEW_DISPATCH_TIMEOUT_MS, currentWaivers } from "../core/user-decisions.mjs";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { acquireProcessLock, isProcessAlive } from "../core/process-lock.mjs";
 import { effectiveReviewAttemptLimit } from "../core/authority-policy.mjs";
+import { authorityRunCommand, authorityStatusCommand } from "../core/authority-run-command.mjs";
 import { reviewFindingIssues, reviewPacketIssues, validReview } from "../evidence/configured-reviewer.mjs";
 import { checkpointReviewResult, recoverReviewResult } from "../evidence/review-result-recovery.mjs";
 import { normalizeReviewCompletionFindings } from "../evidence/review-attempt-store.mjs";
+import {
+  reviewAgreementValue, reviewDepthForTier, reviewDiffValue, reviewModelClass,
+  reviewScenarioChecklist
+} from "../evidence/review-diff.mjs";
 
 export function authorityRequestDisplayValue(request, limit = 8192) {
   const packetBytes = Buffer.byteLength(JSON.stringify(request.packet || null));
@@ -211,6 +216,25 @@ export function abortAuthorityOperation(context, id, flags = {}) {
   return updated;
 }
 
+// The user's "one more AI attempt" answer to exhausted AI review. The grant
+// raises the cap by one, so the open request's next route is `authority run`
+// again and `advance` dispatches it.
+export function extendReviewAuthorityOperation(context, id, flags = {}) {
+  context.validate(id, "active", { quiet: true });
+  const decisionRef = String(flags["decision-ref"] || "").trim();
+  if (!decisionRef)
+    context.fail("authority extend-review requires --decision-ref <ref>");
+  const open = (context.authorityStore?.list(id) || []).map((entry) => entry.value)
+    .find((request) => request.type === "review" && request.status === "requested");
+  const { maxAiAttempts } = context.effectiveReviewAttemptLimit(
+    context.reviewPolicy(id), context.deliveredAiAttempts(id), open?.workspaceHash || null);
+  const result = context.grantExtraAiWave(id, decisionRef, maxAiAttempts);
+  context.output.log(`AUTHORITY ${id}: one more AI review wave\n  waves: ${
+    result.delivered}/${result.maxAiAttempts}\n  decision: ${decisionRef
+    }\n  next: ${`claude-foundation advance ${id} --through proven`}`);
+  return result;
+}
+
 export function resetInfrastructureAuthorityOperation(context, id, flags = {}) {
   context.validate(id, "active", { quiet: true });
   const decisionRef = String(flags["decision-ref"] || "").trim();
@@ -296,11 +320,14 @@ export function reviewSubjectResponseEvidence() {
 }
 
 export function reviewFindingResponseEvidence(request) {
+  // The count matches the prefilled first-round IDs, so a delta response
+  // recorded as given passes the count check.
+  const verifiedFindingIds = request.packet?.closureFindings?.ids || [];
   const evidence = {
     "unresolved-blockers": 0,
-    "verified-findings": 0,
+    "verified-findings": verifiedFindingIds.length,
     findings: [],
-    verifiedFindingIds: request.packet?.closureFindings?.ids || []
+    verifiedFindingIds
   };
   if (request.dispatch?.scope?.mode === "delta")
     evidence["scope-path"] = request.dispatch.scope.paths;
@@ -316,16 +343,75 @@ export function reviewResponseEvidence(request) {
   };
 }
 
+const RESPONSE_REFERENCE_URI = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+// The response problems `authority record` can decide before validating the
+// receipt, collected together: dispatch, references, provenance, and finding
+// closure. The later checks stay as the authority; this only reports early.
+export function authorityResponsePreflightIssues({ request, response, undispatched = false,
+  referenceExists = () => true }) {
+  const issues = [];
+  if (undispatched)
+    issues.push(`dispatch the request first: claude-foundation authority dispatch ${request.changeId} ` +
+      `--request ${request.requestId} --scope full|delta --reviewer-type human|ai --reviewer-identity <id>`);
+  if (request.type !== "review") return issues;
+  const evidence = response?.evidence && typeof response.evidence === "object" ? response.evidence : {};
+  // An error response closes the attempt as an infrastructure outcome; it
+  // carries no receipt, so receipt provenance and references do not apply.
+  const infrastructureError = response?.status === "error";
+  const references = (Array.isArray(evidence.reference) ? evidence.reference : [])
+    .map((value) => String(value).trim()).filter(Boolean);
+  const missing = infrastructureError ? [] : references.filter((reference) =>
+    !RESPONSE_REFERENCE_URI.test(reference) && !referenceExists(reference));
+  if (missing.length)
+    issues.push(`a reference must be a URI or a path that exists: ${missing.join(", ")}`);
+  // `subject-provenance` is the other accepted form, and the only one for
+  // several implementers.
+  const hasProvenance = evidence["subject-provenance"] !== undefined &&
+    evidence["subject-provenance"] !== null && evidence["subject-provenance"] !== "";
+  if (!infrastructureError && !hasProvenance && !String(evidence["subject-actor"] || "").trim())
+    issues.push("add evidence.subject-actor (who implemented the change) or evidence.subject-provenance");
+  const aiSubject = ["subject-provider-family", "subject-model-family", "subject-model"]
+    .some((key) => String(evidence[key] || "").trim());
+  if (!infrastructureError && !hasProvenance && aiSubject &&
+      !String(evidence["subject-session"] || "").trim())
+    issues.push("an AI implementer needs evidence.subject-session");
+  const verifiedIds = Array.isArray(evidence.verifiedFindingIds) ? evidence.verifiedFindingIds : [];
+  // The receipt validator's rule: counts bind only when finding rows or
+  // verified IDs are supplied, or the scope is a delta.
+  const suppliedRows = (Array.isArray(evidence.findings) && evidence.findings.length > 0) ||
+    verifiedIds.length > 0 || request.dispatch?.scope?.mode === "delta" ||
+    (Array.isArray(evidence["scope-path"]) && evidence["scope-path"].length > 0);
+  if (!infrastructureError && suppliedRows && evidence["verified-findings"] !== undefined &&
+      Number(evidence["verified-findings"]) !== verifiedIds.length)
+    issues.push(`evidence.verified-findings (${evidence["verified-findings"]}) must equal the ` +
+      `${verifiedIds.length} verifiedFindingIds`);
+  const expected = request.packet?.closureFindings?.ids;
+  if (Array.isArray(expected) && response?.status !== "error") {
+    const supplied = [...new Set(verifiedIds.map((value) => String(value).trim()).filter(Boolean))].sort();
+    if (JSON.stringify([...expected].sort()) !== JSON.stringify(supplied))
+      issues.push(`verifiedFindingIds must close exactly the first-round findings: ${[...expected].sort().join(", ")}`);
+  }
+  return issues;
+}
+
 export function authorityResponseTemplate(context, request) {
   // Preserve the established eager claim expansion. The production compactor
   // supports both arrays and previews, and callers may rely on malformed packet
   // shapes failing before a review template is projected.
   const acceptanceEvidence = acceptanceResponseEvidence(context, request);
+  // A full-delta review is recorded only after dispatch; say so up front.
+  const dispatchFirst = request.type === "review" && request.reviewCircuit === "full-delta" &&
+    request.status !== "dispatched"
+    ? `claude-foundation authority dispatch ${request.changeId} --request ${request.requestId} ` +
+      "--scope full|delta --reviewer-type human|ai --reviewer-identity <id>"
+    : null;
   return {
     version: Number(context.protocolVersion),
     requestId: request.requestId,
     changeId: request.changeId,
     type: request.type,
+    ...(dispatchFirst ? { dispatchFirst } : {}),
     workspaceHash: request.workspaceHash,
     status: "pass|fail|inconclusive|error",
     evidence: request.type === "acceptance"
@@ -550,11 +636,26 @@ export function createAuthorityRuntime({
   foundationPolicy,
   reviewerConfig,
   reviewerStatus,
+  // Absent in narrow compositions: every configured reviewer is routable.
+  reviewerInstalled = () => true,
   runConfiguredReview,
+  // Optional non-blocking twin of runConfiguredReview; absent means the
+  // asynchronous route awaits the synchronous reviewer.
+  runConfiguredReviewAsync = null,
   acknowledgeInfrastructureAttempts,
+  // Absent in narrow compositions: extend-review then refuses.
+  grantExtraAiWave = () => fail("extra AI review waves are unavailable in this composition"),
   acknowledgeBaseMoveAttempts,
+  // Absent in narrow compositions: dispatch then keeps the manual reset routes.
+  autoReleaseReviewBudget = () => [],
+  // Drops the process-local snapshot cache so the post-review content check
+  // reads the bytes on disk, not the snapshot taken before the reviewer ran.
+  clearSnapshotCache = () => {},
   writeJson,
-  fail
+  fail,
+  // { git, pathExists, readFile, readDirectory, isDirectory }; absent means
+  // AI dispatch carries no inline diff and the reviewer inspects the workspace.
+  reviewDiffContext = null
 }) {
   function withAuthorityLock(id, operation) {
     const locks = join(root, ".foundation", "locks");
@@ -669,17 +770,41 @@ export function createAuthorityRuntime({
     return { handled: false, entry, request, requestId, reviewerType };
   }
 
+  function reviewInfrastructureRetryLimit() {
+    const reviewSettings = foundationPolicy().review || {};
+    const configuredFallbacks = (Array.isArray(reviewSettings.fallbackReviewers)
+      ? reviewSettings.fallbackReviewers
+      : reviewSettings.fallbackReviewer ? [reviewSettings.fallbackReviewer] : [])
+      .filter((name) => name !== "main-session");
+    return Math.max(1,
+      (1 + configuredFallbacks.length) * Number(reviewSettings.infraFailureThreshold || 1));
+  }
+
+  // Release harness-caused review accounting before any dispatch guard reads
+  // it, and reopen requests an exhausted infrastructure circuit had closed.
+  function releaseHarnessReviewBudget(id) {
+    const released = autoReleaseReviewBudget(id, {
+      maxInfrastructureRetries: reviewInfrastructureRetryLimit(),
+      reviewerHealthy: () => reviewerStatus(null).ok === true,
+      reviewerIdentity: stableHash(foundationPolicy().review || {}).slice(0, 12)
+    });
+    const infrastructure = released.find((reference) => reference.startsWith("harness:infra:"));
+    if (infrastructure) for (const entry of authorityStore.list(id)) {
+      if (entry.value.status !== "infrastructure-exhausted") continue;
+      authorityStore.replace(entry, {
+        ...entry.value, status: "requested",
+        infrastructureResetAt: now(), infrastructureResetDecisionRef: infrastructure
+      });
+    }
+    for (const reference of released)
+      console.error(`AUTHORITY ${id}: harness released review accounting (${reference})`);
+    return released;
+  }
+
   function dispatchAuthorityUnlocked(id, flags = {}) {
+    releaseHarnessReviewBudget(id);
     const context = dispatchRequestContext(id, flags);
     if (context.handled) return context.value;
-    const windowState = loadRuntime(id);
-    if (!windowState.reviewWindow) {
-      const startedAt = now();
-      windowState.reviewWindow = { startedAt,
-        deadline: new Date(Date.parse(startedAt) + REVIEW_WINDOW_MS).toISOString() };
-      saveRuntime(windowState);
-    }
-    if (!reviewWindowRemaining(windowState, Date.parse(now()))) throw reviewWindowError(id);
     const { entry, request, requestId, reviewerType } = context;
     function dispatchRouting() {
     const routing = reviewPolicy(id);
@@ -687,13 +812,7 @@ export function createAuthorityRuntime({
     const deliveredSnapshot = deliveredAiAttempts(id, historySnapshot);
     const { promotesLow, maxAiAttempts } = effectiveReviewAttemptLimit(
       routing, deliveredSnapshot, request.workspaceHash);
-    const reviewSettings = foundationPolicy().review || {};
-    const configuredFallbacks = (Array.isArray(reviewSettings.fallbackReviewers)
-      ? reviewSettings.fallbackReviewers
-      : reviewSettings.fallbackReviewer ? [reviewSettings.fallbackReviewer] : [])
-      .filter((name) => name !== "main-session");
-    const maxInfrastructureRetries = Math.max(1,
-      (1 + configuredFallbacks.length) * Number(reviewSettings.infraFailureThreshold || 1));
+    const maxInfrastructureRetries = reviewInfrastructureRetryLimit();
     // The route-aware cap still wins over malformed scope/base details.
     const history = assertReviewDispatchAllowed(
       id, reviewerType, maxAiAttempts, maxInfrastructureRetries);
@@ -907,6 +1026,23 @@ export function createAuthorityRuntime({
     }
     }
     applyDeltaPacket();
+    if (reviewerType === "ai") {
+      // Diff-scoped by default: changed hunks plus the agreement, bound by
+      // the packet digest. Low risk before any delivered AI round is diff-only.
+      packet.reviewDepth = reviewDepthForTier(routing.tier, deliveredAi.length);
+      if (reviewDiffContext) {
+        packet.reviewDiff = reviewDiffValue(reviewDiffContext, scopeRows,
+          packet.changedSurface?.inspection || []);
+        packet.agreement = reviewAgreementValue(reviewDiffContext, packet);
+        // One checklist item per agreement scenario (N8), bound by the packet
+        // digest. A delta round reviews only its correction scope.
+        if (scopeMode === "full") {
+          const checklist = reviewScenarioChecklist({
+            ...reviewDiffContext, packetDir: packet.contractWorkspacePath });
+          if (checklist.items.length) packet.scenarioChecklist = checklist;
+        }
+      }
+    }
     delete packet.packetDigest;
     packet.packetDigest = canonicalPacketDigest(packet);
     return packet;
@@ -1024,11 +1160,24 @@ export function createAuthorityRuntime({
       ...fallbacks.filter((name) => name !== "main-session")].filter(Boolean);
     const attempts = request.fallbackAttempts || [];
     for (const reviewer of configured) {
+      if (!reviewerInstalled(reviewer)) continue;
       const failures = attempts.filter((attempt) =>
         attempt.reviewer === reviewer && !attempt.bindingRecoveredAt).length;
       if (failures < threshold) return reviewer;
     }
     return fallbacks.includes("main-session") ? "main-session" : null;
+  }
+
+  // Configured reviewers whose CLI is absent on this host. They are skipped by
+  // routing, so without a recorded failure the main-session fallback would be
+  // unreachable on a host that has no reviewer CLI at all.
+  function uninstalledConfiguredReviewers(settings) {
+    const fallbacks = Array.isArray(settings.fallbackReviewers)
+      ? settings.fallbackReviewers
+      : settings.fallbackReviewer ? [settings.fallbackReviewer] : [];
+    return [settings.defaultReviewer,
+      ...fallbacks.filter((name) => name !== "main-session")]
+      .filter((name) => name && !reviewerInstalled(name));
   }
 
   function recoverReviewBindingsUnlocked(id, requestId = null) {
@@ -1080,11 +1229,29 @@ export function createAuthorityRuntime({
     return withAuthorityLock(id, () => recoverReviewBindingsUnlocked(id));
   }
 
-  function authorityRunSubject(flags) {
+  // Current concrete `authority run` command for a stored request, from the
+  // request's recorded subject and the calling host's environment.
+  function nextRunCommand(id, requestId) {
+    const request = authorityStore.list(id)
+      .find((row) => row.value.requestId === requestId)?.value || { requestId };
+    const run = authorityRunCommand(id, { ...request, requestId });
+    return { command: run.command,
+      ...(run.placeholders.length ? { placeholders: run.placeholders } : {}),
+      ...(run.unresolved.length ? { unresolved: run.unresolved } : {}) };
+  }
+
+  function failWithNext(message, next) {
+    const { command, placeholders = [] } = typeof next === "string" ? { command: next } : next;
+    fail(`${message}. Next: ${command}${placeholders.length
+      ? ` (supply ${placeholders.map((name) => `<${name}>`).join(", ")})` : ""}`);
+  }
+
+  function authorityRunSubject(flags, id) {
     const requestId = String(flags.request || "");
     if (!requestId) fail("authority run requires --request <id>");
     const subjectActor = String(flags["subject-actor"] || "").trim();
-    if (!subjectActor) fail("authority run requires --subject-actor");
+    if (!subjectActor)
+      failWithNext("authority run requires --subject-actor", nextRunCommand(id, requestId));
     const subjectSession = String(flags["subject-session"] || "").trim() || null;
     const subjectProvider = String(flags["subject-provider-family"] || "").trim().toLowerCase() || null;
     const subjectFamily = String(flags["subject-model-family"] || "").trim().toLowerCase() || null;
@@ -1093,13 +1260,14 @@ export function createAuthorityRuntime({
       .some(Boolean);
     if (aiSubject && [subjectSession, subjectProvider, subjectFamily, subjectModel]
       .some((value) => !value))
-      fail("AI implementation provenance requires subject session, provider family, model family, and model");
+      failWithNext("AI implementation provenance requires subject session, provider family, model family, and model",
+        nextRunCommand(id, requestId));
     return { requestId, subjectActor, subjectSession, subjectProvider,
       subjectFamily, subjectModel, aiSubject };
   }
 
-  function authorityReviewerConfiguration(reviewerName, request) {
-    if (reviewerName !== "main-session") return reviewerConfig(reviewerName);
+  function authorityReviewerConfiguration(reviewerName, request, modelTier = null) {
+    if (reviewerName !== "main-session") return reviewerConfig(reviewerName, modelTier);
     return {
       identity: request.fallbackAttempts?.at(-1)?.reviewer || "configured-reviewer",
       providerFamily: "",
@@ -1107,16 +1275,42 @@ export function createAuthorityRuntime({
     };
   }
 
-  function assertAuthorityReviewerSeparation(reviewerName, configured, reviewSettings, subject) {
+  function authorityReviewerSeparationIssue(reviewerName, configured, reviewSettings, subject) {
     const configuredProvider = String(configured.providerFamily).toLowerCase();
     const configuredFamily = String(configured.modelFamily).toLowerCase();
     const sameFamily = subject.aiSubject && subject.subjectProvider === configuredProvider &&
       subject.subjectFamily === configuredFamily;
     if (sameFamily && reviewSettings.diversity !== "single-model")
-      fail(`configured reviewer '${reviewerName}' shares the implementation provider/model family; choose a diverse configured reviewer or commit review.diversity='single-model' before Build`);
+      return `configured reviewer '${reviewerName}' shares the implementation provider/model family; choose a diverse configured reviewer or commit review.diversity='single-model' before Build`;
     if (subject.aiSubject && reviewSettings.independence !== "self" &&
         subject.subjectActor.toLowerCase() === configured.identity.toLowerCase())
-      fail(`configured reviewer '${reviewerName}' shares the implementation identity; use a distinct reviewer identity/session or commit review.independence='self' before Build`);
+      return `configured reviewer '${reviewerName}' shares the implementation identity; use a distinct reviewer identity/session or commit review.independence='self' before Build`;
+    return null;
+  }
+
+  function assertAuthorityReviewerSeparation(reviewerName, configured, reviewSettings, subject) {
+    const issue = authorityReviewerSeparationIssue(reviewerName, configured, reviewSettings, subject);
+    if (issue) fail(issue);
+  }
+
+  // N8 (3a): a fast-tier round whose scenario coverage is unparseable or has
+  // an unsure scenario is re-run once on the configured model with the same
+  // dispatched packet. It is not a new dispatch or AI wave. A missing scenario
+  // is already an actionable major finding, so it goes straight to repair.
+  // Returns the configured reviewer to escalate to, or null.
+  function scenarioEscalationReviewer(reviewerName, configured, requestValue,
+    reviewSettings, subject, packet, report) {
+    if (!["fast", "standard"].includes(configured.modelTier) || reviewerName === "main-session" ||
+        report?.status === "error" || !packet?.scenarioChecklist?.items?.length) return null;
+    const coverage = report.scenarioCoverage;
+    if (coverage && (coverage.missing.length > 0 || coverage.unsure.length === 0)) return null;
+    const escalated = authorityReviewerConfiguration(reviewerName, requestValue, "configured");
+    if (!escalated || ["fast", "standard"].includes(escalated.modelTier) ||
+        escalated.modelId === configured.modelId)
+      return null;
+    if (authorityReviewerSeparationIssue(reviewerName, escalated, reviewSettings, subject))
+      return null;
+    return escalated;
   }
 
   function authorityRunReviewer(id, flags, subject) {
@@ -1130,21 +1324,76 @@ export function createAuthorityRuntime({
       requestEntry.value = authorityStore.list(id)
         .find((row) => row.value.requestId === requestId).value;
     if (requestEntry.value.status === "infrastructure-exhausted")
-      fail("configured reviewer infrastructure retries are exhausted for this request");
+      failWithNext("configured reviewer infrastructure retries are exhausted for this request",
+        authorityStatusCommand(id, requestId));
     const reviewerName = configuredReviewerRoute(reviewSettings, requestEntry.value,
       String(flags.reviewer || "").trim() || null,
       String(flags["automatic-reviewer"] || "").trim() || null);
-    if (!reviewerName)
-      fail("configured reviewer infrastructure retries are exhausted; configure a fallback reviewer or pause");
+    const explicitRoute = String(flags.reviewer || "").trim() ||
+      String(flags["automatic-reviewer"] || "").trim();
+    const uninstalled = explicitRoute ? [] : uninstalledConfiguredReviewers(reviewSettings);
+    if (!reviewerName) {
+      if (uninstalled.length)
+        fail(`reviewer CLI not installed: ${uninstalled.join(", ")}, and no main-session fallback is configured. Install the reviewer CLI (see DEVELOPER-SETUP.md step 6), or set foundation.json review to {"independence":"self","fallbackReviewers":["main-session"]} to let the calling session review`);
+      failWithNext("configured reviewer infrastructure retries are exhausted; configure review.fallbackReviewers or record a verdict",
+        authorityStatusCommand(id, requestId));
+    }
+    if (reviewerName === "main-session" && !requestEntry.value.mainSessionFallback &&
+        uninstalled.length) {
+      // Record the missing CLI as the configured reviewer's infrastructure
+      // failure so the existing main-session fallback is reachable. Nothing
+      // is spawned; independence rules apply to the main-session reviewer.
+      const missingName = uninstalled[0];
+      const configured = authorityReviewerConfiguration(missingName, requestEntry.value);
+      return { reviewSettings, requestEntry, reviewerName: missingName, configured,
+        notInstalled: true };
+    }
     if (reviewerName === "main-session" && !requestEntry.value.mainSessionFallback)
-      fail("main-session fallback was selected without a recorded configured reviewer failure");
-    const configured = authorityReviewerConfiguration(reviewerName, requestEntry.value);
+      failWithNext("main-session fallback was selected without a recorded configured reviewer failure; omit --reviewer and let routing choose",
+        nextRunCommand(id, requestId));
+    // The first low or medium round runs on its tier's cheaper model class
+    // (reviewModelClass); high, later rounds, and pinned triggers keep the
+    // configured model.
+    const routing = reviewPolicy(id);
+    const runtimeState = loadRuntime(id);
+    const modelTier = reviewModelClass({
+      tier: routing.tier, deliveredAiCount: deliveredAiAttempts(id).length,
+      triggers: routing.triggers,
+      declaredReview: Boolean(runtimeState.reviewRequired) && !runtimeState.reviewKeywordOnly,
+      settings: reviewSettings
+    });
+    let configured = authorityReviewerConfiguration(
+      reviewerName, requestEntry.value, modelTier);
+    // A cheaper standard-class model that would share the implementation's
+    // provider/model family under a diversity requirement never blocks the
+    // review: the configured model runs instead.
+    if (configured.modelTier === "standard" && authorityReviewerSeparationIssue(
+      reviewerName, configured, reviewSettings, subject))
+      configured = authorityReviewerConfiguration(
+        reviewerName, requestEntry.value, "configured");
     assertAuthorityReviewerSeparation(reviewerName, configured, reviewSettings, subject);
     return { reviewSettings, requestEntry, reviewerName, configured };
   }
 
+  // The reviewer call is the one yielded step, so `authority run` (sync) and
+  // the concurrent Prove review (async) share every guard and record rule.
   function runAuthorityReviewerUnlocked(id, flags = {}) {
-    const subject = authorityRunSubject(flags);
+    const steps = authorityReviewerSteps(id, flags);
+    let step = steps.next();
+    while (!step.done) step = steps.next(runConfiguredReview(step.value));
+    return step.value;
+  }
+
+  async function runAuthorityReviewerUnlockedAsync(id, flags = {}) {
+    const steps = authorityReviewerSteps(id, flags);
+    let step = steps.next();
+    while (!step.done) step = steps.next(await (runConfiguredReviewAsync
+      ? runConfiguredReviewAsync(step.value) : runConfiguredReview(step.value)));
+    return step.value;
+  }
+
+  function* authorityReviewerSteps(id, flags = {}) {
+    const subject = authorityRunSubject(flags, id);
     const { requestId, subjectActor, subjectSession, subjectProvider,
       subjectFamily, subjectModel, aiSubject } = subject;
     const reviewer = authorityRunReviewer(id, flags, subject);
@@ -1168,7 +1417,8 @@ export function createAuthorityRuntime({
           infrastructureError: requestEntry.value.fallbackAttempts?.at(-1)?.summary ||
             "configured reviewer infrastructure failed",
           missing: mainSession.missing,
-          action: "Expose the calling host session/model provenance and rerun authority run with --main-session-* fields; the failed reviewer will not run again."
+          action: "Expose the calling host session/model provenance and rerun authority run with --main-session-* fields; the failed reviewer will not run again.",
+          next: nextRunCommand(id, requestId)
         };
         console.log(JSON.stringify(blocked, null, 2));
         return { handled: true, value: blocked };
@@ -1221,8 +1471,15 @@ export function createAuthorityRuntime({
         fail(`configured review dispatch '${requestId}' is indeterminate; do not rerun it automatically. Abort it with a reason, then request the next bounded route or pause`);
       if (controller && isProcessAlive(Number(controller.pid)))
         fail(`configured review dispatch '${requestId}' is still running in controller PID ${controller.pid}`);
-      recoveredReport = recoverReviewResult(root, entry.value, subject, configured,
+      // An escalated checkpoint binds the configured model that produced it.
+      const recoveredEscalation = entry.value.configuredResult?.modelEscalation || null;
+      const expectedReviewer = recoveredEscalation
+        ? authorityReviewerConfiguration(reviewerName, entry.value, "configured") : configured;
+      recoveredReport = recoverReviewResult(root, entry.value, subject, expectedReviewer,
         authorityWorkspaceHash(id, entry.value.provider));
+      if (recoveredReport && recoveredEscalation)
+        recoveredReport = { ...recoveredReport, modelEscalation: recoveredEscalation,
+          finalReviewer: expectedReviewer };
       if (recoveredReport) return entry;
       const attemptDigest = requestEntry.value.dispatch?.attemptDigest;
       const attempt = attemptDigest ? reviewAttemptByDigest(id, attemptDigest) : null;
@@ -1288,26 +1545,89 @@ export function createAuthorityRuntime({
         version: 1,
         pid: process.pid,
         reviewer: configured.identity,
+        subject,
         startedAt: now()
       }
     });
-    const report = recoveredReport || runConfiguredReview({
+    const reviewRequest = {
       changeId: id,
-      timeoutMs: reviewWindowRemaining(loadRuntime(id), Date.parse(now())),
+      timeoutMs: REVIEW_DISPATCH_TIMEOUT_MS,
       reviewer: reviewerName,
+      modelTier: configured.modelTier || null,
       workspace,
       packet: dispatched.packet,
       forbiddenSessionIds: reviewSettings.independence === "self" ? [] : [
         subjectSession,
         ...(scope === "delta" ? [deliveredAi.at(-1)?.reviewerSessionId] : [])
       ].filter(Boolean)
-    });
+    };
+    let report = recoveredReport || (reviewer.notInstalled ? {
+      status: "error", summary: `reviewer CLI not installed: ${reviewerName}`,
+      findings: [], verifiedFindingIds: [], reportReference: null,
+      reviewer: { sessionId: "" }
+    } : yield reviewRequest);
+    let finalReviewer = recoveredReport?.finalReviewer || configured;
+    let modelEscalation = recoveredReport?.modelEscalation || null;
+    const escalated = recoveredReport ? null : scenarioEscalationReviewer(reviewerName,
+      configured, requestEntry.value, reviewSettings, subject, dispatched.packet, report);
+    if (escalated) {
+      // Same dispatch, packet, and digest; only the model changes. The fast
+      // report stays on disk but is never checkpointed or recorded.
+      modelEscalation = {
+        escalatedFrom: configured.modelTier,
+        reason: report.scenarioCoverage ? "scenario-coverage-gap" : "scenario-coverage-unparseable",
+        fastModelId: configured.modelId,
+        fastModelFamily: configured.modelFamily,
+        fastReportReference: report.reportReference || null,
+        modelId: escalated.modelId,
+        modelFamily: String(escalated.modelFamily || "").toLowerCase() || null
+      };
+      finalReviewer = escalated;
+      report = yield {
+        ...reviewRequest,
+        timeoutMs: REVIEW_DISPATCH_TIMEOUT_MS,
+        modelTier: "configured",
+        escalatedFrom: configured.modelTier
+      };
+    }
+    // The verdict is about the bytes this dispatch carried. Anything that
+    // changed them while the reviewer ran (a provider writing tracked files
+    // beside a concurrent review, an edit) makes it a verdict on a superseded
+    // workspace: it is never recorded or checkpointed. The attempt closes as
+    // an error exactly like `authority abort`, the request ends aborted, and
+    // the next pass requests a review bound to the current bytes. A recovered
+    // checkpoint was already bound to its workspace hash on recovery.
+    if (!recoveredReport && report.status !== "error") {
+      clearSnapshotCache(id);
+      const currentHash = authorityWorkspaceHash(id, requestEntry.value.provider);
+      if (currentHash !== dispatched.workspaceHash) {
+        completeReviewAttempt(id, dispatched.dispatch.attemptDigest, {
+          reviewerSessionId: String(report.reviewer?.sessionId || "").trim(),
+          resultStatus: "error", findings: [], verifiedFindingIds: []
+        });
+        const supersededEntry = authorityStore.list(id)
+          .find((row) => row.value.requestId === requestId);
+        const aborted = {
+          ...supersededEntry.value, status: "aborted", abortedAt: now(),
+          abortReason: "workspace changed while the reviewer ran; the verdict judged superseded content"
+        };
+        authorityStore.replace(supersededEntry, aborted);
+        const superseded = {
+          status: "review-superseded", changeId: id, requestId,
+          reviewedWorkspaceHash: dispatched.workspaceHash, currentWorkspaceHash: currentHash,
+          action: "The verdict was not recorded; advance requests a review of the current content."
+        };
+        console.log(JSON.stringify(superseded, null, 2));
+        return superseded;
+      }
+    }
     const checkpoint = checkpointReviewResult(root, dispatched, subject, report);
     if (checkpoint) {
       const resultEntry = authorityStore.list(id)
         .find((row) => row.value.requestId === requestId);
       authorityStore.replace(resultEntry, {
-        ...resultEntry.value, configuredResult: checkpoint
+        ...resultEntry.value,
+        configuredResult: modelEscalation ? { ...checkpoint, modelEscalation } : checkpoint
       });
     }
     function handleConfiguredInfrastructureError() {
@@ -1338,7 +1658,6 @@ export function createAuthorityRuntime({
         ]
       };
       authorityStore.replace(failedEntry, failedRequest);
-      if (!reviewWindowRemaining(loadRuntime(id), Date.parse(now()))) throw reviewWindowError(id);
       // Validation is deterministic for this packet/result. Changing models
       // cannot repair its binding; retain the error and existing resume route.
       const nextReviewer = report.retryable === false ? null
@@ -1349,8 +1668,7 @@ export function createAuthorityRuntime({
           reviewer: undefined,
           "automatic-reviewer": nextReviewer
         };
-        return { handled: true,
-          value: runAuthorityReviewerUnlocked(id, nextFlags) };
+        return { handled: true, retryFlags: nextFlags };
       }
       if (!nextReviewer) {
         authorityStore.replace(failedEntry, {
@@ -1369,7 +1687,8 @@ export function createAuthorityRuntime({
           attempts: failedRequest.fallbackAttempts,
           action: report.retryable === false
             ? "Repair the packet or finding bindings through the existing harness recovery; do not repeat the unchanged full review."
-            : "Configure review.fallbackReviewers, repair reviewer infrastructure, or pause."
+            : "Configure review.fallbackReviewers, repair reviewer infrastructure, or pause.",
+          next: { command: authorityStatusCommand(id, requestId) }
         };
         console.log(JSON.stringify(exhausted, null, 2));
         return { handled: true, value: exhausted };
@@ -1416,7 +1735,8 @@ export function createAuthorityRuntime({
           failedReviewer: configured.identity,
           infrastructureError: report.summary,
           missing: mainSession.missing,
-          action: "Expose the calling host session/model provenance and rerun authority run with --main-session-* fields; the failed reviewer will not run again."
+          action: "Expose the calling host session/model provenance and rerun authority run with --main-session-* fields; the failed reviewer will not run again.",
+          next: nextRunCommand(id, requestId)
         };
         console.log(JSON.stringify(blocked, null, 2));
         return { handled: true, value: blocked };
@@ -1455,6 +1775,8 @@ export function createAuthorityRuntime({
       return { handled: true, value: handback };
     }
     const infrastructureResult = handleConfiguredInfrastructureError();
+    if (infrastructureResult.retryFlags)
+      return yield* authorityReviewerSteps(id, infrastructureResult.retryFlags);
     if (infrastructureResult.handled) return infrastructureResult.value;
     function validateConfiguredReviewResult() {
     const reviewerSession = String(report.reviewer?.sessionId || "").trim();
@@ -1486,7 +1808,11 @@ export function createAuthorityRuntime({
         reviewerSessionId: reviewerSession,
         resultStatus: report.status,
         findings: report.findings,
-        verifiedFindingIds: report.verifiedFindingIds
+        verifiedFindingIds: report.verifiedFindingIds,
+        ...(modelEscalation ? { modelEscalation } : {}),
+        ...(report.scenarioCoverage !== undefined
+          ? { scenarioCoverage: report.scenarioCoverage } : {}),
+        ...(report.specGaps?.length ? { specGaps: report.specGaps } : {})
       };
     const currentAttempt = recoveredReport && reviewAttemptByDigest(id,
       loadRuntime(id).reviewHistory?.chainHead);
@@ -1514,8 +1840,12 @@ export function createAuthorityRuntime({
         attemptDigest: completed.digest,
         reviewer: {
           ...dispatchedEntry.value.dispatch.reviewer,
+          ...(modelEscalation ? {
+            modelFamily: modelEscalation.modelFamily, modelId: modelEscalation.modelId
+          } : {}),
           sessionId: reviewerSession || null
-        }
+        },
+        ...(modelEscalation ? { modelEscalation } : {})
       }
     };
     authorityStore.replace(dispatchedEntry, finalizedRequest);
@@ -1531,12 +1861,15 @@ export function createAuthorityRuntime({
       evidence: {
         observed: report.summary,
         reference: [report.reportReference],
-        reviewer: configured.identity,
+        reviewer: finalReviewer.identity,
         "reviewer-type": "ai",
-        "reviewer-provider-family": configured.providerFamily,
-        "reviewer-model-family": configured.modelFamily,
-        "reviewer-model": configured.modelId,
+        "reviewer-provider-family": finalReviewer.providerFamily,
+        "reviewer-model-family": finalReviewer.modelFamily,
+        "reviewer-model": finalReviewer.modelId,
         "reviewer-session": reviewerSession || null,
+        // The model class actually run (fast|standard|configured), so reports
+        // compare reviews by class as well as by model ID.
+        "reviewer-model-tier": finalReviewer.modelTier || "configured",
         "subject-actor": subjectActor,
         ...(aiSubject ? {
           "subject-session": subjectSession,
@@ -1553,12 +1886,26 @@ export function createAuthorityRuntime({
           ? { "scope-path": dispatched.dispatch.scope.paths } : {})
       }
     });
-    recordAuthorityUnlocked(id, { request: requestId, response: responsePath });
+    recordAuthorityUnlocked(id, {
+      request: requestId, response: responsePath,
+      ...(flags.proofRun ? { proofRun: flags.proofRun } : {})
+    });
     return report;
   }
 
   function runAuthorityReviewer(id, flags = {}) {
     return withAuthorityLock(id, () => runAuthorityReviewerUnlocked(id, flags));
+  }
+
+  // Foreground and awaited by its caller: the authority lock is held across
+  // the reviewer child, exactly like the synchronous route.
+  async function runAuthorityReviewerAsync(id, flags = {}) {
+    const locks = join(root, ".foundation", "locks");
+    const lock = acquireProcessLock(join(locks, `authority-${id}.lock`), { now });
+    if (!lock.acquired)
+      fail(`authority mutation for '${id}' is already in progress; retry after it completes`);
+    try { return await runAuthorityReviewerUnlockedAsync(id, flags); }
+    finally { lock.release(); }
   }
 
   function authorityStatusValue(id, requestId = null) {
@@ -1605,15 +1952,26 @@ export function createAuthorityRuntime({
     const effective = authorityStatusValue(id, requestId).requests[0];
     const request = effective || entry.value;
     if (request.status === "stale" ||
-        request.workspaceHash !== authorityWorkspaceHash(id, request.provider))
-      fail(`authority request '${requestId}' is stale — the workspace changed after it was issued; request review and acceptance last, after the workspace stops changing, then re-request: claude-foundation authority request ${id} --type ${request.type}`);
+        request.workspaceHash !== authorityWorkspaceHash(id, request.provider)) {
+      // A verdict on a superseded workspace can never be recorded, but asking
+      // anyone to re-request is harness bookkeeping. Issue the replacement
+      // bound to the current workspace now; it spends no review attempt until
+      // it is dispatched, and `advance` routes it like any open request.
+      const repository = providerConfig(id, request.provider)?.repository || null;
+      const fresh = requestAuthorityUnlocked(id, {
+        type: request.type, ...(repository ? { repo: repository } : {})
+      }, { quiet: true });
+      fail(`authority request '${requestId}' judged a superseded workspace, so its response was not recorded; ` +
+        `the harness re-requested ${request.type} as '${fresh.requestId}' bound to the current workspace. ` +
+        `Resume with 'claude-foundation advance ${id}'.`, 1,
+      { owner: "harness", boundary: "stale-authority-request", code: "AUTHORITY_REREQUESTED" });
+    }
     if (!authorityStore.isOpen(request.status))
       fail(`authority request '${requestId}' is ${request.status}`);
-    if (request.type === "review" && request.reviewCircuit === "full-delta" &&
-        request.status !== "dispatched")
-      fail(`authority request '${requestId}' must be dispatched before its response is recorded`);
+    const undispatched = request.type === "review" && request.reviewCircuit === "full-delta" &&
+      request.status !== "dispatched";
     if (!existsSync(responsePath)) fail(`authority response not found: ${flags.response}`);
-    return { requestId, responsePath, entry, request };
+    return { requestId, responsePath, entry, request, undispatched };
   }
 
   function validateDispatchedReviewResponse(request, response, evidenceFlags) {
@@ -1723,11 +2081,19 @@ export function createAuthorityRuntime({
   }
 
   function recordAuthorityReceipt(id, entry, request, requestId, response,
-    responsePath, evidenceFlags) {
+    responsePath, evidenceFlags, proofRun = null) {
     const priorPath = receiptPath(id, request.provider);
     const prior = existsSync(priorPath) ? readFileSync(priorPath) : null;
+    // A review started beside proof collection names its run explicitly, so
+    // the receipt never depends on whether collection is still active.
+    const runBinding = proofRun?.proofRunId &&
+      proofRun.workspaceHash === request.workspaceHash ? {
+        proofRunId: proofRun.proofRunId,
+        workspaceSnapshotId: proofRun.workspaceSnapshotId || null
+      } : {};
     recordReceipt(id, request.provider, response.status, {
       ...evidenceFlags,
+      ...runBinding,
       claims: request.claimIds.join(","), workspaceHash: request.workspaceHash,
       "review-attempt": request.dispatch?.attemptDigest,
       source: evidenceFlags.source || `authority-request:${requestId}`,
@@ -1744,8 +2110,17 @@ export function createAuthorityRuntime({
   }
 
   function recordAuthorityUnlocked(id, flags = {}) {
-    const { requestId, responsePath, entry, request } = recordAuthorityRequest(id, flags);
+    const { requestId, responsePath, entry, request, undispatched } = recordAuthorityRequest(id, flags);
     const response = readJson(responsePath);
+    // Every problem known before validation, at once, instead of one per run.
+    const preflight = authorityResponsePreflightIssues({
+      request, response, undispatched,
+      // The receipt validator's bases: the root and the provider's workspace.
+      referenceExists: (reference) => [root, providerWorkspace(id, request.provider)]
+        .some((base) => base && existsSync(resolve(base, reference)))
+    });
+    if (preflight.length)
+      fail(`authority response for '${requestId}' cannot be recorded:\n  - ${preflight.join("\n  - ")}`);
     const validated = authorityStore.validateResponse(response, request, id);
     if (!validated.valid) fail(validated.reason);
     const evidenceFlags = validated.evidence;
@@ -1765,7 +2140,7 @@ export function createAuthorityRuntime({
       return;
     }
     recordAuthorityReceipt(id, entry, request, requestId, response, responsePath,
-      evidenceFlags);
+      evidenceFlags, flags.proofRun || null);
   }
 
   function recordAuthority(id, flags = {}) {
@@ -1803,6 +2178,12 @@ export function createAuthorityRuntime({
   const resetInfrastructureAuthority = lockedAuthorityOperation(
     withAuthorityLock, resetInfrastructureAuthorityUnlocked);
 
+  const extendReviewAuthority = lockedAuthorityOperation(withAuthorityLock,
+    extendReviewAuthorityOperation.bind(null, {
+      validate, authorityStore, reviewPolicy, deliveredAiAttempts,
+      effectiveReviewAttemptLimit, grantExtraAiWave, fail, output: console
+    }));
+
   // A moved base whose replay altered the change's diff expires a delivered
   // passing verdict through no fault of the work. This route releases exactly
   // that attempt from the wave budget, on a recorded user decision, so the
@@ -1827,8 +2208,10 @@ export function createAuthorityRuntime({
     requestAuthority,
     dispatchAuthority,
     runAuthorityReviewer,
+    runAuthorityReviewerAsync,
     abortAuthority,
     resetInfrastructureAuthority,
+    extendReviewAuthority,
     recoverReviewBindings,
     resetBaseMoveAuthority,
     unrecordedDeliveredAiResponse,

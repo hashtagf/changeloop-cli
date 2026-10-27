@@ -91,6 +91,81 @@ function telemetryCacheReadTokens(format, row, usage) {
   ));
 }
 
+// Host tool-call categories measure agent overhead around the harness. They are
+// a closed set so a scorecard can compare runs; anything unrecognized is
+// `other`, never silently dropped.
+export const TOOL_CALL_CATEGORIES = Object.freeze([
+  "harnessCli", "harnessDocReads", "stateReads", "harnessArtifactWrites",
+  "productWrites", "testRuns", "other"
+]);
+
+const HARNESS_CLI = /(?:^|[\s;&|(/"'])(?:claude-foundation|foundation\.mjs|\.claude\/harness\/cli\.sh)\b/;
+const TEST_RUN = /(?:^|[\s;&|(])(?:node\s+(?:--[\w-]+(?:=\S+)?\s+)*--test|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|npx\s+(?:vitest|jest|mocha)|vitest|jest|mocha|pytest|python3?\s+-m\s+(?:pytest|unittest)|go\s+test|cargo\s+test)\b/;
+const HARNESS_DOC_PATH = /(?:^|[\s/"'=])(?:\.claude\/|WORKFLOW\.md\b)/;
+const STATE_PATH = /(?:^|[\s/"'=])(?:\.foundation\/|openspec\/)/;
+const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead"]);
+
+function toolPath(input) {
+  return [input.file_path, input.notebook_path, input.path, input.pattern]
+    .filter((value) => typeof value === "string").join(" ");
+}
+
+export function toolCallCategory(name, input = {}) {
+  const tool = String(name || "");
+  const args = input && typeof input === "object" ? input : {};
+  if (tool === "Bash") {
+    const command = String(args.command || "");
+    if (HARNESS_CLI.test(command)) return "harnessCli";
+    if (TEST_RUN.test(command)) return "testRuns";
+    if (HARNESS_DOC_PATH.test(command)) return "harnessDocReads";
+    if (STATE_PATH.test(command)) return "stateReads";
+    return "other";
+  }
+  if (tool === "Skill") return "harnessDocReads";
+  const path = toolPath(args);
+  if (WRITE_TOOLS.has(tool))
+    return HARNESS_DOC_PATH.test(path) || STATE_PATH.test(path)
+      ? "harnessArtifactWrites" : "productWrites";
+  if (READ_TOOLS.has(tool)) {
+    if (HARNESS_DOC_PATH.test(path)) return "harnessDocReads";
+    if (STATE_PATH.test(path)) return "stateReads";
+  }
+  return "other";
+}
+
+// Returns the host tool calls one assistant message requested, or null when
+// the row carries no inspectable content (unknown, never zero).
+export function messageToolCalls(message) {
+  if (!Array.isArray(message?.content)) return null;
+  return message.content.filter((block) => block?.type === "tool_use").map((block) => ({
+    id: typeof block.id === "string" ? block.id : null,
+    name: String(block.name || "unknown"),
+    category: toolCallCategory(block.name, block.input)
+  }));
+}
+
+// Summarizes calls de-duplicated by tool_use id. `calls === null` means the
+// source was not observable and every count stays null.
+export function toolCallProfile(calls) {
+  if (!Array.isArray(calls)) return {
+    total: null, byTool: null,
+    byCategory: Object.fromEntries(TOOL_CALL_CATEGORIES.map((key) => [key, null]))
+  };
+  const unique = [...new Map(calls.map((call, index) =>
+    [call?.id || `anonymous-${index}`, call])).values()];
+  const byTool = {};
+  const byCategory = Object.fromEntries(TOOL_CALL_CATEGORIES.map((key) => [key, 0]));
+  for (const call of unique) {
+    const name = String(call?.name || "unknown");
+    byTool[name] = Number(byTool[name] || 0) + 1;
+    const category = TOOL_CALL_CATEGORIES.includes(call?.category)
+      ? call.category : toolCallCategory(name, call?.input);
+    byCategory[category] += 1;
+  }
+  return { total: unique.length, byTool, byCategory };
+}
+
 function sourcePathDigest(path) {
   if (!path) return null;
   return createHash("sha256").update(path).digest("hex");
@@ -148,6 +223,7 @@ export function normalizeTelemetryRow(id, row, format, context = {}, timestamp =
     cost: measuredNumber(firstPresent(row.cost, row.cost_usd, usage.cost_usd)),
     durationMs: measuredNumber(firstPresent(row.durationMs, row.duration_ms)),
     tool: firstTruthy(row.tool),
+    ...(format === "claude" ? { toolCalls: messageToolCalls(message) } : {}),
     repositoryId: firstTruthy(row.repositoryId, row.repository_id, row.repository),
     taskId: firstTruthy(row.taskId, row.task_id, row.task),
     workspaceHash: firstTruthy(row.workspaceHash, snapshot.workspaceHash),

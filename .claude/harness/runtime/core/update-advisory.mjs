@@ -195,9 +195,12 @@ export function baseUpdateNotificationDirective(advisory, trigger) {
   };
 }
 
+// Claude Code exports its session as FOUNDATION_CLAUDE_SESSION_ID (session-context
+// hook); without it every Change packet re-surfaced the same advisory.
 export function notificationSessionId(options) {
-  return String(options.sessionId || options.env?.FOUNDATION_SESSION_ID ||
-    process.env.FOUNDATION_SESSION_ID || "").trim();
+  const env = options.env || process.env;
+  return String(options.sessionId || env.FOUNDATION_SESSION_ID ||
+    env.FOUNDATION_CLAUDE_SESSION_ID || "").trim();
 }
 
 export function acquireNotificationLock(path, timeoutMs) {
@@ -227,8 +230,11 @@ export function nextNotificationState(state, sessionId, directive, trigger, now)
 export function updateNotificationDirective(advisory, trigger, options = {}) {
   const { actionable, directive } = baseUpdateNotificationDirective(advisory, trigger);
   const sessionId = notificationSessionId(options);
-  if (!actionable || trigger === "build") return directive;
-  if (!sessionId) return { ...directive, reason: "session-unavailable" };
+  if (!actionable) return directive;
+  // Without a session the Build reminder keeps surfacing; with one, a single
+  // notice per release and session covers Investigate, Change, and Build.
+  if (!sessionId)
+    return trigger === "build" ? directive : { ...directive, reason: "session-unavailable" };
 
   const path = options.notificationStatePath ||
     defaultUpdateNotificationStatePath(options.env || process.env);

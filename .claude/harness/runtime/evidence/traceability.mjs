@@ -1,5 +1,7 @@
+// Letters and digits of any script count, so a Thai scenario title keeps a
+// usable label instead of collapsing to an empty string.
 export function normalizedTraceLabel(value) {
-  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return String(value || "").toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
 }
 
 export function tasksIndexedByClaim(claims, tasks) {

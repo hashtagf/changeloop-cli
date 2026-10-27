@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { acquireProcessLock } from "../core/process-lock.mjs";
 
@@ -8,7 +8,10 @@ const EVIDENCE_TYPES = new Set([
   "tracking-reference", "apply-result", "deployment-health",
   "secret-reference", "operator-attestation"
 ]);
-const RECORD_STATUSES = new Set(["accepted", "completed", "rejected"]);
+const RECORD_STATUSES = new Set([
+  "accepted", "completed", "rejected", "cancelled", "superseded"
+]);
+const TERMINAL_RECORD_STATUSES = new Set(["completed", "cancelled", "superseded"]);
 const SECRET_FIELD = /(?:password|passwd|privatekey|secretvalue|credential|accesstoken|refreshtoken|apikey|accesskey|secretkey)$/i;
 const SECRET_VALUE = /(?:AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~-]{16,}|https?:\/\/[^\s/:@]+:[^\s@]+@)/i;
 
@@ -28,7 +31,8 @@ export function handoffRecordContentValid(record) {
       !cleanString(record.reference)) return false;
   if (record.status === "completed")
     return Array.isArray(record.evidenceReferences) && record.evidenceReferences.length > 0;
-  if (record.status === "rejected") return Boolean(cleanString(record.reason));
+  if (["rejected", "cancelled"].includes(record.status))
+    return Boolean(cleanString(record.reason));
   return true;
 }
 
@@ -144,7 +148,7 @@ export function normalizeHandoffRecordInput(context, id, flags = {}) {
   const operationId = cleanString(flags.id).toUpperCase();
   const status = cleanString(flags.status);
   if (!RECORD_STATUSES.has(status))
-    context.fail("handoff record --status must be accepted|completed|rejected");
+    context.fail("handoff record --status must be accepted|completed|rejected|cancelled|superseded");
   const actor = cleanString(flags.actor);
   const reference = cleanString(flags.reference);
   const reason = cleanString(flags.reason);
@@ -154,8 +158,8 @@ export function normalizeHandoffRecordInput(context, id, flags = {}) {
     context.fail("handoff record requires --actor <named-operator> and --reference <tracking-reference>");
   if (status === "completed" && !evidenceReferences.length)
     context.fail("completed handoff requires --evidence <reference[,reference]>");
-  if (status === "rejected" && !reason)
-    context.fail("rejected handoff requires --reason <why>");
+  if (["rejected", "cancelled"].includes(status) && !reason)
+    context.fail(`${status} handoff requires --reason <why>`);
   context.assertNoSecretMaterial({ actor, reference, reason, evidenceReferences },
     `${id}/${operationId} handoff record`, context.fail);
   return { operationId, status, actor, reference, reason, evidenceReferences };
@@ -163,14 +167,16 @@ export function normalizeHandoffRecordInput(context, id, flags = {}) {
 
 export function handoffRecordValue(context, id, operation, input, previous, state) {
   if (previous.operationDigest === context.operationDigest(operation) &&
-      previous.status === "completed" && input.status !== "completed")
-    context.fail(`completed handoff '${operation.id}' cannot be downgraded`);
+      TERMINAL_RECORD_STATUSES.has(previous.status) && input.status !== previous.status) {
+    const transition = previous.status === "completed" ? "downgraded" : "changed";
+    context.fail(`${previous.status} handoff '${operation.id}' cannot be ${transition}`);
+  }
   const event = {
     status: input.status,
     actor: input.actor,
     reference: input.reference,
     evidenceReferences: input.status === "completed" ? input.evidenceReferences : [],
-    reason: input.status === "rejected" ? input.reason : null,
+    reason: ["rejected", "cancelled"].includes(input.status) ? input.reason : null,
     recordedAt: context.now()
   };
   return {
@@ -209,7 +215,8 @@ export function createHandoffRuntime({
   stableHash,
   defaultOwner = () => "devops-team",
   now,
-  fail
+  fail,
+  capture = (operation) => operation()
 }) {
   function contractPath(id, state = loadRuntime(id)) {
     return join(activeChangePath(id, state), "handoffs.yaml");
@@ -268,9 +275,10 @@ export function createHandoffRuntime({
     const contract = handoffContract(id, options);
     const operations = contract.operations.map((operation) => {
       const check = readRecord(id, operation);
-      const safeTracked = operation.timing === "post-land" &&
-        operation.activation === "safe-before-activation" &&
-        check.validity === "valid" && check.status === "accepted";
+      const safePostLand = operation.timing === "post-land" &&
+        operation.activation === "safe-before-activation";
+      const acknowledged = safePostLand && check.validity === "valid" &&
+        check.status === "accepted";
       const completed = check.validity === "valid" && check.status === "completed";
       const obligationClass = operation.timing === "post-land" &&
         operation.activation === "safe-before-activation"
@@ -286,13 +294,19 @@ export function createHandoffRuntime({
         actor: check.record?.actor || null,
         reference: check.record?.reference || null,
         evidenceReferences: check.record?.evidenceReferences || [],
-        landBlocking: !(completed || safeTracked),
+        landBlocking: !(completed || safePostLand),
         landDisposition: completed ? "completed"
-          : safeTracked ? "tracked-post-land" : "waiting-external"
+          : safePostLand && check.validity === "valid" &&
+              ["cancelled", "superseded"].includes(check.status) ? check.status
+          : acknowledged ? "tracked-post-land"
+            : safePostLand ? "declared-post-land" : "waiting-external"
       };
     });
     const blocking = operations.filter((row) => row.landBlocking);
-    const tracked = operations.filter((row) => row.landDisposition === "tracked-post-land");
+    const declared = operations.filter((row) =>
+      row.landDisposition === "declared-post-land");
+    const tracked = operations.filter((row) =>
+      ["declared-post-land", "tracked-post-land"].includes(row.landDisposition));
     return {
       version: 1,
       changeId: id,
@@ -300,6 +314,7 @@ export function createHandoffRuntime({
         : tracked.length ? "READY_WITH_TRACKED_HANDOFF" : "COMPLETE",
       operations,
       blocking: blocking.map((row) => row.id),
+      declared: declared.map((row) => row.id),
       tracked: tracked.map((row) => row.id)
     };
   }
@@ -359,23 +374,7 @@ export function createHandoffRuntime({
         validity: row.validity,
         reference: row.reference,
         userActionRequired: row.landBlocking,
-        decision: !row.landBlocking ? null
-          : row.obligationClass === "production-verification" ? {
-              kind: "post-land-production-verification",
-              summary: "Production verification can happen after Land because activation remains safely disabled.",
-              question: "Should this change Land now with production verification tracked to its owner?",
-              options: [
-                { id: "track-and-land", outcome: "Record the owner and tracking reference, then continue Land." },
-                { id: "wait", outcome: "Wait for the operation to complete before Land." },
-                { id: "split", outcome: "Land only the portion that does not depend on this operation." },
-                { id: "pause", outcome: "Keep the change pending." }
-              ],
-              recommended: "track-and-land",
-              requiredFacts: ["actor", "tracking-reference"],
-              fingerprint: stableHash({ version: 1, changeId: id,
-                operationDigest: row.operationDigest, validity: row.validity,
-                status: row.status })
-            } : {
+        decision: !row.landBlocking ? null : {
               kind: row.obligationClass,
               summary: row.obligationClass === "activation-safety"
                 ? "This operation is coupled to activation and must be made safe before Land."
@@ -401,8 +400,76 @@ export function createHandoffRuntime({
     console.log(JSON.stringify(handoffPacketValue(id, flags.id || null), null, 2));
   }
 
-  function showHandoffStatus(id) {
+  function showHandoffStatus(id, options = {}) {
+    if (options.list) return showHandoffList(options);
     console.log(JSON.stringify(handoffReadiness(id), null, 2));
+  }
+
+  function runtimeChangeIds() {
+    const runtimeRoot = join(root, ".foundation", "runtime");
+    if (!existsSync(runtimeRoot)) return [];
+    return readdirSync(runtimeRoot, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => entry.name.slice(0, -5))
+      .sort();
+  }
+
+  function listReadiness(id) {
+    try {
+      // The shipped `fail` exits outside a trap. Enter the injected capture
+      // boundary before any state or contract read so one corrupt change can
+      // be represented in-band instead of terminating the aggregate command.
+      return { readiness: capture(() => handoffReadiness(id)), error: null };
+    } catch (error) {
+      return {
+        readiness: null,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  function handoffListValue(filters = {}) {
+    const owner = cleanString(filters.owner);
+    const environment = cleanString(filters.environment);
+    const openOnly = filters.open === true;
+    const changes = [];
+    const errors = [];
+    for (const id of runtimeChangeIds()) {
+      const result = listReadiness(id);
+      if (result.error) {
+        errors.push({ changeId: id, error: result.error });
+        continue;
+      }
+      const readiness = result.readiness;
+      const operations = readiness.operations.filter((row) => {
+        if (owner && row.owner !== owner) return false;
+        if (environment && row.environment !== environment) return false;
+        if (openOnly && !row.landBlocking &&
+            TERMINAL_RECORD_STATUSES.has(row.landDisposition)) return false;
+        return true;
+      });
+      if (!operations.length) continue;
+      changes.push({
+        changeId: id,
+        changeStatus: loadRuntime(id).status,
+        readiness: readiness.status,
+        operations
+      });
+    }
+    return {
+      version: 1,
+      filters: {
+        open: openOnly,
+        owner: owner || null,
+        environment: environment || null
+      },
+      changes,
+      errors
+    };
+  }
+
+  function showHandoffList(flags = {}) {
+    console.log(JSON.stringify(handoffListValue(flags), null, flags.json ? 0 : 2));
   }
 
   return {
@@ -410,8 +477,10 @@ export function createHandoffRuntime({
     operationDigest,
     handoffReadiness,
     handoffPacketValue,
+    handoffListValue,
     showHandoffPacket,
     showHandoffStatus,
+    showHandoffList,
     recordHandoff
   };
 }

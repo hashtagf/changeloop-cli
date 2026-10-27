@@ -1,12 +1,12 @@
 import { measuredNumber } from "../core/measured-number.mjs";
 import { executionSurfaceBudgetScale } from "../core/authority-policy.mjs";
 
-export function budgetDirective(ratio, operatorRequired) {
-  if (operatorRequired || ratio >= 1)
-    return {
-      mode: "operator-required", action: "OPERATOR_REQUIRED",
-      recommendation: "ASK_USER"
-    };
+export const AUTO_BUDGET_CONTINUATION_REF = "harness://auto-extend/budget/1";
+
+// Budget is advisory: it shapes how the agent spends, never whether the user
+// is asked. Exhaustion is handled by `applyBudgetDecision`, which opens a new
+// same-size window every time.
+export function budgetDirective(ratio) {
   if (ratio >= 0.85)
     return {
       mode: "completion-only", action: "COMPLETION_ONLY",
@@ -187,34 +187,6 @@ export function createBudgetRuntime({ policy, now }) {
     };
   }
 
-  function budgetExhaustionDecision(state, window) {
-    return {
-      kind: "budget-exhausted",
-      summary: "The active model budget is exhausted. Required scope remains locked until the user decides how to proceed.",
-      options: [
-        {
-          id: "continue",
-          outcome: "Open an audited continuation window for eligible unfinished model work."
-        },
-        {
-          id: "rescope",
-          outcome: "Propose an explicit contract revision; no acceptance criterion changes without user approval."
-        },
-        {
-          id: "pause",
-          outcome: "Spend no more model budget and preserve the resumable checkpoint."
-        }
-      ],
-      recommended: "pause",
-      decisionRefRequiredForContinuation: true,
-      prompt: "The budget is exhausted while required scope may remain. Ask the user to choose continue, rescope, or pause.",
-      continuationCommand: state.id
-        ? `claude-foundation budget continue ${state.id} --reason <reason> --decision-ref <host-user-decision>`
-        : null,
-      exhaustedAt: window.exhaustedAt || null
-    };
-  }
-
   function calibrationForState(state) {
     const surface = state.executionSurface || {};
     return budgetCalibration(state.schema, state.impact, state.size, {
@@ -239,10 +211,9 @@ export function createBudgetRuntime({ policy, now }) {
   }
 
   function upgradeVersion3Budget(state, existing) {
-    // Runtime v4 changes an exhausted window from an implicit auto-rescope
-    // boundary into an explicit user-decision boundary. Preserve all v3 usage
-    // and window identity while upgrading so a process restart cannot erase
-    // either the spend or the pending decision.
+    // Preserve all v3 usage and window identity while upgrading so a process
+    // restart cannot erase the spend. An exhausted v3 window is auto-continued
+    // by `applyBudgetDecision` like any other.
     if (existing.version !== 3 || !existing.lifetime || !existing.window)
       return existing;
     const upgraded = {
@@ -251,13 +222,6 @@ export function createBudgetRuntime({ policy, now }) {
       lifetime: { ...existing.lifetime },
       window: { ...existing.window }
     };
-    const requestExhausted = knownNumber(upgraded.window.usedRequests) &&
-      Number(upgraded.window.usedRequests) >= Number(upgraded.window.targetRequests || 1);
-    const tokenExhausted = knownNumber(upgraded.window.usedTokens) &&
-      Number(upgraded.window.usedTokens) >= Number(upgraded.window.targetTokens || 1);
-    if (upgraded.window.exhaustedAt || upgraded.window.mode === "operator-required" ||
-        requestExhausted || tokenExhausted)
-      upgraded.window.mode = "operator-required";
     state.budget = upgraded;
     return upgraded;
   }
@@ -350,14 +314,9 @@ export function createBudgetRuntime({ policy, now }) {
     budget.window = budgetWindow(runId, targets, priorRunUsage,
       Number(previous.sequence || 0) + 1, reason);
     // A new run id resets this window's usage — that is what a genuine host
-    // session rollover means. It must not also hand back the *allowance*: the
-    // run id is caller-supplied, so clearing an operator stop or the
-    // one-extension cap here would let `--run anything-new` re-arm the gate
-    // indefinitely with no decision recorded. Only `budget continue` widens
-    // the allowance, and it records why.
+    // session rollover means. The extension lineage carries across runs.
     budget.window.extensionRootId = previous.extensionRootId || previous.id || null;
     budget.window.extensionNumber = Number(previous.extensionNumber || 0);
-    if (previous.mode === "operator-required") budget.window.mode = "operator-required";
     return budget.window;
   }
 
@@ -381,50 +340,57 @@ export function createBudgetRuntime({ policy, now }) {
     const measured = requestsKnown || tokensKnown;
     const limiter = !measured ? null
       : tokenRatio > requestRatio ? "tokens" : "requests";
-    const operatorRequired = window.mode === "operator-required";
-    const { mode, action, recommendation } = budgetDirective(ratio, operatorRequired);
-    const userActionRequired = mode === "operator-required";
+    const { mode, action, recommendation } = budgetDirective(ratio);
     const allowance = budgetAllowance(window, requestsKnown, tokensKnown, measured);
     return {
       ratio, measured, limiter, mode, action, recommendation,
       allowance,
-      status: userActionRequired ? "NEEDS_USER_DECISION" : "CONTINUE",
-      userActionRequired,
-      decision: userActionRequired ? budgetExhaustionDecision(state, window) : null,
+      status: "CONTINUE",
+      userActionRequired: false,
+      decision: null,
       allowed: mode === "completion-only" ? [
         "focused-fix", "provider-run", "receipt-reuse", "proof-resume",
         "metrics", "budget-checkpoint", "land-recovery", "archive"
-      ] : mode === "operator-required" ? [
-        // An operator stop withholds *new* work, not the loop's own completion
-        // path. `Required proof remains` is stated for this state too, and a
-        // change that cannot run its providers or resume Land is stranded
-        // rather than gated. What stays out is anything that would grow the
-        // change while the operator is being asked whether to fund it.
-        "packet", "readiness", "provider-run", "proof-resume", "receipt-reuse",
-        "metrics", "budget-checkpoint", "land-recovery", "budget-continue", "archive"
       ] : ["scoped-execution"],
       forbidden: mode === "completion-only" ? [
         "scope-expansion", "speculative-investigation", "new-subagent", "optional-refactor"
-      ] : mode === "operator-required" ? [
-        "model-exploration", "new-subagent", "scope-expansion"
       ] : []
     };
   }
 
+  // Every exhaustion opens one more window of the same size for the same run,
+  // recorded as a harness decision. Budget never asks the user. It does not
+  // use an operator-approved continuation (`extensionNumber` is unchanged).
+  function autoContinueBudget(state, window) {
+    const budget = state.budget;
+    const next = budgetWindow(window.id, {
+      requests: Number(budget.targetRequests), tokens: Number(budget.targetTokens)
+    }, {
+      measured: true,
+      requests: Number(window.baselineRequests || 0) + Number(window.usedRequests || 0),
+      tokens: knownNumber(window.usedTokens)
+        ? Number(window.baselineTokens || 0) + Number(window.usedTokens) : null
+    }, Number(window.sequence || 0) + 1, "harness-auto-continue");
+    next.extensionRootId = window.extensionRootId || window.id;
+    next.extensionNumber = Number(window.extensionNumber || 0);
+    budget.autoContinuation = {
+      decisionRef: AUTO_BUDGET_CONTINUATION_REF, owner: "harness", at: now(),
+      count: Number(budget.autoContinuation?.count || 0) + 1,
+      previous: { ...window, exhaustedAt: window.exhaustedAt || now(), closedAt: now() }
+    };
+    budget.window = next;
+    return true;
+  }
+
   function applyBudgetDecision(state) {
-    const window = state.budget.window;
-    const preliminary = budgetDecision(state);
-    if (window.mode !== "operator-required") window.mode = preliminary.mode;
-    if (preliminary.ratio >= 1 && !window.exhaustedAt) window.exhaustedAt = now();
-    // Exhaustion is a user-decision boundary on the first window as well as on
-    // continuations. It must never silently reduce scope or re-arm merely
-    // because the host supplies a different run id. Deterministic completion
-    // operations remain explicitly allowed by `budgetDecision`; only new model
-    // work waits for an audited `budget continue` decision reference.
-    if (preliminary.ratio >= 1) window.mode = "operator-required";
-    // Recomputed, because the transition above changes the answer the caller is
-    // about to act on.
-    return budgetDecision(state);
+    const preliminaryWindow = ensureBudgetState(state).window;
+    // A legacy `operator-required` window was an exhaustion stop; it continues
+    // like any other exhausted window.
+    if (budgetDecision(state).ratio >= 1 || preliminaryWindow.mode === "operator-required")
+      autoContinueBudget(state, preliminaryWindow);
+    const decision = budgetDecision(state);
+    state.budget.window.mode = decision.mode;
+    return decision;
   }
 
   function synchronizeBudgetUsage(state, events, runId, measurement, newEventCount = 0) {

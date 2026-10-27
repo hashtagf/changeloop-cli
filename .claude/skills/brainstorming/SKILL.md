@@ -1,9 +1,12 @@
 ---
 name: brainstorming
-description: Resolve genuine ambiguity before creating or materially revising an OpenSpec change. Use for unclear observable outcomes, competing approaches with consequential tradeoffs, unknown scope boundaries, or an explicit request to explore options. Skip when repository evidence and user intent already determine the change.
+description: "Resolve consequential product or scope ambiguity before Change intake. Use for competing outcomes or approaches; verify discoverable facts first and carry settled choices into OpenSpec. Skip settled implementation and read-only how/why questions; use investigate."
 ---
 
 # Change investigation
+
+Preserve attributable historical decisions and label inference. Test factual
+assumptions before comparing designs.
 
 Use the lightest path that resolves the decision.
 

@@ -1,9 +1,12 @@
 ---
 name: api-design-fundamentals
-description: Design or change a published HTTP, GraphQL, or RPC contract. Use for resources, protocol semantics, request/response schemas, errors, idempotency, pagination, authorization boundaries, versioning, and compatibility. Skip private one-off transport with no independently consumed contract.
+description: "Use when a change's workType includes api or library, or a requirement defines a request, response, status code, error body, pagination, or version that other code consumes. Skip private module interfaces; use programming-fundamentals."
 ---
 
 # API design fundamentals
+
+Trace external consumers and serialized bytes; use `change-impact-analysis`
+for unverified consumer assumptions.
 
 Use this as the primary skill when clients must code against the changed
 surface.

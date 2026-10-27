@@ -1,13 +1,45 @@
 import { createHash } from "node:crypto";
 import {
-  existsSync, lstatSync, readFileSync, readdirSync, readlinkSync
+  copyFileSync, existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, renameSync,
+  statSync
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
-  declaredPathMatcher, isChangePacketPath, isExcludedPath, trackedPathSet
+  declaredPathMatcher, isChangePacketPath, isExcludedPath, mergeSurfaceAdditions,
+  surfaceAdditionEntries, surfaceAdditionPaths, trackedPathSet
 } from "./workspace-surface.mjs";
+import { gitRepositoryAbsent, resolveGitHead } from "./git-head.mjs";
+import { withoutGitIgnored } from "./git-ignore.mjs";
 import { taskBlocks, taskMetadata } from "../contracts/change-artifacts.mjs";
+import { normalizeLifecycleState } from "./lifecycle-reducer.mjs";
+
+// Read-only git subcommands that need a repository to answer at all.
+const NO_REPOSITORY_QUERIES = new Set([
+  "ls-files", "status", "rev-parse", "ls-tree", "check-ignore", "show"
+]);
+
+// A file untouched for longer than this when read is safe to identify by
+// metadata; anything younger is re-read until it settles.
+const RACY_WINDOW_MS = 2000;
+// The state file is replaced atomically (new inode) on every save, so it needs
+// only to outlast a few filesystem timestamp ticks (4-10 ms on Linux).
+const RUNTIME_RACY_WINDOW_MS = 30;
+
+function statIdentity(path) {
+  try {
+    const stat = statSync(path, { bigint: true });
+    if (!stat.isFile()) return null;
+    return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+  } catch { return null; }
+}
+
+function statSettled(path, windowMs = RACY_WINDOW_MS) {
+  try {
+    const stat = statSync(path);
+    return Date.now() - Math.max(stat.mtimeMs, stat.ctimeMs) > windowMs;
+  } catch { return false; }
+}
 
 export function createStateRuntime({
   root,
@@ -24,6 +56,9 @@ export function createStateRuntime({
   fail
 }) {
   function runtimePath(id) { return join(runtime, `${id}.json`); }
+  // The last state that parsed, kept beside the live file so an unreadable
+  // state is a harness repair rather than a reason to throw the work away.
+  function previousRuntimePath(id) { return `${runtimePath(id)}.prev`; }
   function changePath(id) { return join(changes, id); }
   function receiptPath(id, provider) { return join(receipts, id, `${provider}.json`); }
   function proofPath(id) { return join(receipts, id, "proof.json"); }
@@ -35,7 +70,9 @@ export function createStateRuntime({
     return isChangePacketPath(rel, id);
   }
 
-  function activeChangePath(id, state = loadRuntime(id)) {
+  // Only reads the status and workspace location, so it may borrow the shared
+  // parse instead of paying for a private copy on every one of its many calls.
+  function activeChangePath(id, state = loadRuntime(id, { shared: true })) {
     if (state.status === "archived" && state.archivedChangePath) {
       const archived = join(root, state.archivedChangePath);
       if (existsSync(archived)) return archived;
@@ -68,7 +105,29 @@ export function createStateRuntime({
 
   function slugify(value) {
     return value.toLowerCase().trim()
-      .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || "change";
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+/, "").slice(0, 64)
+      .replace(/-+$/, "") || "change";
+  }
+
+  // A lifecycle command reads the same state file thousands of times and the
+  // file carries the whole sandbox baseline, so each read-and-parse is real
+  // time. A parse is reused only while the file's identity (inode, size, and
+  // nanosecond mtime/ctime) is unchanged AND the file was already older than
+  // RUNTIME_RACY_WINDOW_MS when it was read: a rewrite inside one timestamp tick could
+  // otherwise keep the identity. Every caller still gets its own copy to mutate.
+  const runtimeParses = new Map();
+  function readRuntimeValue(path, shared = false) {
+    const identity = statIdentity(path);
+    const hit = identity ? runtimeParses.get(path) : null;
+    if (hit && hit.identity === identity) return shared ? hit.value : structuredClone(hit.value);
+    // Legacy statuses are read in their current form; the file is rewritten
+    // only by the next ordinary save.
+    const value = JSON.parse(readFileSync(path, "utf8"));
+    normalizeLifecycleState(value);
+    if (identity && identity === statIdentity(path) && statSettled(path, RUNTIME_RACY_WINDOW_MS))
+      runtimeParses.set(path, { identity, value: structuredClone(value) });
+    else runtimeParses.delete(path);
+    return value;
   }
 
   // `recoverable` is for the one caller that must work precisely when the
@@ -76,7 +135,7 @@ export function createStateRuntime({
   // from a broken change, and gating it on loadRuntime made it the dead end it
   // exists to resolve. A minimal placeholder is enough for abandon to
   // quarantine what is on disk.
-  function loadRuntime(id, { recoverable = false } = {}) {
+  function loadRuntime(id, { recoverable = false, shared = false } = {}) {
     const path = runtimePath(id);
     const present = existsSync(path);
     if (!present && !recoverable) fail(`unknown change '${id}'`);
@@ -85,8 +144,10 @@ export function createStateRuntime({
     if (!present)
       return { version: 2, id, status: "unknown", schema: null, recoveredState: "missing" };
     try {
-      return JSON.parse(readFileSync(path, "utf8"));
+      return readRuntimeValue(path, shared);
     } catch (error) {
+      const restored = restorePreviousRuntime(id, error);
+      if (restored) return restored;
       if (!recoverable)
         fail(`invalid JSON: ${runtimeRelativePath(id)} (${error.message}); ` +
           `retire it with 'claude-foundation change abandon ${id} --reason <reason> --decision-ref <ref>'`);
@@ -98,9 +159,41 @@ export function createStateRuntime({
     return relative(root, runtimePath(id));
   }
 
+  // Quarantine the unreadable file and reinstate the last state that parsed.
+  // Proof freshness is recomputed from content, so a state one save behind
+  // cannot pass stale evidence; it only replays the latest transition.
+  function restorePreviousRuntime(id, error) {
+    const path = runtimePath(id);
+    const previous = previousRuntimePath(id);
+    if (!existsSync(previous)) return null;
+    let state;
+    try { state = JSON.parse(readFileSync(previous, "utf8")); }
+    catch { return null; }
+    if (state?.id !== id) return null;
+    normalizeLifecycleState(state);
+    renameSync(path, `${path}.corrupt-${Date.now()}`);
+    copyFileSync(previous, path);
+    console.error(`RECOVERED: ${runtimeRelativePath(id)} was unreadable (${error.message}); ` +
+      "restored the last valid state and kept the unreadable copy beside it");
+    return state;
+  }
+
   function saveRuntime(state) {
+    // `surfaceAdditions` only grows. A caller holding a state loaded before
+    // readiness recorded an addition must not drop it, or Land's hash would
+    // diverge from the proven one.
+    const path = runtimePath(state.id);
+    if (existsSync(path)) {
+      try {
+        const stored = JSON.parse(readFileSync(path, "utf8"));
+        copyFileSync(path, previousRuntimePath(state.id));
+        const additions = stored.surfaceAdditions || [];
+        if (additions.length || state.surfaceAdditions?.length) state.surfaceAdditions =
+          mergeSurfaceAdditions(state.surfaceAdditions, additions);
+      } catch {}
+    }
     state.updatedAt = now();
-    writeJson(runtimePath(state.id), state);
+    writeJson(path, state);
   }
 
   function activeChanges() {
@@ -137,8 +230,18 @@ export function createStateRuntime({
     }
   }
 
+  // Content digest, reused while the file's identity is unchanged and settled
+  // (see readRuntimeValue); a file rewritten since is always re-read.
+  const fileDigests = new Map();
   function fileDigest(path) {
-    return createHash("sha256").update(readFileSync(path)).digest("hex");
+    const identity = statIdentity(path);
+    const hit = identity ? fileDigests.get(path) : null;
+    if (hit && hit.identity === identity) return hit.digest;
+    const digest = createHash("sha256").update(readFileSync(path)).digest("hex");
+    if (identity && identity === statIdentity(path) && statSettled(path))
+      fileDigests.set(path, { identity, digest });
+    else fileDigests.delete(path);
+    return digest;
   }
 
   function filesystemEntryIdentity(path) {
@@ -245,9 +348,79 @@ export function createStateRuntime({
   // Declared means the resolved `--surface` globs plus every task's `[paths:]`,
   // so a file the change creates is surface as soon as the ledger says the
   // change owns that path.
-  function declaredSurfaceMatcher(id, state = {}) {
-    const globs = [...(state.declaredSurface || [])];
-    const tasks = join(changePath(id), "tasks.md");
+  // Which selected repository a workspace (sandbox or target checkout) belongs
+  // to. Anything not recorded as a child repository is the root workspace.
+  function workspaceRepositoryId(state = {}, workspace = null) {
+    if (!workspace) return "root";
+    const target = canonicalPath(workspace);
+    for (const [repositoryId, runtime] of Object.entries(state.repositories || {})) {
+      if (repositoryId === "root" || !runtime) continue;
+      for (const candidate of [runtime.path, runtime.targetPath])
+        if (candidate && canonicalPath(candidate) === target) return repositoryId;
+    }
+    return "root";
+  }
+
+  // The target whose Git view governs a sandbox that has no checkout of its
+  // own: a copy sandbox of a target whose `.git` is a file cannot carry it.
+  // Such a sandbox sits inside the target's tree, so Git run there answers for
+  // the enclosing repository, under which the whole sandbox is ignored: the
+  // proof hash then ignored code edits and stale evidence passed, and a
+  // rewritten ignored file entered the copy-mode Land projection. Null for the
+  // target itself and for any workspace with its own `.git`.
+  function borrowedGitTarget(state, workspace) {
+    const current = canonicalPath(workspace);
+    if (current === canonicalPath(root) || existsSync(join(workspace, ".git"))) return null;
+    if (state.workspace?.path && canonicalPath(state.workspace.path) === current) return root;
+    for (const [repositoryId, record] of Object.entries(state.repositories || {}))
+      if (repositoryId !== "root" && record?.path && record.targetPath &&
+          canonicalPath(record.path) === current) return record.targetPath;
+    return null;
+  }
+
+  // The sandbox's own files, judged by its target: what the target tracks is
+  // content, and what the target's rules ignore is no change's work. Null when
+  // the workspace answers for itself or the target is no repository.
+  function borrowedGitView(state, workspace) {
+    const target = borrowedGitTarget(state, workspace);
+    if (!target || !existsSync(target)) return null;
+    const listed = git(["ls-files", "-z"], target);
+    if (listed.status !== 0) return null;
+    return {
+      target,
+      tracked: trackedPathSet(listed.stdout.split("\0").filter(Boolean)),
+      withoutIgnored: (paths) => withoutGitIgnored(target, paths)
+    };
+  }
+
+  // What Land must present before it applies: recorded additions Prove did
+  // not refuse but flagged. `protected` paths are control-plane, CI, or secret
+  // paths; `deleted` paths are exact removals the sandbox's own change surface
+  // reported. Paths only — never file contents, so a secret is never printed.
+  function surfaceAdditionReport(state = {}, repositoryId = null) {
+    const entries = surfaceAdditionEntries(state.surfaceAdditions)
+      .filter((entry) => !repositoryId || entry.repositoryId === repositoryId);
+    return {
+      entries,
+      protected: entries.filter((entry) => entry.protected),
+      deleted: entries.filter((entry) => entry.deleted),
+      requiresPresentation: entries.some((entry) => entry.protected || entry.deleted)
+    };
+  }
+
+  function declaredSurfaceMatcher(id, state = {}, repositoryId = "root") {
+    // `surfaceAdditions` are exact sandbox paths Prove found outside every
+    // task's `[paths:]` and recorded instead of refusing; the hash and the Land
+    // projection must carry them or a created file would silently not land.
+    // Only this repository's additions apply: another repository's path must
+    // not widen this repository's manifest, hash, or deletion guard.
+    const globs = [...(state.declaredSurface || []),
+      ...surfaceAdditionPaths(state.surfaceAdditions, repositoryId)];
+    // The active packet owns `[paths:]`: Build widens it in the sandbox, and
+    // Land later projects that packet onto the target. Reading the target copy
+    // left the widened paths out of the proven hash, then Land's own packet
+    // projection changed the hash and staled its grant and proof.
+    const tasks = join(activeChangePath(id, state), "tasks.md");
     if (existsSync(tasks))
       for (const task of taskBlocks(readFileSync(tasks, "utf8")).map(taskMetadata))
         globs.push(...(task.paths || []));
@@ -264,6 +437,12 @@ export function createStateRuntime({
     // The default 1MB maxBuffer silently truncates `ls-files`/`status` on
     // large repositories, and a failed listing here degrades into a wrong
     // surface rather than an error.
+    // Outside any repository these read-only queries can only fail with
+    // exit 128; answering that here spares a process per query, and a copy
+    // sandbox of a plain directory asks a few hundred of them.
+    if (NO_REPOSITORY_QUERIES.has(args[0]) && gitRepositoryAbsent(cwd))
+      return { status: 128, signal: null, stdout: "", stderr: "fatal: not a git repository\n",
+        output: [null, "", "fatal: not a git repository\n"], pid: 0 };
     return spawnSync("git", args, {
       cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024
     });
@@ -294,6 +473,8 @@ export function createStateRuntime({
   }
 
   function gitHead(cwd) {
+    const direct = resolveGitHead(cwd);
+    if (direct !== undefined) return direct;
     const result = git(["rev-parse", "HEAD"], cwd);
     return result.status === 0 ? result.stdout.trim() : null;
   }
@@ -363,13 +544,18 @@ export function createStateRuntime({
     };
   }
 
-  function collectFilesystemSnapshot(workspace, allowed) {
+  // `view`: the target's Git view of a sandbox without its own checkout. A
+  // file is then judged as Git would judge it (tracked, declared, or the
+  // packet); a directory only by name, so a declared file below is reached.
+  function collectFilesystemSnapshot(workspace, allowed, view = null) {
     const files = [];
     function collect(dir) {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const path = join(dir, entry.name);
         const rel = relative(workspace, path).replaceAll("\\", "/");
-        if (!allowed(rel)) continue;
+        if (!allowed(rel, view ? {
+          gitAware: !entry.isDirectory(), tracked: view.tracked.has(rel)
+        } : {})) continue;
         if (entry.isDirectory()) collect(path);
         else if (entry.isFile() || entry.isSymbolicLink()) files.push([rel, path]);
       }
@@ -457,11 +643,18 @@ export function createStateRuntime({
     // (every tracked byte) expires it on upstream commits the change never
     // touched. Paired with the sandbox diff identity, this is the narrow
     // binding that lets an unchanged verdict survive a moved base.
-    const declared = declaredSurfaceMatcher(id, state);
+    const declared = declaredSurfaceMatcher(id, state,
+      workspaceRepositoryId(state, workspace));
     const allowed = snapshotPathPolicy(id, ignored, declared);
-    let files = collectGitSnapshot(workspace, allowed);
-    if (files === null) files = collectFilesystemSnapshot(workspace, allowed)
-      .map(([rel, path]) => [rel, path, filesystemEntryIdentity(path)]);
+    const view = borrowedGitView(state, workspace);
+    let files = view ? null : collectGitSnapshot(workspace, allowed);
+    if (files === null) {
+      const walked = collectFilesystemSnapshot(workspace, allowed, view);
+      const kept = new Set(view ? view.withoutIgnored(walked.map(([rel]) => rel))
+        : walked.map(([rel]) => rel));
+      files = walked.filter(([rel]) => kept.has(rel))
+        .map(([rel, path]) => [rel, path, filesystemEntryIdentity(path)]);
+    }
     for (const [rel, , identity] of files)
       foldSnapshotEntry(digests, id, workspace, rel, identity);
     const value = snapshotValue(id, workspace, contractRevision, files, digests);
@@ -521,23 +714,27 @@ export function createStateRuntime({
 
   function workspaceManifest(workspace, id, excludeChange = false) {
     const result = {};
-    const ignored = ignoredPathSet(workspace);
+    const manifestState = existsSync(runtimePath(id)) ? readJson(runtimePath(id)) : {};
+    // A sandbox without its own checkout reads its files through its target's
+    // Git view, exactly as its proof hash does.
+    const view = borrowedGitView(manifestState, workspace);
+    const ignored = view ? new Set() : ignoredPathSet(workspace);
     // Tracked-aware, like the snapshot and the copy filter: both admit a
     // committed file under an excluded-named directory, so the manifests whose
     // diff decides what apply projects must admit it too — a name-only
     // exclusion here dropped exactly those edits at Land, silently, while
     // proof (whose hash includes them) reported pass.
-    const listed = git(["ls-files", "-z"], workspace);
+    const listed = view ? { status: 0 } : git(["ls-files", "-z"], workspace);
     const gitAware = listed.status === 0;
-    const tracked = gitAware
+    const tracked = view ? view.tracked : gitAware
       ? trackedPathSet(listed.stdout.split("\0").filter(Boolean))
       : new Set();
     // The same predicate the proof hash uses. Two manifests are diffed to decide
     // what apply projects, so a path either manifest admits and the other does
     // not becomes a create or a delete; confining both to one surface is what
     // keeps an unrelated tree out of that diff.
-    const declared = declaredSurfaceMatcher(id,
-      existsSync(runtimePath(id)) ? readJson(runtimePath(id)) : {});
+    const declared = declaredSurfaceMatcher(id, manifestState,
+      workspaceRepositoryId(manifestState, workspace));
     function collect(dir) {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const path = join(dir, entry.name);
@@ -557,7 +754,9 @@ export function createStateRuntime({
       }
     }
     collect(workspace);
-    return result;
+    if (!view) return result;
+    const kept = new Set(view.withoutIgnored(Object.keys(result)));
+    return Object.fromEntries(Object.entries(result).filter(([rel]) => kept.has(rel)));
   }
 
   return {
@@ -591,6 +790,8 @@ export function createStateRuntime({
     inspectSnapshots,
     writeSnapshot,
     declaredSurfaceMatcher,
+    surfaceAdditionReport,
+    workspaceRepositoryId,
     clearSnapshotCache,
     registerPolicyCacheClearer,
     workspaceManifest,

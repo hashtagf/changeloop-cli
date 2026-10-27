@@ -186,3 +186,19 @@ export function verifySpecSync({ before, after, delta } = {}) {
 
   return { valid: violations.length === 0, violations };
 }
+
+// Violations decided by the pre-archive spec and the delta alone: whatever
+// OpenSpec merges, the post-archive check above reports each of them (or, for
+// a scenario deletion whose requirement the merge drops, a sibling violation).
+// Land checks them before it writes anything, so a stale delta stops at
+// readiness instead of after the durable spec rewrite.
+export const PRE_ARCHIVE_SPEC_SYNC_KINDS = Object.freeze([
+  "delta-section-unrecognized", "delta-name-ambiguous", "added-requirement-preexisting",
+  "removed-requirement-absent", "modified-scenario-deleted"
+]);
+
+export function predictSpecSync({ before, delta } = {}) {
+  const violations = verifySpecSync({ before, after: before, delta }).violations
+    .filter((violation) => PRE_ARCHIVE_SPEC_SYNC_KINDS.includes(violation.kind));
+  return { valid: violations.length === 0, violations };
+}

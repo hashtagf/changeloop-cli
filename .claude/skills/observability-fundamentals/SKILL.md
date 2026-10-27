@@ -1,9 +1,12 @@
 ---
 name: observability-fundamentals
-description: Add or review operability when runtime code changes a failure mode, log, metric, trace, SLI/SLO, alert, queue, dependency, or production blind spot. Covers structured events, correlation, RED/USE metrics, percentiles, symptom alerts, ownership, and telemetry cost/cardinality. Skip offline or throwaway code with no operated runtime.
+description: "Design or review runtime logs, metrics, traces, SLIs/SLOs, alerts, and failure visibility. Use for changed operated boundaries and production blind spots. Use performance-investigation to explain measurements; skip offline code and unnecessary telemetry."
 ---
 
 # Observability fundamentals
+
+Missing counters remain unavailable, never zero. Use `performance-investigation`
+to validate comparative numbers.
 
 This is cross-cutting. Load it with one primary skill only when the change adds
 or materially alters runtime failure behavior.

@@ -103,16 +103,17 @@ def run_single_query(
                     remaining = process.stdout.read()
                     if remaining:
                         buffer += remaining.decode("utf-8", errors="replace")
-                    break
-
-                ready, _, _ = select.select([process.stdout], [], [], 1.0)
-                if not ready:
-                    continue
-
-                chunk = os.read(process.stdout.fileno(), 8192)
-                if not chunk:
-                    break
-                buffer += chunk.decode("utf-8", errors="replace")
+                        buffer += "\n"
+                    else:
+                        break
+                else:
+                    ready, _, _ = select.select([process.stdout], [], [], 1.0)
+                    if not ready:
+                        continue
+                    chunk = os.read(process.stdout.fileno(), 8192)
+                    if not chunk:
+                        break
+                    buffer += chunk.decode("utf-8", errors="replace")
 
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
@@ -168,6 +169,8 @@ def run_single_query(
                             return triggered
 
                     elif event.get("type") == "result":
+                        if event.get("is_error"):
+                            raise RuntimeError("evaluation runner reported an error")
                         return triggered
         finally:
             # Clean up process on any exit path (return, exception, timeout)
@@ -175,7 +178,7 @@ def run_single_query(
                 process.kill()
                 process.wait()
 
-        return triggered
+        raise RuntimeError("evaluation ended or timed out without an observed decision")
     finally:
         if command_file.exists():
             command_file.unlink()
@@ -193,6 +196,10 @@ def run_eval(
     model: str | None = None,
 ) -> dict:
     """Run the full eval set and return results."""
+    if not eval_set or len({q["query"] for q in eval_set}) != len(eval_set):
+        raise ValueError("evaluation queries must be nonempty and unique")
+    if min(num_workers, timeout, runs_per_query) <= 0 or not 0 <= trigger_threshold <= 1:
+        raise ValueError("invalid evaluation budget or threshold")
     results = []
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
@@ -210,7 +217,7 @@ def run_eval(
                 )
                 future_to_info[future] = (item, run_idx)
 
-        query_triggers: dict[str, list[bool]] = {}
+        query_triggers: dict[str, list[bool | None]] = {}
         query_items: dict[str, dict] = {}
         for future in as_completed(future_to_info):
             item, _ = future_to_info[future]
@@ -222,13 +229,17 @@ def run_eval(
                 query_triggers[query].append(future.result())
             except Exception as e:
                 print(f"Warning: query failed: {e}", file=sys.stderr)
-                query_triggers[query].append(False)
+                query_triggers[query].append(None)
 
     for query, triggers in query_triggers.items():
         item = query_items[query]
-        trigger_rate = sum(triggers) / len(triggers)
+        observed = [value for value in triggers if type(value) is bool]
+        complete = len(observed) == len(triggers)
+        trigger_rate = sum(observed) / len(observed) if observed else None
         should_trigger = item["should_trigger"]
-        if should_trigger:
+        if not complete:
+            did_pass = None
+        elif should_trigger:
             did_pass = trigger_rate >= trigger_threshold
         else:
             did_pass = trigger_rate < trigger_threshold
@@ -236,8 +247,9 @@ def run_eval(
             "query": query,
             "should_trigger": should_trigger,
             "trigger_rate": trigger_rate,
-            "triggers": sum(triggers),
-            "runs": len(triggers),
+            "triggers": sum(observed),
+            "runs": len(observed),
+            "unavailable_runs": len(triggers) - len(observed),
             "pass": did_pass,
         })
 
@@ -251,7 +263,8 @@ def run_eval(
         "summary": {
             "total": total,
             "passed": passed,
-            "failed": total - passed,
+            "failed": sum(r["pass"] is False for r in results),
+            "unavailable": sum(r["pass"] is None for r in results),
         },
     }
 
@@ -299,7 +312,7 @@ def main():
         summary = output["summary"]
         print(f"Results: {summary['passed']}/{summary['total']} passed", file=sys.stderr)
         for r in output["results"]:
-            status = "PASS" if r["pass"] else "FAIL"
+            status = "UNAVAILABLE" if r["pass"] is None else "PASS" if r["pass"] else "FAIL"
             rate_str = f"{r['triggers']}/{r['runs']}"
             print(f"  [{status}] rate={rate_str} expected={r['should_trigger']}: {r['query'][:70]}", file=sys.stderr)
 

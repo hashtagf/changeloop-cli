@@ -1,19 +1,24 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { checkNpmWorkspace } from "./npm-lockfile-check.mjs";
+import { aliasedTestProvider } from "./provider-catalog.mjs";
 
 const PROVIDER_SCRIPT_ALIASES = {
   "static-analysis": ["check", "typecheck", "type-check", "lint"],
   integration: ["test:integration", "integration"],
   compatibility: ["test:compatibility", "compatibility"],
   performance: ["test:performance", "performance", "bench"],
+  concurrency: ["test:concurrency", "concurrency"],
   "security-static": ["security", "security:static", "scan:security"],
   accessibility: ["test:accessibility", "accessibility", "a11y"],
   "data-migration": ["test:migration", "migration:check"],
   resilience: ["test:resilience", "resilience"],
   observability: ["test:observability", "observability"],
   deployment: ["test:deployment", "deployment:check"],
-  "dependency-supply-chain": ["supply-chain", "dependencies:audit", "audit:dependencies"]
+  "dependency-supply-chain": ["supply-chain", "dependencies:audit", "audit:dependencies"],
+  evaluation: ["test:eval", "eval", "evaluate"],
+  parity: ["test:parity", "parity"],
+  "plan-check": ["plan:check", "plan"]
 };
 
 export function readJsonCandidate(path, warnings, source) {
@@ -110,7 +115,15 @@ export function testCandidates(tooling, repository, repositoryCount, declaredSur
   const { dependencies, scripts, manager } = tooling;
   const script = scripts.test ? "test" :
     Object.keys(scripts).find((name) => ["test:unit", "unit"].includes(name));
-  if (!script) return [];
+  // A package with no runnable test script cannot be proven; say so instead of
+  // returning nothing, so detection, doctor, and the Prove packet name the fix.
+  if (!script) return [{
+    provider: providerInstanceName("test", repository, repositoryCount),
+    capability: "test", repository: repository.id, confidence: "none",
+    recommended: false, source: "package.json#scripts.test",
+    detail: "no scripts.test; add one so Prove can run tests",
+    config: null
+  }];
   const raw = String(scripts[script]);
   const source = `package.json#scripts.${script}`;
   const riskyScripts = packageScriptRisk(tooling, script);
@@ -212,7 +225,10 @@ export function capabilityRepositories(capability, repositories, contract) {
 export function configuredEvidenceProviders({
   contract, repositories, providerCapability, commandExists, root
 }) {
-  return Object.entries(contract.providers || {}).map(([provider, config]) => {
+  // A provider that only repeats a test provider's command is not wiring for
+  // its capability; detection treats it as missing (see aliasedTestProvider).
+  return Object.entries(contract.providers || {}).filter(([provider, config]) =>
+    !aliasedTestProvider(contract.providers, provider, config)).map(([provider, config]) => {
     const repositoryId = config.repository || "root";
     const repository = repositories.find((row) => row.id === repositoryId);
     const executable = config.adapter === "external" ? null : config.command?.[0] || null;
@@ -299,7 +315,7 @@ export function discoverMissingEvidence({
     if (!found && capability !== "discovery") unresolved.push({
       provider: requiredProvider, capability,
       repository: targets.length === 1 ? targets[0].id : null,
-      reason: "no-safe-project-command",
+      reason: "no-safe-project-command", owner: "agent",
       next: `configure a project-owned ${capability} command in execution.yaml`
     });
   }
@@ -340,10 +356,22 @@ export function detectEvidenceWiring({
   const configured = configuredEvidenceProviders({
     contract, repositories, providerCapability, commandExists, root
   });
-  const missing = required.filter((provider) => !providerConfig(provider));
-  const { candidates, unresolved } = discoverMissingEvidence({
+  const missing = required.filter((provider) => {
+    const config = providerConfig(provider);
+    return !config || Boolean(config.aliasOf);
+  });
+  const discovered = discoverMissingEvidence({
     missing, providerConfig, providerCapability, knownProviders, repositories, contract,
     tooling, declaredSurface, root
+  });
+  const { candidates } = discovered;
+  const unresolved = discovered.unresolved.map((row) => {
+    const aliasOf = providerConfig(row.provider)?.aliasOf;
+    return aliasOf ? {
+      ...row, aliasOf,
+      detail: `its provider only repeats test provider '${aliasOf}'; ` +
+        `wire a project-owned ${row.capability} command to observe it`
+    } : row;
   });
   const unavailable = unavailableEvidenceProviders(configured);
   return {

@@ -148,7 +148,7 @@ def generate_html(data: dict, auto_refresh: bool = False, skill_name: str = "") 
 <body>
     <h1>""" + title_prefix + """Skill Description Optimization</h1>
     <div class="explainer">
-        <strong>Optimizing your skill's description.</strong> This page updates automatically as Claude tests different versions of your skill's description. Each row is an iteration — a new description attempt. The columns show test queries: green checkmarks mean the skill triggered correctly (or correctly didn't trigger), red crosses mean it got it wrong. The "Train" score shows performance on queries used to improve the description; the "Test" score shows performance on held-out queries the optimizer hasn't seen. When it's done, Claude will apply the best-performing description to your skill.
+        <strong>Optimizing your skill's description.</strong> Each row is a candidate description. Training queries guide improvement and select the candidate. Held-out queries run once after selection and provide independent confirmation; they never select a candidate or guide another iteration. This report proposes a description. Applying it follows the active project's change workflow.
     </div>
 """]
 
@@ -159,7 +159,8 @@ def generate_html(data: dict, auto_refresh: bool = False, skill_name: str = "") 
     <div class="summary">
         <p><strong>Original:</strong> {html.escape(data.get('original_description', 'N/A'))}</p>
         <p class="best"><strong>Best:</strong> {html.escape(data.get('best_description', 'N/A'))}</p>
-        <p><strong>Best Score:</strong> {data.get('best_score', 'N/A')} {'(test)' if best_test_score else '(train)'}</p>
+        <p><strong>Selection Score (train):</strong> {data.get('best_train_score', data.get('best_score', 'N/A'))}</p>
+        <p><strong>Held-out confirmation:</strong> {best_test_score or 'not-run'}</p>
         <p><strong>Iterations:</strong> {data.get('iterations_run', 0)} | <strong>Train:</strong> {data.get('train_size', '?')} | <strong>Test:</strong> {data.get('test_size', '?')}</p>
     </div>
 """)

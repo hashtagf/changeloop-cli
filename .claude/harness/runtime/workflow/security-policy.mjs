@@ -15,7 +15,18 @@ export const SECURITY_TERMS = [
   "multi-tenant", "trust boundary", "irreversible", "sensitive data", "pii",
   "personal data", "command execution", "injection", "sql injection", "xss",
   "csrf", "ssrf", "sandbox escape", "privilege", "data migration",
-  "schema migration", "payment", "billing", "refund", "webhook signature"
+  "schema migration", "payment", "billing", "refund", "webhook signature",
+  // Thai intents name the same boundaries. Bare โทเคน/โทเค็น is absent for the
+  // same reason as bare "token": it also describes model token budgets.
+  "ล็อกอิน", "ล็อคอิน", "เข้าสู่ระบบ", "ลงชื่อเข้าใช้", "ยืนยันตัวตน",
+  "ออเทนทิเคชัน", "ออเธนติเคชัน", "ออโธไรเซชัน", "รหัสผ่าน", "พาสเวิร์ด",
+  "พาสคีย์", "สิทธิ์", "สิทธิการเข้าถึง", "ควบคุมการเข้าถึง", "ยกระดับสิทธิ",
+  "โทเคนเข้าถึง", "โทเค็นเข้าถึง", "โทเคนยืนยันตัวตน", "โทเค็นยืนยันตัวตน",
+  "โทเคนเข้าสู่ระบบ", "โทเค็นเข้าสู่ระบบ", "ความลับ", "รหัสลับ", "คีย์ลับ",
+  "ข้อมูลรับรอง", "เซสชันผู้ใช้", "คุกกี้", "เข้ารหัส", "ถอดรหัส",
+  "ความปลอดภัย", "ข้อมูลส่วนตัว", "ข้อมูลส่วนบุคคล", "ข้อมูลอ่อนไหว",
+  "ชำระเงิน", "จ่ายเงิน", "คืนเงิน", "เรียกเก็บเงิน", "เพย์เมนต์", "บิลลิ่ง",
+  "ย้ายข้อมูล", "ไมเกรชัน", "ไมเกรต", "มิเกรต", "ลบข้อมูล", "ย้อนกลับไม่ได้"
 ];
 
 // These labels describe ordinary input/business correctness by themselves.
@@ -27,13 +38,21 @@ const BUSINESS_VALIDATION_TRIGGERS = new Set([
   "type-confusion-validation-bypass", "untrusted-input"
 ]);
 
-function containsTerm(value, terms) {
+const THAI = /\p{Script=Thai}/u;
+
+// Latin terms match whole words or phrases. Thai is written without spaces
+// between words, so a Thai term matches as a substring.
+export function matchesSecurityTerm(value, term) {
   const semantic = String(value || "").toLowerCase();
-  return terms.some((term) => {
-    const escaped = String(term).toLowerCase()
-      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[\\s-]+");
-    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`).test(semantic);
-  });
+  const normalized = String(term).toLowerCase();
+  if (THAI.test(normalized)) return semantic.includes(normalized);
+  const escaped = normalized
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[\\s-]+");
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`).test(semantic);
+}
+
+function containsTerm(value, terms) {
+  return terms.some((term) => matchesSecurityTerm(value, term));
 }
 
 export function materialSecurityTriggers(triggers, intent = "", terms = SECURITY_TERMS) {

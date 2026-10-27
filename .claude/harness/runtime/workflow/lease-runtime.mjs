@@ -3,8 +3,9 @@ import {
   renameSync, rmSync, writeFileSync
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { conflictKeysOverlap } from "../core/graph-execution.mjs";
+import { conflictKeysOverlap, scopeAllowsPath } from "../core/graph-execution.mjs";
 import { acquireProcessLock } from "../core/process-lock.mjs";
+import { taskAuthorityShape } from "../core/task-execution-authority.mjs";
 
 export function leaseDescriptorIsOwned(descriptor, id, taskId, owner) {
   return descriptor.changeId === id && descriptor.taskId === taskId &&
@@ -47,11 +48,34 @@ export function taskNodeOutputSchema(plan, taskId) {
   return undefined;
 }
 
+// A resource another lease holds is queued work, not a defect: the error names
+// its holder and carries a harness-owned wait boundary, so `advance` waits and
+// resumes instead of handing anyone a repair.
+export const LEASE_RESOURCE_HELD = "LEASE_RESOURCE_HELD";
+
+export function leaseWaitError(message, { changeId = null, taskId = null, key = null, held = null } = {}) {
+  const holder = [changeId, taskId].filter(Boolean).join("/") || "the holding lease";
+  const wait = {
+    owner: "harness", kind: "lease-resource",
+    holder: { changeId, taskId }, key, held,
+    condition: `${holder} releases ${held || key || "the shared resource"} (its task finishes, ` +
+      "its change lands or is abandoned, or its lease expires)."
+  };
+  return Object.assign(new Error(message), {
+    code: LEASE_RESOURCE_HELD, owner: "harness", boundary: "resource", wait, details: { wait }
+  });
+}
+
 export function leaseAcquisitionRequest(context, id, taskId, flags) {
   const owner = flags.owner;
   if (!taskId || !owner || !/^[a-zA-Z0-9._-]+$/.test(owner))
     context.fail("agents acquire requires <change> <task> --owner <agent-id>");
   const plan = context.agentPlanValue(id);
+  const queued = !plan.dispatchable && !(plan.blockingReasons || []).length
+    ? (plan.resourceWaits || [])[0] : null;
+  if (queued)
+    throw leaseWaitError(`change '${id}' is queued: ${queued.reason}`,
+      { changeId: queued.changeId, key: queued.key, held: queued.key });
   if (!plan.dispatchable)
     context.fail(`change '${id}' conflicts with active repository work`);
   const normalizedTaskId = taskId.toUpperCase();
@@ -84,19 +108,30 @@ export function acquireLeaseUnderLock(context) {
   const occupied = (context.workspaceLeases?.() || []).find((lease) =>
     lease.taskId !== task.id && (lease.repository || "root") === (task.repository || "root"));
   if (occupied)
-    throw new Error(`workspace '${task.repository || "root"}' conflicts with active task '${occupied.taskId}'`);
+    throw leaseWaitError(`workspace '${task.repository || "root"}' conflicts with active task '${occupied.taskId}'`,
+      { changeId: occupied.changeId || id, taskId: occupied.taskId,
+        key: `workspace:${task.repository || "root"}`, held: `workspace:${task.repository || "root"}` });
   const descriptors = context.resourceDescriptors();
   const renewal = leaseRenewalRows(descriptors, id, task.id, owner);
   const conflicts = leaseResourceConflicts(keys, descriptors, id, task.id, owner);
   if (conflicts.length) {
     const conflict = conflicts[0];
-    throw new Error(`scope '${conflict.key}' conflicts with '${conflict.held}' held by ${
-      conflict.descriptor.changeId || "unknown"}/${conflict.descriptor.taskId || "unknown"}`);
+    throw leaseWaitError(`scope '${conflict.key}' conflicts with '${conflict.held}' held by ${
+      conflict.descriptor.changeId || "unknown"}/${conflict.descriptor.taskId || "unknown"}`, {
+      changeId: conflict.descriptor.changeId || null, taskId: conflict.descriptor.taskId || null,
+      key: conflict.key, held: conflict.held
+    });
   }
   const sameRenewal = sameLeaseRenewalAuthority(
     renewal, keys, prior, owner, plan);
-  if (renewal.length && !sameRenewal)
+  // The owner's own unreleased lease is the same worker's attempt: a changed
+  // graph, contract, or widened `[paths:]` re-grants it under a new generation
+  // instead of stranding the task behind a refusal only a takeover could clear.
+  const ownPrior = prior.owner === owner && prior.status !== "taken-over" &&
+    (prior.repository || "root") === (task.repository || "root");
+  if (renewal.length && !sameRenewal && !ownPrior)
     throw new Error(`stale lease authority for '${id}/${task.id}'; release or take over the prior lease before reacquiring`);
+  if (!sameRenewal) for (const row of renewal) rmSync(row.path, { force: true });
   if (sameRenewal) {
     for (const row of renewal) context.writeJson(row.path, {
       ...row.descriptor, expiresAt, renewedAt: context.now()
@@ -144,7 +179,11 @@ export function acquireLeaseUnderLock(context) {
     workspaceHash: plan.workspaceHash, repository: task.repository,
     paths: task.paths || [], claimIds: task.claims || [],
     outputSchema: taskNodeOutputSchema(plan, task.id),
-    resources: keys, baselineSurface: context.observedTaskSurface(id, task),
+    taskAuthority: taskAuthorityShape(plan.graph, task.id),
+    // Writes since the owner's unreleased lease was first granted still
+    // belong to this task, so a re-grant keeps judging them against its scope.
+    resources: keys, baselineSurface: ownPrior && Array.isArray(prior.baselineSurface)
+      ? prior.baselineSurface : context.observedTaskSurface(id, task),
     acquiredAt, expiresAt
   };
   context.writeJson(taskLeasePath, lease);
@@ -212,26 +251,30 @@ export function leaseReleaseIdentity(context, id, taskId, flags) {
     return { absent: true };
   }
   const taskLease = context.readJson(index);
-  const force = Boolean(flags.force);
+  // A foreign lease past its TTL has no live worker left to protect, so taking
+  // it over is recovery the harness owns, not a flag or decision to supply.
+  const expiredForeign = taskLease.owner !== owner && taskLease.status !== "taken-over" &&
+    Date.parse(taskLease.expiresAt || "") <= context.nowMs();
+  const force = Boolean(flags.force) || expiredForeign;
   validateLeaseReleaseClaim({ ...context, owner }, id, taskLease, force, flags);
   return { absent: false, owner, index, taskLease, force };
 }
 
+export function leaseAuthorityIsStale(plan, taskLease) {
+  return plan.graphRevision !== taskLease.graphRevision ||
+    plan.graphIdentity !== taskLease.graphIdentity ||
+    Number(plan.contractRevision) !== Number(taskLease.contractRevision);
+}
+
 export function leasePathIsAllowed(path, allowed) {
-  for (const scope of allowed) {
-    const prefix = String(scope).replace(/\/\*\*?$/, "").replace(/\/$/, "");
-    if (scope === "*" || path === prefix || path.startsWith(`${prefix}/`)) return true;
-  }
-  return false;
+  return allowed.some((scope) => scopeAllowsPath(scope, path));
 }
 
 export function observedLeaseWrites(context, id, taskLease, force) {
   if (force) return [];
-  const currentPlan = context.agentPlanValue(id);
-  if (currentPlan.graphRevision !== taskLease.graphRevision ||
-      currentPlan.graphIdentity !== taskLease.graphIdentity ||
-      Number(currentPlan.contractRevision) !== Number(taskLease.contractRevision))
-    context.fail(`stale result authority for '${id}/${taskLease.taskId}': graph or contract changed after lease acquisition`);
+  if (leaseAuthorityIsStale(context.agentPlanValue(id), taskLease))
+    context.fail(`stale result authority for '${id}/${taskLease.taskId}': graph or contract changed after lease acquisition; ` +
+      `re-acquire with 'claude-foundation agents acquire ${id} ${taskLease.taskId} --owner ${taskLease.owner}', then release again`);
   const baseline = new Map();
   for (const row of taskLease.baselineSurface || []) baseline.set(row.path, row.identity);
   const current = new Map();
@@ -243,11 +286,23 @@ export function observedLeaseWrites(context, id, taskLease, force) {
   observedWrites.sort();
   const allowed = taskLease.paths || [];
   if (allowed.length) {
-    const outside = [];
-    for (const path of observedWrites)
-      if (!leasePathIsAllowed(path, allowed)) outside.push(path);
-    if (outside.length)
-      context.fail(`task '${taskLease.taskId}' changed outside granted scope: ${outside.join(", ")}; result and proof were not accepted`);
+    // `[paths:]` is bookkeeping, so a write outside it is accepted and Prove
+    // records it into the change surface. What still refuses is a write inside
+    // another live task's scope: that is the concurrent-task conflict leases
+    // exist to prevent.
+    const others = (context.workspaceLeases?.() || []).filter((lease) =>
+      lease.taskId !== taskLease.taskId && (lease.paths || []).length);
+    const contested = [];
+    for (const path of observedWrites) {
+      if (leasePathIsAllowed(path, allowed)) continue;
+      const owners = others.filter((lease) => leasePathIsAllowed(path, lease.paths))
+        .map((lease) => lease.taskId);
+      if (owners.length) contested.push(`${path} (owned by ${[...new Set(owners)].join(", ")})`);
+    }
+    if (contested.length)
+      context.fail(`task '${taskLease.taskId}' changed outside granted scope: ${contested.join(", ")}; result and proof were not accepted. ` +
+        `These paths belong to the named active task; revert them, then release again ` +
+        "(the lease is still held, so no re-acquire is needed)");
   }
   return observedWrites;
 }
@@ -305,7 +360,11 @@ export function createLeaseRuntime({
   writeJson,
   now,
   observedTaskSurface = () => [],
-  fail
+  fail,
+  // Parallel workers release at nearly the same moment and the critical
+  // section is a few file writes, so contention waits briefly instead of
+  // handing each worker a "retry the same command" step.
+  lockWaitMs = 10_000
 }) {
   function leasePath(resource) {
     return join(leases, "resources", `${stableHash(resource)}.json`);
@@ -324,8 +383,15 @@ export function createLeaseRuntime({
 
   function withAcquisitionLock(action) {
     const path = join(leases, "acquire.lock");
-    const lock = acquireProcessLock(path, { now });
-    if (!lock.acquired) fail("lease acquisition is busy; retry the same command");
+    const deadline = Date.now() + lockWaitMs;
+    let lock = acquireProcessLock(path, { now });
+    while (!lock.acquired && Date.now() < deadline) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+      lock = acquireProcessLock(path, { now });
+    }
+    if (!lock.acquired)
+      fail(`lease acquisition stayed busy for ${Math.round(lockWaitMs / 1000)}s; ` +
+        `another harness process holds ${path}`);
     try { return action(); }
     finally { lock.release(); }
   }
@@ -347,7 +413,7 @@ export function createLeaseRuntime({
     return rows;
   }
 
-  function acquire(id, taskId, flags) {
+  function acquire(id, taskId, flags, { quiet = false } = {}) {
     const request = leaseAcquisitionRequest({
       agentPlanValue, policy, leases, exists: existsSync, readJson,
       nowMs: Date.now, fail
@@ -358,17 +424,35 @@ export function createLeaseRuntime({
       leasePath, observedTaskSurface, workspaceLeases: () => active(id)
     });
     const result = withAcquisitionLock(operation);
+    if (quiet) return { ...result, taskId: request.task.id, owner: request.owner };
     console.log(`LEASE ACQUIRED ${id}/${request.task.id}\n  owner: ${request.owner}\n  lease: ${result.leaseId}\n  generation: ${result.fencingGeneration}\n  attempt: ${result.executionAttempt}\n  expires: ${request.expiresAt}`);
   }
 
-  function release(id, taskId, flags) {
-    const identity = leaseReleaseIdentity({
-      leases, exists: existsSync, readJson, nowMs: Date.now, fail, log: console.log
-    }, id, taskId, flags);
-    if (identity.absent) return;
+  function release(id, taskId, flags, { quiet = false } = {}) {
+    const identityContext = {
+      leases, exists: existsSync, readJson, nowMs: Date.now, fail,
+      log: quiet ? () => {} : console.log
+    };
+    let identity = leaseReleaseIdentity(identityContext, id, taskId, flags);
+    if (identity.absent) return { absent: true, observedWrites: [] };
+    // A graph or contract that moved after acquisition (a widened `[paths:]`
+    // elsewhere, an amendment) does not change what this owner already did.
+    // Renewing for the same owner keeps the original baseline, so the writes
+    // are still judged from the start of the task; the harness renews here
+    // instead of handing the worker an acquire-then-release recovery.
+    if (!identity.force && leaseAuthorityIsStale(agentPlanValue(id), identity.taskLease)) {
+      const staleLease = identity.taskLease;
+      if (!agentPlanValue(id).tasks?.some((task) => task.id === staleLease.taskId))
+        fail(`task '${id}/${staleLease.taskId}' is no longer in the change's plan after an ` +
+          "amendment; its result cannot be accepted. Revert its writes, or take the lease " +
+          "over with --force --decision-ref <host-user-decision>");
+      const renewed = acquire(id, staleLease.taskId, { owner: staleLease.owner }, { quiet: true });
+      identity = leaseReleaseIdentity(identityContext, id, taskId,
+        { ...flags, "lease-id": renewed.leaseId });
+    }
     const { owner, index, taskLease, force } = identity;
     const observedWrites = observedLeaseWrites({
-      agentPlanValue, observedTaskSurface, fail
+      agentPlanValue, observedTaskSurface, fail, workspaceLeases: () => active(id)
     }, id, taskLease, force);
     const operation = releaseLeaseUnderLock.bind(null, {
       id, owner, index, taskLease, force, observedWrites,
@@ -376,18 +460,39 @@ export function createLeaseRuntime({
       remove: rmSync, writeJson, now
     });
     withAcquisitionLock(operation);
+    if (quiet) return { absent: false, observedWrites };
     console.log(`LEASE RELEASED ${id}/${taskLease.taskId}${
       taskLease.owner === owner ? "" : `\n  taken over from: ${taskLease.owner}`}${
       observedWrites.length ? `\n  observed writes: ${observedWrites.join(", ")}` : ""}`);
   }
 
-  function active(id) {
+  // Drops a lease no worker ever received (the one `advance` holds for its
+  // session task) without recording a result or a takeover, so an explicit
+  // acquire starts the task's first real attempt.
+  function discard(id, taskId, owner) {
+    const index = join(leases, "tasks", id, `${String(taskId).toUpperCase()}.json`);
+    if (!existsSync(index)) return;
+    withAcquisitionLock(() => {
+      const taskLease = readJson(index, {});
+      if (taskLease.owner !== owner) return;
+      for (const resource of taskLease.resources || []) {
+        const path = leasePath(resource);
+        if (existsSync(path) && readJson(path, {}).leaseId === taskLease.leaseId) rmSync(path);
+      }
+      rmSync(index, { force: true });
+    });
+  }
+
+  // `includeExpired` lists unreleased task leases past their TTL too, so the
+  // harness can still settle a lease it holds for a long-running session task.
+  function active(id, { includeExpired = false } = {}) {
     const root = join(leases, "tasks", id);
     if (!existsSync(root)) return [];
     return readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
       .map((entry) => readJson(join(root, entry.name), {}))
-      .filter((lease) => Date.parse(lease.expiresAt || "") > Date.now());
+      .filter((lease) => lease.status !== "taken-over" &&
+        (includeExpired || Date.parse(lease.expiresAt || "") > Date.now()));
   }
 
   const cleanup = cleanupLeaseOperation.bind(null, {
@@ -396,5 +501,5 @@ export function createLeaseRuntime({
     readJson, remove: rmSync
   });
 
-  return { leasePath, acquire, release, active, cleanup };
+  return { leasePath, acquire, release, discard, active, cleanup };
 }

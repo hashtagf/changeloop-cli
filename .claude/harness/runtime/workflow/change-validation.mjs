@@ -4,6 +4,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { auditTraceability } from "../evidence/traceability.mjs";
 import { detectEvidenceWiring } from "../evidence/evidence-bootstrap.mjs";
+import {
+  isPostReleaseCapability, reviewCoveredProviders, splitPostReleaseProviders
+} from "../evidence/provider-catalog.mjs";
 import { nextAfterValidate } from "../core/next-step.mjs";
 import { gateRepairPlan } from "../core/convergent-gate.mjs";
 import { compiledExecutionSurfaceValue } from "../core/authority-policy.mjs";
@@ -11,6 +14,9 @@ import {
   taskBlocks, taskMetadata
 } from "../contracts/change-artifacts.mjs";
 import { createSpecDeltaValidator } from "./validation/spec-delta.mjs";
+import {
+  probeOpenSpecVersion, recordStrictLintPass, strictLintMemoKey, strictLintPassed
+} from "../core/tool-identity.mjs";
 
 const GROUNDING_READ_ROLES = [
   "requirement", "backlog", "architecture", "contract", "composition-root",
@@ -20,20 +26,38 @@ const CRITICAL_CASE_ORACLES = [
   "production-entry", "real-wire", "contract-oracle", "failure-path"
 ];
 
+// A legacy rapid change declares skip_specs and has no deltas to lint; a
+// compiled rapid change drops the marker, carries concise deltas, and is
+// linted like any other.
+export function openSpecStrictLintApplies(state, dir, read = readFileSync) {
+  if (state?.schema !== "foundation-rapid") return true;
+  let marker = "";
+  try { marker = String(read(join(dir, ".openspec.yaml"), "utf8")); } catch { return false; }
+  return !/^\s*skip_specs:\s*true\s*$/m.test(marker);
+}
+
 // Module scope, taking `fail` explicitly: the check has no runtime state and
 // the deterministic tests exercise it against a stubbed CLI.
 export function assertOpenSpecStrictValid(id, dir, fail, options = {}) {
   // dir is <projectRoot>/openspec/changes/<id> for both the root and the
   // sandbox copy, so the CLI runs against whichever tree is being validated.
   const projectRoot = resolve(dir, "..", "..", "..");
-  const probe = spawnSync("openspec", ["--version"], {
-    cwd: projectRoot, encoding: "utf8", timeout: 15_000
-  });
+  const probe = probeOpenSpecVersion({ cwd: projectRoot, timeout: 15_000 });
   if (probe.error || probe.status !== 0) {
+    // Before Build the harness has not prepared its tools yet, so the lint
+    // waits for preparation. Once Prove needs the agreement, a skipped lint
+    // would let an invalid delta reach archive after the code landed.
+    if (options.requireCli)
+      fail(`OpenSpec CLI is required for strict spec validation of '${id}' before Prove; ` +
+        "the harness prepares it with the next 'advance' (npm access needed when it is not installed)");
     if (!options.quiet)
       console.error("WARNING: OpenSpec CLI unavailable; strict spec lint deferred to tool preparation");
     return;
   }
+  // A pass is reused only for byte-identical lint inputs under the same CLI;
+  // failures are never memoized, so a repaired packet always re-lints.
+  const memoKey = strictLintMemoKey(projectRoot, id, probe.identity);
+  if (strictLintPassed(memoKey, projectRoot)) return;
   const lint = spawnSync("openspec",
     ["validate", id, "--type", "change", "--strict", "--json", "--no-interactive"],
     { cwd: projectRoot, encoding: "utf8", timeout: 60_000 });
@@ -51,6 +75,8 @@ export function assertOpenSpecStrictValid(id, dir, fail, options = {}) {
       "each starts with ## ADDED Requirements, ## MODIFIED Requirements, or " +
       "## REMOVED Requirements.");
   }
+  if (memoKey && strictLintMemoKey(projectRoot, id, probe.identity) === memoKey)
+    recordStrictLintPass(memoKey, projectRoot);
 }
 
 function normalizedScope(path) {
@@ -298,13 +324,17 @@ export function validationChangeDirectory(id, source, state,
 export function validateImplementationTasks(tasks, fail) {
   const taskIds = tasks.map((task) => task.id).filter(Boolean);
   if (tasks.length && taskIds.length !== tasks.length)
-    fail("every implementation task requires a stable ID such as T001");
+    fail("every implementation task requires a stable ID such as T001; tasks without one: " +
+      tasks.filter((task) => !task.id).map((task) => `'${String(task.text || "").slice(0, 60)}'`).join(", ") +
+      ". Set tasks[].id in the semantic draft or amendment; the compiler writes tasks.md");
   if (new Set(taskIds).size !== taskIds.length)
-    fail("tasks.md contains duplicate task IDs");
+    fail(`tasks.md contains duplicate task IDs: ${[...new Set(taskIds.filter((id, index) =>
+      taskIds.indexOf(id) !== index))].join(", ")}; give each task a unique tasks[].id in the semantic draft or amendment`);
   const lifecycleTasks = tasks.filter((task) =>
     !task.done && /(?:^|[\s(`"'])\/(?:prove|land)\b/.test(task.text));
   if (lifecycleTasks.length)
-    fail("tasks.md contains a lifecycle gate; /prove and /land are commands, not implementation tasks");
+    fail(`tasks.md contains a lifecycle gate (${lifecycleTasks.map((task) => task.id || task.text).join(", ")}); ` +
+      "/prove and /land are commands, not implementation tasks; remove those tasks from the draft or amendment");
   return taskIds;
 }
 
@@ -350,8 +380,8 @@ export function normalizeValidationAcceptance(id, state, claims, acceptance,
 export function validationDocumentBudgets(state) {
   return ["xs", "s"].includes(String(state.size || "").toLowerCase()) ||
     state.impact === "low"
-    ? { "proposal.md": 900, "design.md": 1400, "tasks.md": 900 }
-    : { "proposal.md": 1600, "design.md": 2600, "tasks.md": 1600 };
+    ? { "proposal.md": 1200, "design.md": 2000, "tasks.md": 1200 }
+    : { "proposal.md": 2400, "design.md": 3600, "tasks.md": 2400 };
 }
 
 export function lockValidatedGrounding(state, grounding, fingerprint, timestamp) {
@@ -376,7 +406,8 @@ export function warnValidationDocumentBudgets(dir, state,
     if (!exists(path)) continue;
     const words = read(path, "utf8").trim().split(/\s+/).filter(Boolean).length;
     if (words > limit)
-      warn(`WARNING: ${name} is ${words} words (soft budget ${limit}); retain only load-bearing content`);
+      warn(`WARNING: ${name} is ${words} words (soft budget ${limit}); ` +
+        "move duplicated or machine-only content into an appendix instead of trimming content the reader needs");
   }
 }
 
@@ -397,7 +428,8 @@ export function reportDeclaredSurfaceForecast(id, state, quiet, covered,
 export function reportValidationReviewAssurance(quiet, resolvable, policy,
   assurance, note = console.error) {
   if (quiet || !resolvable) return null;
-  if (assurance)
+  // A change no review runs on has no reviewer posture worth announcing.
+  if (assurance && policy.required)
     note(`NOTE: review assurance posture: ${assurance.summary}`);
   if (policy.required && !policy.independenceWaived) {
     note("NOTE: this change requires review evidence; an independent reviewer must exist by Prove");
@@ -431,10 +463,18 @@ export function assertWaivableCapability(context, id, request, waivers) {
   if (waivers.some((row) => row.capability === request.capability))
     context.fail(`capability '${request.capability}' is already waived`);
   const required = context.requiredProviders(id);
+  const capabilityOf = (provider) => required.includes(provider) &&
+    context.providerCapability(provider, context.providerConfig(id, provider)) || provider;
   if (!required.includes(request.capability) && !required.some((provider) =>
-    context.providerCapability(provider,
-      context.providerConfig(id, provider)) === request.capability))
+    capabilityOf(provider) === request.capability))
     context.fail(`capability '${request.capability}' is not required by change '${id}'; nothing to waive`);
+  // Waiving test also withdraws the discovery check that counts its tests.
+  const withdrawn = new Set([request.capability,
+    ...(request.capability === "test" ? ["discovery"] : [])]);
+  if (required.every((provider) => withdrawn.has(capabilityOf(provider))))
+    context.fail(`waiving '${request.capability}' would leave change '${id}' with no required ` +
+      "evidence: its proof would have no receipt manifest and Land refuses that proof. " +
+      `Repair the failing provider, or amend the agreement: claude-foundation change amend ${id} <amendment.json>`);
 }
 
 export function waiveGateOperation(context, id, flags = {}) {
@@ -545,17 +585,24 @@ export function semanticInvariantIssues(invariants, contract, decisionIds,
   return issues;
 }
 
+// Supersession links and human context are optional: an absent link means
+// none, so a compiled design shows only the fields a reader needs.
+const DURABLE_DECISION_REQUIRED = ["Status", "Decision", "Why", "Rejected", "Consequences"];
 const DURABLE_DECISION_FIELDS = [
-  "Status", "Decision", "Why", "Rejected", "Consequences",
-  "Supersedes", "Superseded by"
+  ...DURABLE_DECISION_REQUIRED, "Supersedes", "Superseded by",
+  "Context", "Decided by", "Decision ref"
 ];
 
 export function durableDecisionSection(content) {
-  const rawSection = String(content || "").match(
-    /^## Decisions\s*$([\s\S]*?)(?=^## Compatibility and migration\s*$)/m
+  const text = String(content || "");
+  // A compiled design omits the section when the change records no durable
+  // decision; a hand-authored one may still end it with the next heading.
+  if (!/^## Decisions\s*$/m.test(text)) return { issues: [] };
+  const rawSection = text.match(
+    /^## Decisions\s*$([\s\S]*?)(?=^## |(?![\s\S]))/m
   )?.[1]?.trim();
   if (!rawSection)
-    return { issues: ["design.md requires a Decisions section"] };
+    return { issues: ["design.md Decisions section is empty; list decisions or `none`"] };
   const section = rawSection.replace(/<!--[\s\S]*?-->/g, "").trim();
   if (/^`?none`?[.!]?$/i.test(section)) return { issues: [] };
   if (/^- \*\*Decision:\*\*/m.test(section))
@@ -588,7 +635,7 @@ export function durableDecisionBlockIssues(block, id, ids, values) {
   );
   if (block.split("\n").some((line) => line.trim() && !allowedLine.test(line)))
     issues.push(`${label} contains content outside its metadata fields`);
-  for (const field of DURABLE_DECISION_FIELDS)
+  for (const field of DURABLE_DECISION_REQUIRED)
     if (!values[field]) issues.push(`${label} requires ${field}`);
   if (values.Status && !["accepted", "superseded"].includes(values.Status.toLowerCase()))
     issues.push(`${label} Status must be accepted|superseded`);
@@ -663,8 +710,8 @@ export function durableDecisionGraphIssues(decisions) {
   const issues = [];
   const byId = new Map(decisions.map((decision) => [decision.id, decision]));
   for (const decision of decisions) {
-    const supersedes = decision.values.Supersedes || "";
-    const supersededBy = decision.values["Superseded by"] || "";
+    const supersedes = decision.values.Supersedes || "none";
+    const supersededBy = decision.values["Superseded by"] || "none";
     issues.push(...durableDecisionReferenceIssues(
       decision, "Supersedes", supersedes, byId));
     issues.push(...durableDecisionReferenceIssues(
@@ -724,19 +771,68 @@ export function requiredProvidersOperation(context, id) {
           capabilityContext, "discovery", claim.repositories || []);
     }
   }
-  if (context.reviewPolicy(id, state, contract).required)
-    addRequiredCapability(capabilityContext, "review");
+  const reviewRequired = context.reviewPolicy(id, state, contract).required &&
+    !capabilityContext.waived.has("review");
+  if (reviewRequired) addRequiredCapability(capabilityContext, "review");
   if (context.resolvedAcceptance(id, state, contract).required)
     addRequiredCapability(capabilityContext, "acceptance");
   for (const capability of context.policyCapabilitySplit(id, contract).enforced)
     addRequiredCapability(capabilityContext, capability);
-  const qualityMode = context.foundationPolicy?.().quality?.changeGate || "warn";
+  const qualityMode = context.foundationPolicy?.().quality?.changeGate || "off";
   const highRisk = state.impact === "high" ||
     (state.securityTriggers || []).length > 0;
   if (qualityMode === "enforce-high-risk" && highRisk)
     for (const capability of ["changed-quality", "mutation"])
       addRequiredCapability(capabilityContext, capability);
-  return [...capabilityContext.required].sort();
+  // A specialist provider that only repeats the test command is never run:
+  // while review is required, review covers its capability (reported as a
+  // `covered-by-review` advisory). Without review it stays required, so it is
+  // never covered by nothing.
+  if (reviewRequired)
+    for (const row of reviewCoveredProviders(contract.providers))
+      capabilityContext.required.delete(row.provider);
+  // Post-release signals (release health, experiment guardrails) arrive only
+  // after the change ships, so they gate the rollout and never proof or Land.
+  return splitPostReleaseProviders([...capabilityContext.required].sort(),
+    contract.providers, context.providerCapability).blocking;
+}
+
+// The post-release gates the change still owes, as deferred rollout gates:
+// configured providers, capabilities its work types owe, and capabilities its
+// claims declare. A capability with no provider instance still owes its gate.
+export function postReleaseRolloutGates(context, id) {
+  const contract = context.evidence(id);
+  const providers = contract.providers || {};
+  const gates = splitPostReleaseProviders(Object.keys(providers).sort(), providers,
+    context.providerCapability).rolloutGates;
+  const covered = new Set(gates.map((gate) => gate.capability));
+  const owed = new Set(context.policyRolloutCapabilities?.(id) || []);
+  for (const claim of contract.claims || [])
+    for (const capability of claim.capabilities || [])
+      if (isPostReleaseCapability(capability)) owed.add(capability);
+  const extra = [...owed].filter((capability) => !covered.has(capability)).sort();
+  // A waived capability no longer owes its gate; it stays listed as waived so
+  // the handoff and archive still show the user's decision.
+  const state = context.loadRuntime?.(id);
+  const waived = new Set(state ? currentWaivers(state, state.waivers?.some((row) => row.binding)
+    ? context.relevantHash?.(id) : undefined).map((row) => row.capability) : []);
+  return [...gates, ...splitPostReleaseProviders(extra, {}, context.providerCapability).rolloutGates]
+    .map((gate) => waived.has(gate.capability) ? { ...gate, status: "waived" } : gate);
+}
+
+// The capabilities review covers in place of a provider that only repeats the
+// test command; empty when review is not required (waived or not selected),
+// because then nothing covers them and the provider stays required.
+export function reviewCoveredAdvisories(contract, reviewRequired) {
+  if (!reviewRequired) return [];
+  return reviewCoveredProviders(contract.providers)
+    .map((row) => ({
+      capability: row.capability, provider: row.provider,
+      reason: "covered-by-review", status: "covered-by-review", aliasOf: row.aliasOf,
+      detail: `its provider only repeats test provider '${row.aliasOf}', so the required ` +
+        "review covers it; no receipt claims it passed",
+      next: `wire a project-owned ${row.capability} command in execution.yaml to observe it`
+    }));
 }
 
 export function missingHighRiskQualityCapabilities(state, claims, policy) {
@@ -764,6 +860,9 @@ export function createChangeValidationRuntime({
   reviewAssurancePosture = () => null,
   policyCapabilities,
   policyCapabilityTrigger,
+  // (id, configuredCapabilities) -> agent-owned configure-provider EDIT rows
+  // for work-type capabilities the change has no provider for.
+  policyProviderSetupActions = () => [],
   changedSurfaceResolvable,
   forecastCapabilities,
   rawExecution,
@@ -778,7 +877,7 @@ export function createChangeValidationRuntime({
   now,
   authorityPreflight = () => ({ status: "READY", blockers: [], decision: null }),
   executionContract = null,
-  foundationPolicy = () => ({ quality: { changeGate: "warn" } }),
+  foundationPolicy = () => ({ quality: { changeGate: "off" } }),
   fail: terminalFail
 }) {
   let activeValidationCapture = null;
@@ -902,7 +1001,14 @@ export function createChangeValidationRuntime({
     // A failing traceability audit is a refusal, not a crash. It exits without
     // `die` because the findings are already printed above, so it declares the
     // block explicitly instead.
-    if (audit.status === "error") { markBlocked(); process.exitCode = 1; }
+    if (audit.status === "error") {
+      const finding = audit.findings.find((item) => item.level === "error");
+      markBlocked({
+        code: "contract-invalid",
+        reason: finding ? `${finding.code}: ${finding.message}` : "traceability audit failed"
+      });
+      process.exitCode = 1;
+    }
   }
 
   function changeArtifactGaps(state, dir) {
@@ -1758,9 +1864,10 @@ export function createChangeValidationRuntime({
     // after the code had landed, so a pure wording defect forced a re-prove.
     // Same tool, same mode, earlier. Quiet changes presentation only; skipping
     // the subprocess here let an invalid agreement travel all the way to Land.
-    // Rapid changes declare skip_specs and have no deltas to lint.
-    if (state.schema !== "foundation-rapid")
-      assertOpenSpecStrictValid(id, dir, fail, { quiet: options.quiet });
+    if (openSpecStrictLintApplies(state, dir))
+      assertOpenSpecStrictValid(id, dir, fail, {
+        quiet: options.quiet, requireCli: options.requireOpenSpec === true
+      });
 
     // The gate is about a task that names a lifecycle *command*, so the slash
     // has to start a token. Matching a bare `/land` anywhere also matched the
@@ -1780,7 +1887,10 @@ export function createChangeValidationRuntime({
     normalizeValidationAcceptance(id, state, claims, acceptance,
       fail, console.error, acceptance.required ? now() : null);
 
-    if (claims.some((claim) => claim.impact === "high")) state.reviewRequired = true;
+    if (claims.some((claim) => claim.impact === "high")) {
+      state.reviewRequired = true;
+      delete state.reviewKeywordOnly;
+    }
     state.evidenceCapabilities = [...new Set(claims.flatMap((claim) => claim.capabilities))];
     const budgetReviewRisk = changedSurfaceResolvable(id, state)
       ? reviewPolicy(id, state, executableEvidence) : null;
@@ -1838,7 +1948,7 @@ export function createChangeValidationRuntime({
     const compiled = executionContract?.(id) || null;
     const preflight = compiled?.authority || authorityPreflight(id);
     if (!options.quiet) {
-      console.log(`VALID ${id} (${state.schema}, ${claims.length} claims)\n  next: ${nextAfterValidate(state.status, id)}`);
+      console.log(`VALID ${id} (${state.schema}, ${claims.length} claims)\n  next: ${nextAfterValidate(state.status, id, state)}`);
       if (preflight.status !== "READY")
         console.log(`  authority: ${preflight.status}; ${preflight.blockers
           .map((blocker) => `${blocker.code}: ${blocker.next}`).join("; ")}`);
@@ -1899,6 +2009,16 @@ export function createChangeValidationRuntime({
   // precondition is checked instead of caught. `requiredProviders` deliberately
   // does not get this treatment: dropping an inferred capability there would
   // under-require evidence, so it must still stop.
+  // The providers review covers right now, decided exactly as
+  // requiredProviders does: only while review is required and not waived.
+  function reviewCoveredRows(id, active = null) {
+    const state = loadRuntime(id);
+    const waivers = active || currentWaivers(state,
+      state.waivers?.some((row) => row.binding) ? relevantHash(id) : undefined);
+    const reviewWaived = waivers.some((row) => row.capability === "review");
+    return reviewCoveredAdvisories(evidence(id), !reviewWaived && reviewPolicy(id).required);
+  }
+
   function advisoryCapabilities(id) {
     const state = loadRuntime(id);
     const active = currentWaivers(state, state.waivers?.some((row) => row.binding) ? relevantHash(id) : undefined);
@@ -1911,17 +2031,38 @@ export function createChangeValidationRuntime({
       next: `restore it: claude-foundation change waive ${id} --capability ${
         row.capability} --revoke --decision-ref <ref>`
     }));
-    if (!changedSurfaceResolvable(id)) return waived;
+    if (!changedSurfaceResolvable(id)) return [...providerSetupRows(id, waived), ...waived];
+    const inferred = policyCapabilitySplit(id).advisory.map((capability) => ({
+      capability,
+      trigger: policyCapabilityTrigger(id, capability),
+      reason: "policy-inferred-unwired",
+      next: `configure a project-owned ${capability} provider in openspec/changes/${
+        id}/execution.yaml, or accept the advisory`
+    }));
     return [
-      ...policyCapabilitySplit(id).advisory.map((capability) => ({
-        capability,
-        trigger: policyCapabilityTrigger(id, capability),
-        reason: "policy-inferred-unwired",
-        next: `configure a project-owned ${capability} provider in openspec/changes/${
-          id}/execution.yaml, or accept the advisory`
-      })),
+      ...reviewCoveredRows(id, active),
+      ...inferred,
+      ...providerSetupRows(id, [...inferred, ...waived]),
       ...waived
     ];
+  }
+
+  // A work type that owes a capability the change has no provider for gets an
+  // agent-owned setup step with its resume route: never a user action and
+  // never blocking proof.
+  function providerSetupRows(id, listed) {
+    const seen = new Set(listed.map((row) => row.capability));
+    let contract;
+    try { contract = evidence(id); } catch { return []; }
+    const configured = Object.entries(contract?.providers || {})
+      .map(([provider, config]) => providerCapability(provider, config)).filter(Boolean);
+    return (policyProviderSetupActions(id, configured) || [])
+      .filter((action) => !seen.has(action.capability))
+      .map((action) => ({
+        ...action,
+        reason: "work-type-provider-missing",
+        next: `${action.instruction} Resume: ${action.resume}`
+      }));
   }
 
   const waiveGate = waiveGateOperation.bind(null, {
@@ -2017,8 +2158,13 @@ export function createChangeValidationRuntime({
       console.log(`  OK       ${row.provider}: ${row.adapter} (${row.repository})`);
     for (const row of detection.candidates)
       console.log(`  ${row.recommended ? "CANDIDATE" : "REVIEW   "} ${row.provider}: ${row.source}${row.detail ? `; ${row.detail}` : ""}`);
+    // A provider that only repeats a test run is covered only while review
+    // covers it; otherwise it stays required and unwired, so it blocks.
+    const covered = new Set(reviewCoveredRows(id).map((row) => row.provider));
     for (const row of detection.unresolved)
-      console.log(`  BLOCKED  ${row.provider}: ${row.reason}; next: ${row.next}`);
+      console.log(row.aliasOf && covered.has(row.provider)
+        ? `  COVERED  ${row.provider}: covered by review; ${row.detail}`
+        : `  BLOCKED  ${row.provider}: ${row.reason}; next: ${row.next}`);
     for (const row of detection.unavailable)
       console.log(`  BLOCKED  ${row.provider}: ${row.reason}; next: ${row.next}`);
     for (const row of detection.warnings)

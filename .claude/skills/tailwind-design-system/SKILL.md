@@ -1,9 +1,12 @@
 ---
 name: tailwind-design-system
-description: "Build or maintain shared Tailwind CSS v4 design-system mechanics: CSS-first @theme tokens, semantic variables, component variants, dark mode, responsive primitives, and v3-to-v4 migration. Use when Tailwind v4 configuration or reusable component APIs change. Skip one-off styling and non-Tailwind work; use frontend-design for visual implementation and ui-ux-pro-max for UX direction."
+description: "Maintain shared Tailwind CSS v4 tokens, component variants, theming, responsive primitives, or compatible v3 migration. Verify installed version and generated CSS through project tools. Skip one-off styling; use frontend-design for settled visual implementation."
 ---
 
 # Tailwind design system (v4)
+
+Verify component focus and reduced motion after token changes; generated CSS
+alone cannot prove accessible behavior.
 
 Confirm the installed Tailwind major version before applying v4 syntax. For v3,
 use the official migration path rather than partially mixing models.

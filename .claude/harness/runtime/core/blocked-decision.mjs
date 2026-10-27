@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 // A terminal stop is only honest if it also says how to leave it. Readiness
 // already answers "what now?" for every non-ready proof state; the guards that
 // end a run outright used to answer it with a bare refusal, which reads to a
@@ -61,4 +63,43 @@ export function createBlockedDecision({ fail }) {
   }
 
   return { blockedDecisionValue, blockWithDecision };
+}
+
+// A structured non-ready outcome names its own stop; telemetry records that
+// reason instead of an empty refusal.
+export function blockedOutcomeReason(value) {
+  const first = (items) => {
+    const item = Array.isArray(items) ? items[0] : null;
+    return typeof item === "string" ? item
+      : item?.reason || item?.summary || item?.message || null;
+  };
+  return value?.decision?.summary || first(value?.next) || first(value?.issues) ||
+    first(value?.blockers) || value?.reason || value?.summary ||
+    [value?.command, value?.stage, value?.status].filter(Boolean).join(" ") || null;
+}
+
+export function blockedOutcomeStop(value) {
+  const code = value?.stage === "execution-indeterminate" ? "execution-indeterminate"
+    : value?.status === "NEEDS_USER_DECISION" || value?.decision ? "decision-required"
+      : null;
+  return { code, reason: blockedOutcomeReason(value) };
+}
+
+// Work that runs beside an operation (the review `advance` starts next to the
+// executable providers) must not mark the whole process blocked when it
+// refuses: its failure stays an open request that the next pass routes, while
+// the operation itself continues. `capture` records a refusal raised inside a
+// detached `run` and reports whether it did; outside one it does nothing.
+export function createDetachedBlockScope() {
+  const storage = new AsyncLocalStorage();
+  return {
+    run(operation) { return storage.run({ blocked: null }, operation); },
+    capture(message) {
+      const scope = storage.getStore();
+      if (!scope) return false;
+      scope.blocked = String((message && typeof message === "object"
+        ? message.reason : message) || "");
+      return true;
+    }
+  };
 }

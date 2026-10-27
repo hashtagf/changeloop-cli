@@ -1,9 +1,12 @@
 ---
 name: refactoring-fundamentals
-description: Reshape existing code while preserving observable behavior. Use for extract, move, rename, split, consolidate, deduplicate, untangle, or legacy restructuring when the requested outcome is structural rather than behavioral. Characterize untested behavior first and work in reversible green steps. Skip greenfield features, bug fixes, formatting-only work, and code scheduled for deletion.
+description: "Restructure code while preserving observable behavior. Use for extraction, movement, deduplication, or simplification grounded in a real obstacle. Capture characterization evidence and ordered OpenSpec slices; separate behavior changes and preserve public compatibility."
 ---
 
 # Refactoring fundamentals
+
+Establish consumer compatibility before deleting APIs. Keep non-obvious
+rationale; line counts and reviewer consensus are not defects.
 
 Use this process skill before the construction skill that defines the target
 shape.
@@ -18,7 +21,7 @@ shape.
    the current shape. Do not refactor from taste alone.
 4. Apply one named, reversible move at a time and rerun the narrowest trustworthy
    check between moves.
-5. Keep behavior-preserving and behavior-changing commits separate; do not edit
+5. Keep behavior-preserving and behavior-changing slices separate; do not edit
    expected assertions to make a structural change pass.
 6. Keep large work shippable with Mikado, branch-by-abstraction, strangler, or
    expand-migrate-contract sequencing. Avoid flag-day rewrites.
@@ -28,9 +31,10 @@ shape.
 ## Harness handoff
 
 Record the equivalence claim, touched behavior, baseline provider, ordered
-structural slices, and rollback point in the active OpenSpec change/tasks. Use
+structural slices, and rollback point through Change revision/amendment. Use
 the harness receipts to prove the same behavior on the exact workspace; do not
-create a second refactor ledger.
+create a second refactor ledger. Build never stages or commits; only the
+harness marks tasks complete.
 
 ## Check before finishing
 

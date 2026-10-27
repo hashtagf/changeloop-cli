@@ -41,11 +41,15 @@ export function createBootstrap({ start, pinned, fail, warn = console.error }) {
     plans: join(root, ".foundation", "plans"),
     leases: join(root, ".foundation", "leases"),
     prototypes: join(root, ".foundation", "prototypes"),
+    packages: join(root, ".foundation", "packages"),
+    previews: join(root, ".foundation", "previews"),
     attestations: join(root, ".foundation", "attestations"),
     authority: join(root, ".foundation", "authority"),
+    reviews: join(root, ".foundation", "reviews"),
     handoffs: join(root, ".foundation", "handoffs"),
     instructionManifests: join(root, ".foundation", "instruction-manifests"),
     recovery: join(root, ".foundation", "recovery"),
+    deliveries: join(root, ".foundation", "deliveries"),
     changes: join(root, "openspec", "changes")
   };
   for (const name of [

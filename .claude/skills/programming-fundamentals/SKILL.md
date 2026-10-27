@@ -1,9 +1,12 @@
 ---
 name: programming-fundamentals
-description: Apply code-level fundamentals before changing non-trivial logic, models, modules, abstractions, or data structures. Covers constrained data modeling, illegal-state elimination, deep modules, information hiding, focused functions, pure core/effectful shell, explicit errors, complexity, naming, and testability. Use for module boundaries or public interfaces within one process; skip one-line shell, generated output, and pure configuration.
+description: "Design or review nontrivial local logic, types, state, data structures, and deep module interfaces. Use inside one process; record durable contracts in OpenSpec and prove behavior through project tools. Skip trivial/generated code and cross-runtime architecture."
 ---
 
 # Programming fundamentals
+
+Strengthen types where partial operations need it; do not brand every primitive.
+Validate real boundaries before removing guards.
 
 Use this as the primary skill for code whose main difficulty is local logic.
 Load a reference only for the decision in front of you.

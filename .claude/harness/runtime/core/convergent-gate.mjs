@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { sortedJson, sortedValue as stableValue } from "./trust.mjs";
 
 function text(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -9,15 +10,8 @@ function sortedStrings(values) {
     .map((value) => text(String(value || ""))).filter(Boolean))].sort();
 }
 
-function stableValue(value) {
-  if (Array.isArray(value)) return value.map(stableValue);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.keys(value).sort()
-    .map((key) => [key, stableValue(value[key])]));
-}
-
 export function gateDigest(value) {
-  return createHash("sha256").update(JSON.stringify(stableValue(value))).digest("hex");
+  return createHash("sha256").update(sortedJson(value)).digest("hex");
 }
 
 export function normalizeGateFinding(finding = {}, defaults = {}) {
@@ -108,6 +102,42 @@ export function gateRepairPlan(findings = [], { phase = "unknown", gate = "unkno
   })).sort((left, right) => left.id.localeCompare(right.id));
   const value = { version: 1, phase, gate, tasks };
   return { ...value, digest: gateDigest(value) };
+}
+
+// A coding gate that returned the same findings for unchanged inputs is still
+// agent work, not a user decision: the harness never blocks before Land. The
+// stall is handed back as an automatic repair whose next step is a different
+// in-scope strategy, carrying exactly what the gate returned. Counting how
+// often the same stall repeats belongs to the advance recovery ladder.
+// Genuine user-authority choices keep using `noProgressDecision`.
+export function noProgressRepair({
+  changeId, phase, gate, progress, findings = [], attemptedStrategies = [],
+  resumeCommand, reason = null
+}) {
+  const normalized = normalizeGateFindings(findings, { phase, gate });
+  const lead = normalized.find((finding) => finding.message &&
+    finding.message !== "No diagnostic message was provided")?.message || null;
+  return {
+    status: "ACTION_REQUIRED",
+    route: "AUTO_REPAIR",
+    reason: "NO_PROGRESS",
+    progressFingerprint: progress?.fingerprint || null,
+    findings: normalized,
+    attemptedStrategies: [...(attemptedStrategies || [])].map(stableValue),
+    next: [{
+      kind: "change-strategy",
+      reason: [reason ||
+        `The ${gate} gate returned the same findings for unchanged inputs; ` +
+        "the previous repair strategy did not change the result, so choose a different in-scope repair",
+      lead].filter(Boolean).join(": "),
+      unchanged: true,
+      progressFingerprint: progress?.fingerprint || null,
+      findingIds: normalized.map((finding) => finding.id).filter(Boolean),
+      findings: normalized.slice(0, 8),
+      attemptedStrategies: [...(attemptedStrategies || [])].map(stableValue),
+      ...(resumeCommand ? { command: resumeCommand } : {})
+    }]
+  };
 }
 
 export function noProgressDecision({

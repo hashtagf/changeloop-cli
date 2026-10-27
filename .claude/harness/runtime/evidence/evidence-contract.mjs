@@ -3,7 +3,15 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { measuredNumber } from "../core/measured-number.mjs";
 import { isExcludedPath } from "../core/workspace-surface.mjs";
-import { classifyReviewRisk } from "./review-routing.mjs";
+import { memoizeByGitIndex } from "../core/tool-identity.mjs";
+import {
+  classifyReviewRisk, reviewSemanticText, securityRiskSignals, thaiRiskPattern
+} from "./review-routing.mjs";
+import { providerTimeoutMs, reviewCoveredProviders, unobservedAliasConfig } from "./provider-catalog.mjs";
+
+const THAI_REQUIRED_SEMANTICS =
+  thaiRiskPattern("concurrency", "money", "migration", "irreversible");
+const THAI_CRITICAL_SEMANTICS = thaiRiskPattern("money", "migration", "irreversible");
 
 // Named once and read by both `reviewPolicy` and the change-time forecast. The
 // forecast has to answer "will this need a reviewer?" from the same lists, but
@@ -93,10 +101,6 @@ export function executionFingerprintValue(stableHash, adapterProtocolVersion, co
   });
 }
 
-export function providerConfigOperation({ evidence }, id, provider) {
-  return configuredProviderValue(evidence(id).providers || {}, provider);
-}
-
 export function providerClaimsOperation({
   claimsForProvider,
   providerConfig,
@@ -174,30 +178,63 @@ export function environmentDescriptorOperation({
   };
 }
 
-export function collectReviewSignals(state, contract, configuredCapabilities = []) {
+export function collectReviewSignals(state, contract, configuredCapabilities = [],
+  grounding = null, workTypeOnly = new Set()) {
   const capabilities = new Set([
     ...(state.evidenceCapabilities || []),
     ...contract.claims.flatMap((claim) => claim.capabilities || []),
     ...configuredCapabilities
-  ]);
-  const semantic = `${state.intent || ""} ${(state.securityTriggers || []).join(" ")}`
-    .toLowerCase();
+  ].filter((capability) => !workTypeOnly.has(capability)));
+  // Keyword-only intent never forces diversity or a higher tier; see
+  // reviewSemanticText. Review itself stays required for such changes through
+  // state.reviewRequired set by resolve.
+  const semantic = reviewSemanticText({ state, claims: contract.claims, grounding });
   const requiredTriggers = [];
   const diversityTriggers = [];
   const riskClaims = contract.claims.filter((claim) => claim.impact !== "low");
   if (riskClaims.some((claim) => claim.capabilities.some((capability) =>
-    REVIEW_FORCING_CAPABILITIES.includes(capability))))
+    !workTypeOnly.has(capability) && REVIEW_FORCING_CAPABILITIES.includes(capability))))
     requiredTriggers.push("risk-capability");
   if (riskClaims.some((claim) => (claim.repositories || []).length > 1))
     requiredTriggers.push("multi-repository-claim");
-  if (/\b(concurren|race|deadlock|money|payment|billing|financial|migration|irreversible)\w*\b/.test(semantic))
+  // A specialist capability wired only to the test command is covered by
+  // review instead of by a re-run, so review is required and names it; the
+  // capability itself sets the tier (security-static and the contract/data
+  // capabilities are high, resilience at least medium).
+  for (const row of reviewCoveredProviders(contract.providers))
+    requiredTriggers.push(`covered-by-review:${row.capability}`);
+  // An access-control or financial risk signal declares a high-risk boundary:
+  // review is required under every review policy, named by the signal itself.
+  requiredTriggers.push(...securityRiskSignals(state, "high"));
+  if (/\b(concurren|race|deadlock|money|payment|billing|financial|migration|irreversible)\w*\b/.test(semantic) ||
+      THAI_REQUIRED_SEMANTICS.test(semantic))
     requiredTriggers.push("risk-semantics");
   if ((state.securityTriggers || []).length ||
       REVIEW_DIVERSITY_CAPABILITIES.some((value) => capabilities.has(value)))
     diversityTriggers.push("critical-capability");
-  if (/\b(money|payment|billing|financial|migration|irreversible)\b/.test(semantic))
+  if (/\b(money|payment|billing|financial|migration|irreversible)\b/.test(semantic) ||
+      THAI_CRITICAL_SEMANTICS.test(semantic))
     diversityTriggers.push("critical-semantics");
   return { capabilities, requiredTriggers, diversityTriggers };
+}
+
+// Risk-tiered review reviews every change except a low-tier rapid-lane change
+// that nothing asks to review: no declared or keyword review, no required or
+// diversity trigger, no review capability. Its proof is the project's
+// deterministic evidence alone. Anything inferred from the built diff that
+// raises the tier (security-static, contract or data capabilities) restores
+// review, because the tier is recomputed at every Prove.
+export function rapidEvidenceOnly({ state = {}, signals, riskRoute, signalled }) {
+  return state.schema === "foundation-rapid" && riskRoute?.tier === "low" &&
+    !signalled && !(signals?.diversityTriggers || []).length;
+}
+
+// The contract fingerprint keeps the review-policy shape it had before the
+// rapid exemption existed (risk-tiered was always `required: true`), so
+// upgrading never re-fingerprints an in-flight change. The exemption is a pure
+// function of fingerprinted inputs and is enforced live by requiredProviders.
+export function fingerprintedReviewPolicy(policy) {
+  return policy?.tier && policy.required === false ? { ...policy, required: true } : policy;
 }
 
 export function assembleReviewPolicy({
@@ -231,11 +268,12 @@ export function assembleReviewPolicy({
   if (waived) triggers.push("diversity-waived-single-model");
   const selfReview = policy.independence === "self";
   if (selfReview) triggers.push("independence-waived-self-review");
+  const signalled = Boolean(state.reviewRequired || requiredTriggers.length ||
+    capabilities.has("review"));
   return {
     required: riskTiered
-      ? true
-      : Boolean(state.reviewRequired || requiredTriggers.length ||
-        capabilities.has("review")),
+      ? !rapidEvidenceOnly({ state, signals, riskRoute, signalled })
+      : signalled,
     ...(riskTiered ? {
       tier: riskRoute.tier,
       route: riskRoute.route,
@@ -295,13 +333,14 @@ export function uncoveredCommandWorkspaceFiles({
   config, workspace, repositoryId = "root", tracked = () => false,
   declared = () => false
 }) {
+  // Pure checks first: `tracked` may have to consult Git.
   return commandWorkspaceFiles(config, workspace).filter((rel) =>
-    !tracked(rel) && !declared(rel) && !providerInputCovers(config, repositoryId, rel));
+    !declared(rel) && !providerInputCovers(config, repositoryId, rel) && !tracked(rel));
 }
 
 export function providerEvidencePolicy(config = {}) {
   return {
-    timeoutMs: Number(config.timeoutMs || 120000),
+    timeoutMs: providerTimeoutMs(config),
     minimum: config.minimum ?? null,
     report: config.report || null,
     reportFormat: config.reportFormat || null,
@@ -534,7 +573,9 @@ export function createEvidenceContract({
   canonicalPath, loadRuntime, relevantHash,
   relevantSnapshot, singleRelevantSnapshot, fileDigest, stableHash,
   filesystemEntryIdentity,
-  policyCapabilities, foundationPolicy, handoffContract, git, declaredSurfaceMatcher, die
+  policyCapabilities, foundationPolicy, handoffContract, git, declaredSurfaceMatcher, die,
+  // Absent in narrow compositions: every capability may raise the review tier.
+  policyCapabilityTrigger = () => null
 }) {
   function executionServiceSource(id, name, service) {
     const commandValid = Array.isArray(service?.command) &&
@@ -747,10 +788,13 @@ export function createEvidenceContract({
     const repositoryId = config.repository || "root";
     const repository = selectedRepositories(id).find((row) => row.id === repositoryId);
     const workspace = canonicalPath(repository?.workspacePath || repository?.path || ROOT);
-    const declared = declaredSurfaceMatcher(id, loadRuntime(id));
+    const declared = declaredSurfaceMatcher(id, loadRuntime(id), repositoryId);
     const uncovered = uncoveredCommandWorkspaceFiles({
       config, workspace, repositoryId, declared,
-      tracked: (rel) => git(["ls-files", "--error-unmatch", "--", rel], workspace).status === 0
+      // Index membership only: reused while the repository index is
+      // unchanged, so repeated contract reads do not respawn Git per file.
+      tracked: (rel) => memoizeByGitIndex(workspace, `tracked:${rel}`, () =>
+        git(["ls-files", "--error-unmatch", "--", rel], workspace).status === 0)
     });
     if (uncovered.length)
       die(`provider '${provider}' command names untracked workspace file(s) outside its inputs and declared surface: ${
@@ -974,10 +1018,20 @@ export function createEvidenceContract({
     const value = readJson(path);
     validateEvidenceClaims(id, value);
     const executionValue = rawExecution(id, dir);
-    const configuredProviders = {
+    const declaredProviders = {
       ...(value.providers || {}),
       ...(executionValue.providers || {})
     };
+    // A previewOnly provider exists for pre-Build previews: Prove never selects
+    // it, so it is kept out of the proof contract and its validation.
+    const previewProviders = Object.fromEntries(Object.entries(declaredProviders)
+      .filter(([, config]) => config?.previewOnly === true));
+    const configuredProviders = Object.fromEntries(Object.entries(declaredProviders)
+      .filter(([, config]) => config?.previewOnly !== true));
+    // Identity still applies: the provider name becomes a file name under
+    // .foundation/previews, so it must be a plain instance id.
+    for (const [provider, config] of Object.entries(previewProviders))
+      validateProviderIdentity(id, provider, config);
     for (const [provider, config] of Object.entries(configuredProviders)) {
       validateConfiguredProvider(id, provider, config, {
         configuredProviders, executionValue, claims: value.claims
@@ -990,7 +1044,7 @@ export function createEvidenceContract({
     if (writerConflict)
       die(`discovery receipt '${writerConflict.output}' has multiple writers ('${
         writerConflict.producers.join("', '")}'); each durable provider receipt requires one producer`);
-    return { ...value, providers: configuredProviders, execution: executionValue };
+    return { ...value, providers: configuredProviders, previewProviders, execution: executionValue };
   }
   
   function builtInProviderConfig(id, provider) {
@@ -1016,9 +1070,13 @@ export function createEvidenceContract({
     };
   }
 
+  // A specialist capability wired to a test provider's own command observes
+  // only that test run; it resolves as unwired external evidence instead of
+  // a pass by the same exit code (see unobservedAliasConfig).
   function providerConfig(id, provider) {
-    return configuredProviderValue(evidence(id).providers || {}, provider) ||
-      builtInProviderConfig(id, provider);
+    const providers = evidence(id).providers || {};
+    return unobservedAliasConfig(providers, provider,
+      configuredProviderValue(providers, provider) || builtInProviderConfig(id, provider));
   }
 
   const resolvedAcceptance = resolvedAcceptanceOperation.bind(null, {
@@ -1122,7 +1180,7 @@ export function createEvidenceContract({
       impact: state.impact,
       coupling: state.coupling,
       reviewRequired: Boolean(state.reviewRequired),
-      reviewPolicy: reviewPolicy(id, { ...state, waivers: [] }, contract),
+      reviewPolicy: fingerprintedReviewPolicy(reviewPolicy(id, { ...state, waivers: [] }, contract)),
       acceptance: resolvedAcceptance(id, state, contract),
       externalOperations: handoffContract(id).operations,
       claims: contract.claims,
@@ -1134,14 +1192,24 @@ export function createEvidenceContract({
   
   function reviewPolicy(id, state = loadRuntime(id), contract = evidence(id)) {
     const grounding = readJson(join(activeChangePath(id), "grounding.yaml"), {});
-    const signals = collectReviewSignals(state, contract, policyCapabilities(id));
+    // A capability only a declared work type requires still needs its
+    // evidence, but does not raise the review tier on its own. Path rules come
+    // first in the trigger list, so a leading work-type trigger means no path
+    // required it.
+    const workTypeOnly = new Set(policyCapabilities(id).filter((capability) =>
+      String(policyCapabilityTrigger(id, capability) || "").startsWith("work-type:")));
+    const signals = collectReviewSignals(state, contract, policyCapabilities(id), grounding,
+      workTypeOnly);
     const riskRoute = classifyReviewRisk({
       state, claims: contract.claims, capabilities: signals.capabilities, grounding,
       requiredTriggers: signals.requiredTriggers
     });
     const policy = foundationPolicy().review || {};
     const riskTiered = foundationPolicy().workflow.reviewPolicy === "risk-tiered";
-    const result = assembleReviewPolicy({ state, signals, riskRoute, policy, riskTiered });
+    const assembled = assembleReviewPolicy({ state, signals, riskRoute, policy, riskTiered });
+    const grants = state.reviewHistory?.extraAiWaves || [];
+    const result = grants.length ? { ...assembled, grantedAiWaveCap:
+      Math.max(...grants.map((row) => Number(row.delivered || 0) + 1)) } : assembled;
     const waived = currentWaivers(state, state.waivers?.some((row) => row.binding) ? relevantHash(id) : undefined)
       .find((row) => row.capability === "review");
     return waived ? { ...result, required: false, userWaiver: waived } : result;

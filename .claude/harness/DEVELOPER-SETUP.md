@@ -1,17 +1,18 @@
 # Developer setup
 
-Change Loop v3.5.17 front-loads material decisions so Build and Prove can run to a
+Change Loop v3.6.8 front-loads material decisions so Build and Prove can run to a
 bounded conclusion without repeatedly interviewing the developer. The shipped
 workflow adds:
 
-- six primary user commands, with semantic draft v3 compiling stable OpenSpec
+- seven primary user commands including optional `/deliver`, with semantic draft v4 validating discovery and compiling stable OpenSpec
   links and conditional artifacts instead of asking the model to maintain them;
 - optional Grounding v3 containing only non-derived material decisions, while
   legacy Grounding v2 remains readable;
 - strictest-wins low/medium/high review routing with at most two delivered AI
   review waves: one full packet and one finding-bound delta;
-- deterministic repair closure after the second AI review instead of a third AI
-  loop or a mandatory human approval;
+- deterministic repair closure after the second AI review, else one closure
+  review of the repaired delta, instead of an open AI loop or a mandatory human
+  approval;
 - one resumable `advance --through build|proven|archived` coordinator, which
   invokes compatible proof/Land primitives, reruns only stale providers, and
   returns one bounded action at a real boundary;
@@ -23,15 +24,15 @@ workflow adds:
 Before the first Change Loop packet on a developer machine:
 
 1. Install Node.js 20.19 or later.
-2. Verify `claude-foundation version` is `3.5.17` and the repository runtime API
-   is `36`. A delta between the two is advisory while both doctors still pass:
+2. Verify `claude-foundation version` is `3.6.8` and the repository runtime API
+is `42`. A delta between the two is advisory while both doctors still pass:
    the CLI forwards to the runtime installed in the project, so an older CLI
    prints `warning: project runtime API … differs from CLI API …` and keeps
    working. Only a doctor that exits non-zero is a blocked machine.
 3. When the CLI itself is behind, upgrade it: `brew upgrade claude-foundation`.
-   If instead the pinned source is absent, clone tag `v3.5.17` from
+   If instead the pinned source is absent, clone tag `v3.6.8` from
    `Maximumsoft-Co-LTD/claude-foundation` into
-   `~/.local/share/claude-foundation/3.5.17`.
+   `~/.local/share/claude-foundation/3.6.8`.
 4. Install or refresh the runtime inside the project with
    `claude-foundation init <project-path>`. The equivalent entrypoint inside a
    source checkout is `bash /path/to/claude-foundation/install.sh
@@ -39,14 +40,22 @@ Before the first Change Loop packet on a developer machine:
 5. Add `~/.local/bin` to `PATH`, then run
    `claude-foundation doctor --stage change`.
 6. Install and authenticate the reviewer CLI your project selects:
-   - Codex: `npm install -g @openai/codex && codex login`
+   - Codex: `npm install -g @openai/codex && codex login`. A Codex that runs on
+     `OPENAI_API_KEY`, `CODEX_API_KEY`, `OPENROUTER_API_KEY` or a non-OpenAI
+     `model_provider` in `~/.codex/config.toml` needs no `codex login`: the
+     `login status` probe is skipped there. Set `"auth": "skip"` on the
+     reviewer in `foundation.json` to skip it explicitly.
    - Claude Code: `npm install -g @anthropic-ai/claude-code && claude auth login`
 7. Set the committed `foundation.json` review profile once. A Codex-only team
    uses `defaultReviewer: "codex-sol"`; a Claude-Code-only team uses
    `defaultReviewer: "claude-opus"`. Set `fallbackReviewers` to configured
    reviewer names followed optionally by `"main-session"`, and set
    `infraFailureThreshold` to bound infrastructure retries per reviewer. The
-   route never runs after `fail` or `inconclusive`; `main-session` is explicit
+   route never runs after `fail` or `inconclusive`. A configured reviewer whose
+   CLI is not installed counts as an infrastructure failure, so a host with no
+   reviewer CLI reaches `main-session` when it is listed (with `independence:
+   "self"`); without it the run stops naming the missing CLI and the config to
+   add. `main-session` is explicit
    self-review and requires `independence: "self"`. Change Loop automatically reuses complete AI
    subject provenance only when its session matches the ambient host; otherwise
    the caller supplies the `--main-session-*` provenance fields. When coding and review use the same
@@ -118,7 +127,8 @@ Change → Build → Review → Prove without reopening locked choices.
 Existing changes can use `/change`, `/build`, `/prove`, and `/land` separately.
 A deterministic failure resumes at the affected provider. First-review findings
 receive one delta review; after two delivered AI waves Change Loop uses current
-test, mutation, integration, and static evidence to close verified repairs. It
+test, mutation, integration, and static evidence to close verified repairs, or
+one closure review when no evidence binds them. It
 asks again only for a real contract contradiction or new material risk, not for
 warnings or optional improvements.
 

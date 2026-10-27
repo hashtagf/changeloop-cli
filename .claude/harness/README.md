@@ -1,5 +1,10 @@
 # Change Loop harness runtime
 
+**Audience:** coding agents, host integrators, evidence authors, and maintainers.
+This installed reference is maintained by Change Loop; consumers should not
+customize it in place. For everyday use, follow the
+[user quickstart](https://claude-foundation.dev/docs/quickstart/).
+
 This directory contains the deterministic runtime installed with Change Loop.
 It turns an OpenSpec change into a bounded implementation and
 evidence workflow:
@@ -19,7 +24,8 @@ The product and workflow are called **Change Loop**. The package and CLI remain
 ## Using Change Loop
 
 Users describe the goal to their coding agent and use `/change`, `/build`,
-`/prove`, and `/land`; `/dev` can drive Change through Prove in one request.
+`/prove`, and `/land`; `/dev` drives the same lifecycle, reaching Land only
+within the user's explicit authority.
 The agent runs the underlying CLI, so users do not need to construct JSON,
 receipt, recovery, or bookkeeping commands.
 
@@ -32,26 +38,66 @@ host permission recovery stay internal. A change is
 finished only after the user explicitly authorizes Land and its state is
 `archived`.
 
-Installed users should start with `WORKFLOW.md`. The rest of this page maps the
-runtime for maintainers and evidence authors; `EVIDENCE.md` is the canonical
+Users can follow the quickstart linked above; the installed `WORKFLOW.md` is
+the detailed lifecycle contract. The rest of this page maps the runtime for
+agents, maintainers, and evidence authors; `EVIDENCE.md` is the canonical
 provider and receipt contract.
 
-Runtime API 35 adds spec approval through `change resolve --approve-spec`,
-an explicit review continuation through `change resolve --continue-review`,
+Runtime API 39 adds bounded repository intelligence, adaptive intake metrics,
+and selective amendment proof recovery. Typed intake inspection uses
+`change start <draft.json> --inspect` and discovery deltas for v4 amendments.
+Spec approval uses `change resolve --approve-spec`,
 and content-bound review waivers through `change waive --capability review`.
-Each requires a real `--decision-ref`. Review dispatches share a persisted
-30-minute deadline. See [WORKFLOW.md](../../WORKFLOW.md) for the user contract.
+Each requires a real `--decision-ref`. Review is bounded by its rounds; each
+dispatch has its own timeout. See [WORKFLOW.md](../../WORKFLOW.md) for the user contract.
 
 Every phase view is derived from one versioned execution contract. Semantic
-draft v3 compiles meaningful keys into stable cross-ledger IDs and writes only
-the OpenSpec artifacts the change needs. After Change, protocol-v5 `advance`
+draft v5 (and v4) validates typed-risk discovery coverage (optional for ordinary changes) and decision prerequisites,
+then compiles meaningful keys into stable cross-ledger IDs and writes only
+the OpenSpec artifacts the change needs. After Change, protocol-v6 `advance`
 is the normal model-facing entrypoint; primitive commands remain compatible
 operator and integration tools. It compiles
 risk, required providers, external authority, workspace mutation capability,
 budgets, repositories, and Land requirements once; packets, planning,
 readiness, and the mutation guard consume that result instead of independently
-reinterpreting policy. Lifecycle writes go through the typed reducer. These are
-backend changes only: installed user command names and arguments are unchanged.
+reinterpreting policy. Lifecycle writes go through the typed reducer. Existing
+command names remain compatible; `change start --inspect` is an additive
+read-only argument.
+
+## File ownership and writers
+
+Ownership determines what installation and upgrades may replace. It does not
+say who must type the content or who may approve a decision. An agent can write
+project-owned code; the harness can compile a project-owned agreement.
+
+| Category | Paths in an installed project | Who writes or updates it | Reader and authority |
+|---|---|---|---|
+| Project agreement | `openspec/specs/`, `openspec/changes/`, `openspec/investigations/` | Agent authors intent and investigation records; harness compiles/amends packets, updates task completion, and archives through OpenSpec | Users review intent, scenarios, and outcomes; consequential decisions remain theirs |
+| Project configuration | `foundation.json`, `openspec/config.yaml`, `openspec/repositories.yaml`, `quality/` | Project maintainer or authorized agent; installer seeds missing configuration and may perform documented additive/default migrations | Project chooses policy; upgrades preserve custom settings |
+| Project instructions and host settings | `CLAUDE.md`, `AGENTS.md`, `.claude/settings.json` | Project authors local instructions; installer updates only its marked pointer blocks and merges supported settings | These are not replaced by the upstream repository's maintainer manuals |
+| Installed product | `.claude/orchestrator.md`, `.claude/commands`, `.claude/harness`, `.claude/skills`, `.claude/rules`, `.claude/hooks`, `openspec/schemas`, `WORKFLOW.md`, `.foundation/.gitignore`, `.foundation/README.md` | Change Loop maintainers change source; installer refreshes managed files | Agent/host instructions and system references, not consumer customization points |
+| Runtime records | `.foundation/runtime/`, `receipts/`, `evidence/`, `transactions/`, and other state listed below | Harness and configured tools through supported operations | Read for diagnosis; never hand-edit proof, receipts, lifecycle state, or recovery journals |
+| Working inputs and implementation | `.foundation/drafts/`, declared code/test paths inside `.foundation/sandboxes/` or `.foundation/repository-sandboxes/` | Agent writes drafts and implements within the declared Build workspace | Drafts are temporary inputs, not the agreement; sandbox content may be unlanded project work |
+| Optional local policy | `.foundation/policy.json` | Project maintainer or authorized agent supplies capability rules | Project-controlled input despite its location; not an evidence receipt |
+
+The installer's `MANAGED` list defines product ownership; the per-install
+`.foundation/install-manifest.txt` records the managed files. A managed directory
+does not make every custom file beneath it disposable: custom agents, hooks,
+and other project additions must survive upgrades. `foundation.json` may gain
+missing fields or recognized legacy-default migrations; it is not replaced
+wholesale with upstream policy.
+
+Generated does not mean disposable, and project-owned does not mean manually
+editable during an active lifecycle. Change agreements go through draft/revision
+or amendment routes; task checkboxes and IDs are maintained by the harness.
+Use supported recovery and cleanup rather than deleting `.foundation/`: it can
+hold unlanded code, proof history, transaction backups, and local policy.
+
+The upstream source repository also contains contributor instructions, internal
+tests, research reports, and website sources. These are for developing and
+documenting Change Loop itself; they are not installed consumer requirements.
+Consumer `CLAUDE.md` and `AGENTS.md` stay project-owned even though
+the upstream repository uses those names for its own maintainer guidance.
 
 ## Files in this directory
 
@@ -68,8 +114,11 @@ backend changes only: installed user command names and arguments are unchanged.
 | Core | `runtime/core/lifecycle-outcome.mjs` | Owner-validated lifecycle outcomes and target-versus-delivery user projection |
 | Core | `runtime/core/land-grant.mjs` | Session/change/proof/target-bound explicit Land authority |
 | Core | `runtime/core/tool-preparation.mjs` | Project-local tool readiness, preparation identity, and setup boundaries |
+| Core | `runtime/core/tool-identity.mjs` | Content-keyed reuse of successful OpenSpec probes and strict lint (persisted in `.foundation/cache/`), and per-process Git index queries |
+| Core | `runtime/core/git-head.mjs` | HEAD and "not a repository" answered from repository files, falling back to Git for any layout it does not model |
 | Core | `runtime/core/lifecycle-reducer.mjs` | Typed lifecycle transitions and compatibility-preserving state mutation |
 | Core | `runtime/core/process-runtime.mjs` | Provider process execution, readiness checks, and managed services |
+| Core | `runtime/core/signals.mjs` | Process-scoped signals (drift restored, budget warning, already archived) that keep their stream line and ride on the advance envelope |
 | Core | `runtime/core/shell-mutation-policy.mjs` | Shared phase-aware shell mutation and canonical Build containment policy |
 | Core | `runtime/core/state-runtime.mjs` | Runtime state, paths, hashing, snapshots, workspace manifests, and Git helpers |
 | Core | `runtime/core/trust.mjs` | Canonical JSON and Ed25519 verification shared by trust protocols |
@@ -105,13 +154,32 @@ backend changes only: installed user command names and arguments are unchanged.
 | Workflow | `runtime/workflow/authority.mjs` | External authority request persistence and response validation |
 | Workflow | `runtime/workflow/budget.mjs` | Run/lifetime usage windows and budget policy transitions |
 | Workflow | `runtime/workflow/change-lifecycle.mjs` | Change creation, draft materialization, resolution, and atomic start |
-| Workflow | `runtime/workflow/semantic-draft.mjs` | Semantic draft v3 validation, stable links, typed extensions, and provider defaults |
+| Workflow | `runtime/workflow/semantic-draft.mjs` | Semantic draft v3 compatibility plus v4/v5 discovery coverage, stable links, typed extensions, decision status and durable rationale, unknown task field warnings, and provider defaults |
+| Workflow | `runtime/workflow/draft-folder.mjs` | Draft v5 folder loader: splits authored `proposal.md`/`design.md` prose by outline heading, checks order, placeholders, and derived headings, and derives grounding NFR/observability from `change.json` |
+| Workflow | `runtime/workflow/validation/outline-contract.mjs` | The versioned outline: each packet section's document, order, heading (en/th), owner, feeding fields, and condition |
+| Workflow | `runtime/workflow/validation/architecture-fields.mjs` | Typed fields `boundaries`, `tenancy`, `domain` |
+| Workflow | `runtime/workflow/validation/contract-fields.mjs` | Typed fields `apiContracts`, `eventContracts`, `dataModel`, `ui`, `configContract` |
+| Workflow | `runtime/workflow/validation/quality-fields.mjs` | Typed fields `nfr`, `threatModel`, `observability`, `trackingPlan`, `capacity` |
+| Workflow | `runtime/workflow/validation/delivery-fields.mjs` | Typed fields `rollout`, `testStrategy`, `dependencies`, `recovery` |
+| Workflow | `runtime/workflow/validation/work-type-fields.mjs` | Work-type fields: `bugfix` variants, `refactor`, `libraryContract`, `migrationPlan`, `integrations`, `performanceAnalysis`, `dependencyChange`, `deprecationPlan`, `infraPlan`, `privacyAssessment`, `experimentDesign`, `releasePlan`, `modelCard` |
+| Workflow | `runtime/workflow/validation/process-fields.mjs` | Proposal fields `decisionLog`, `communication`, `releaseNote`, `demo`, `compliance`, and the archive-only review, compliance, and rollout-gate appendices |
+| Workflow | `runtime/workflow/validation/design-blueprints.mjs` | `WORK_TYPES`, `LIGHT_WORK`, `BEHAVIOR_NEUTRAL_WORK`, and design field validation/rendering in outline order |
+| Workflow | `runtime/workflow/validation/dev-document.mjs` | Work-type inference and the sections each work type requires |
+| Workflow | `runtime/workflow/validation/semantic-intake.mjs` | Risk-derived discovery dimensions, decision-DAG validation, and bounded frontier selection |
+| Workflow | `runtime/workflow/validation/semantic-source-inventory.mjs` | Deterministic grounded-source inventory and freshness findings |
+| Workflow | `runtime/workflow/validation/repository-intelligence.mjs` | Bounded repository discovery, relevance ranking, and dependency/caller/test maps |
+| Workflow | `runtime/workflow/validation/semantic-intake-intelligence.mjs` | Adaptive intake depth, question-quality gates, multilingual-neutral signals, and effectiveness snapshots |
+| Workflow | `runtime/workflow/semantic-intake-state.mjs` | Draft/source-bound typed intake snapshot and safe resume projection |
+| Workflow | `runtime/workflow/validation/amendment-invalidation.mjs` | Selective claim, task, provider, approval, and proof invalidation planning |
+| Workflow | `runtime/workflow/validation/selective-proof-plan.mjs` | Fail-closed receipt preservation and exact post-amendment proof recovery |
 | Workflow | `runtime/workflow/semantic-amendment.mjs` | Transactional Build-time agreement amendments that preserve canonical prose and completed work |
-| Workflow | `runtime/workflow/advance-runtime.mjs` | Protocol-v5 deterministic chaining, owner outcomes, and safe user projection |
+| Workflow | `runtime/workflow/advance-runtime.mjs` | Protocol-v6 deterministic chaining, durable recovery decisions, owner outcomes, and safe user projection |
 | Workflow | `runtime/workflow/change-validation.mjs` | Traceability, change validation, and provider requirements |
 | Workflow | `runtime/workflow/land-journal.mjs` | Atomic apply identity, journal, rollback, verification, and cleanup |
 | Workflow | `runtime/workflow/land-runtime.mjs` | Multi-repository Land readiness, planning, pointers, and resume saga |
 | Workflow | `runtime/workflow/repository-delivery-saga.mjs` | Prepare-all, dependency-ordered, uncommitted multi-repository Apply and resume |
+| Workflow | `runtime/workflow/land-verification.mjs` | Target-read verification that every writable repository holds its proven sandbox bytes before archive |
+| Workflow | `runtime/workflow/sandbox-preservation.mjs` | Sandbox-versus-target comparison and recoverable backups before any sandbox removal |
 | Workflow | `runtime/workflow/lease-runtime.mjs` | Agent resource lease acquisition, renewal, release, and cleanup |
 | Workflow | `runtime/workflow/packet-runtime.mjs` | Changed-surface calculation and bounded task/review packet generation |
 | Workflow | `runtime/workflow/repository-topology.mjs` | Repository discovery, selection, dependency validation, and workspace views |
@@ -124,13 +192,28 @@ backend changes only: installed user command names and arguments are unchanged.
 | Docs | `CONSUMER-QUALITY.md` | Installed quality protocols, onboarding, adapters, baselines, and fail-closed rules |
 | Docs | `README.md` | Runtime overview and operator guide |
 
-Semantic draft version 3 is the default. Agents write intent, requirements,
-tasks, and evidence capabilities once; the compiler generates stable IDs,
-cross-ledger links, specs, and safe detected provider wiring. Multiple specs,
+Semantic draft version 5 is the default; versions 4 and 3 compile unchanged.
+A v5 draft is a folder: `change.json` (`version: 5`, every typed field) plus
+authored `proposal.md` and `design.md` whose `## ` headings come from the
+outline contract. The compiler keeps authored prose byte-for-byte, merges it
+with derived sections in outline order, and rejects unknown, derived,
+out-of-order, empty, or `TODO`/`TBD` sections in one EDIT. Every field module
+exports `validate<Field>(value, path)` (issues prefixed by the exact path, such
+as `boundaries[0].timeout is required`) and `render<Field>(value, {language})`
+(markdown without the heading, Thai labels for `th`); older field shapes stay
+valid. New fields are optional in v4 and v3 as well. The section order, work
+types, and required sections are specified in [WORKFLOW.md](../../WORKFLOW.md#draft-v5-folder-and-outline).
+
+Agents write intent, requirements,
+tasks, and explicit discovery dispositions once (evidence capabilities default
+to `test`); the
+harness derives required dimensions, refuses unresolved coverage, and validates
+the decision frontier before the compiler generates stable IDs, cross-ledger
+links, specs, and safe detected provider wiring. Multiple specs,
 decisions, diagrams, prototype selections, integration documentation,
 repositories, and external operations are typed extensions. Version 1 remains
-an exact compatibility path and version 2 retains its unambiguous mechanical
-bookkeeping behavior.
+an exact compatibility path, version 2 retains its unambiguous mechanical
+bookkeeping behavior, and version 3 remains readable.
 
 Rich local references resolve to regular files inside the project; remote
 integration references use HTTPS with a fixed version. Semantic amendments may
@@ -157,7 +240,8 @@ logic independently testable.
 - Project-owned test and browser dependencies required by configured evidence
 
 Change Loop prepares its pinned OpenSpec CLI under `.foundation/tools` when it
-is absent and runs declared repository setup commands in isolated workspaces.
+is absent at Prove or Land (Build records it as `deferred` and never stops for
+it) and runs declared repository setup commands in isolated workspaces.
 It does not globally install Playwright, browser binaries, test frameworks, or
 application dependencies; each application locks and maintains those versions.
 
@@ -199,12 +283,80 @@ claude-foundation doctor --stage prove --change <change>
 
 ## Primary agent commands
 
+### Investigation intake records
+
+`investigate --template` now emits record v2; v1 records, states, and handoffs
+remain readable. `purpose: research` permits a facts-only investigation;
+`purpose: change` retains the intent of a feature, improvement, or bug. Command
+names and arguments are unchanged. See [the lifecycle contract](../../WORKFLOW.md#investigate-problem)
+for boundaries and authority.
+
+| Field | Record shape |
+|---|---|
+| `intent` | `{goal, outcome, actors: [], scope: []}`; goal and outcome required when a change is ready |
+| `conversation` | `[{key, speaker: user\|agent, statement, source}]`; cite accessible messages/notes, retain events unchanged |
+| `requirements` | `[{key, revision, kind, statement, origin: user\|agent, status, material, conversationKeys: []}]`; optional `examples`, `criteria`, retirement `reason`, `supersededBy: {key, revision}` |
+| `questions` | `[{key, question, material, status: open\|answered\|deferred, dependsOn: [], workKeys: []}]`; answered rows need `answer` and user `conversationKeys`; deferral needs `reason`; alternatives/recommendation optional |
+| `work` | `[{key, outcome, questionKeys: []}]`; work is independent when all named questions are answered |
+| `experiments` | `[{key, question, criteria: [], material, status: planned\|complete, requirementRefs: [{key, revision}]}]`; complete rows need `findings` and `limitations`; optional bounded `prototypePaths`; retain results and supersede under a new key with `supersededBy` and `reason` |
+| `historyGaps` | Nonempty strings identifying unavailable conversation context; do not claim missing messages were read |
+| `hypotheses` | `[{key, statement, status: open\|supported\|falsified, factKeys: []}]`; settled rows need `factKeys`; optional `experimentKeys` name the current (not superseded) experiments that test the hypothesis, and the report shows them as each open hypothesis's next check |
+
+Requirement kinds are `behavior`, `constraint`, `example`, `exception`,
+`non-goal`, and `success-criterion`. Statuses are `stated`, `confirmed`,
+`proposed`, `unresolved`, `superseded`, and `cancelled`. Explicit user intent
+can be `stated` without another confirmation; `confirmed` and user-origin
+rows must cite a user event. A material proposal or unresolved question cannot
+become an agreement by silence. Revision content and provenance are retained;
+invalid edits preserve the last validated intake for agent repair.
+
+V2 handoffs bind intake content as well as sources and workspace. Change
+authors `investigationCoverage: [{sourceKey, sourceRevision, targets: []}]`.
+Each target is `{kind: requirement, key: <requirement-key>}`, or
+`{kind: scenario, key: <requirement-key>, scenario: <scenario-key-or-name>}`,
+or `{kind: non-goal, key: <exact-non-goal-text>}`, or
+`{kind: constraint, key: <exact-constraint-text>}`, or
+`{kind: design, key: <decision-key>}`. Every active material stated/confirmed
+requirement needs a real target. Several sources can share a target; a source
+can have several targets. Revised/amended agreements retain coverage. Links
+prove structural completeness, not semantic equivalence; the agent compares
+meaning in the compiled packet. Legacy changes need no retroactive mapping.
+
+When material questions remain, the typed action includes `pendingQuestions`
+and `independentWork`. Continue independent investigation while asking for
+the answer; do not perform dependent work or add blanket confirmation gates.
+
+### Command reference
+
 | Command | What it does | When to use it |
 |---|---|---|
-| `change start --template` | Prints the compact semantic draft v3 contract | Beginning a fresh Change |
-| `change start <draft.json>` | Compiles, validates, installs, and prepares one isolated change transactionally | Completing Change |
-| `change amend <change> <amendment.json>` | Adds discovered requirements while preserving canonical content and completed tasks | A semantic v3 Build discovers new behavior |
-| `advance <change> --through build\|proven\|archived` | Runs deterministic steps and returns one `EDIT`, `RUN_EXTERNAL`, `REPAIR`, `WAIT`, `ASK_USER`, or `DONE` action | Every normal step after Change |
+| `investigate --template` | Prints the versioned source/fact/hypothesis record | Starting a bounded investigation |
+| `investigate <record.json>` | Persists source-bound investigation state and emits a Change handoff when ready | Resuming Investigate or crossing into Change |
+| `change start --template` | Leads with the minimal draft v5 folder (`change.json` with `version: 5` and `workType`, plus `proposal.md`) and its file-tool `save` route, then prints the typed-field contract with machine-checkable discovery coverage, `minimalDraftWriting`, one example block per work type (`workTypeExamples`), and the v5 folder layout (`draftFolderV5`); a v4 JSON draft still starts | Beginning a fresh Change |
+| `change start <draft.json \| draft-folder> --inspect` | Returns the next typed intake action and exact resume route without creating a change | Iterating on a semantic draft |
+| `change start <draft.json \| draft-folder>` | Compiles, validates, installs, and prepares one isolated change transactionally | Completing Change |
+| `change revise <change> <draft.json>` | Recompiles a revised semantic draft over the same change id through the start intake gate in the same call (an incomplete intake prints its action and changes nothing), with rollback and a requirement delta for approval; `--merge` applies the file as a partial draft over the recorded compiled-from draft; `--approve-spec --decision-ref <ref> [--through <target>]` records the user's approval in that call | An agreed semantic change must change before Build starts |
+| `change amend <change> <amendment.json>` | Adds, revises, or removes requirements before Land starts, including a `proven` candidate (returns to `building`); requires and retains a discovery delta for v4; a verify-only `updateTasks` amendment fixes an unfinished task's verify command (`--template` prints both); inspects in the same call and amends only at `DONE`, and accepts the same approval flags as `change revise` | A semantic v3/v4 change discovers new or changed behavior |
+| `change amend <change> --task <key\|id> --verify <command> [--reopen]` | Corrects one task's verify command directly through the same transaction (`--reopen` unticks a completed task); keeps the spec approval, claims, and capabilities, refuses an always-passing command, and accepts the task only when the new command passes | A task's verify command is wrong |
+| `advance <change> --through build\|proven\|archived` | Runs deterministic steps and returns one `WORKING`, `EDIT`, `RUN_EXTERNAL`, `REPAIR`, `WAIT`, `ASK_USER`, or `DONE` action | Every normal step after Change |
+
+While a proof runs, another `advance` for the same change returns `WORKING`
+with `wait.progress`: the current `wave`, the providers `running`, each
+`finished` provider with its `status` and `durationMs`, `startedAt`, and
+`elapsedMs`. It is advisory and never changes recovery. Wait for the running
+proof instead of starting another.
+
+Every route `advance` returns stays on this surface: a `command`, `next`,
+instruction, or decision option that would name an operator primitive below
+(`proof`, `land`, `sandbox`, `evidence init`) is rewritten to the matching
+`advance` route, and the recovery ladder (owner repair, `TRY_ALTERNATE_APPROACH`,
+then a `REPAIR` back to the original agent or harness owner with repetition
+evidence on the third unchanged round; only a user-owned boundary becomes a
+question), the
+first-observation `user-environment` question for causes only the user can
+clear (typed `resource`, `credential`, or `network`), the optional `signals[]`
+the envelope carries, and the budget no-progress cap are specified in
+[WORKFLOW.md § Recovery and user decisions](../../WORKFLOW.md#recovery-and-user-decisions).
 
 ## Advanced operator and compatibility commands
 
@@ -219,16 +371,23 @@ claude-foundation doctor --stage prove --change <change>
 | `agents plan <change> [--group <n>] [--pretty]` | Persists the full plan and prints a ≤4 KiB summary or one dispatch group | Before spawning independent workers |
 | `agents dispatch <change> [--pretty]` | Returns one graph- and lease-bound native-host action | Advanced host integration behind `advance` |
 | `advance <change> [--through build\|proven\|archived] [--host-result <result.json>] [--pretty]` | Runs deterministic lifecycle work and returns one minimal action at a real boundary | Normal post-Change agent path |
+| `advance <change> --decision retry\|wait\|pause\|merge\|retain --decision-fingerprint <hash> --decision-ref <ref> --reason <approach>` | Records the user's answer to the offered recovery or advance decision and resumes its retained target; grants no unrelated authority | Agent records an explicit answer |
+| `advance <change> --through archived --restore-target <path,path>` / `--recover-apply settle\|keep-current\|restore-backup` / `advance <change> --undo-land`, each with `--decision-ref <ref>` where the user decides | Restores conflicting target paths inside Land, settles an interrupted apply, or undoes an archived Land whose diff is still uncommitted; see [WORKFLOW.md § `/land`](../../WORKFLOW.md#land-change) | Land conflict, interrupted apply, or the user's undo |
 | `doctor` | Checks runtime and project readiness | After install or when diagnosing setup |
 | `changes` | Lists active changes and readiness | Finding work to resume or land |
-| `packet <change> --phase <phase>` | Prints a compact diagnostic handoff; review packets are ≤8 KiB | Operator/debug inspection |
+| `current` | Prints the one active change with readiness and next command; with none or several it lists candidates and exits non-zero. While exactly one change is active, `advance`, `packet`, `metrics`, `feedback`, `package`, `change audit`, `authority status`, `handoff status`, and `evidence detect\|doctor` may omit `<change>`; `advance` with `--through archived`, `--approve-spec`, `--restore-target`, `--recover-apply`, or `--undo-land` always needs the explicit id | Lost the change id |
+| `packet <change> --phase <phase>` | Prints a compact diagnostic handoff; review packets are ≤20 KiB; `--task` for a completed task prints its read-only packet (`executionAuthority.status: "completed"`) | Operator/debug inspection |
 | `packet <change> --repo <id> [--task <id>] [--pretty]` | Prints a bounded repository or task packet | Starting a native subagent |
-| `metrics <change>` | Reports measured phase/provider cost and emitted context bytes | Finding latency or orchestration overhead |
+| `metrics <change>` | Reports measured phase/provider cost, emitted context bytes, and blocked operations by code, phase, and operation with the latest local reason | Finding latency, orchestration overhead, or where a change keeps stopping |
 | `feedback <change> [--pretty] [--diagnostics]` | Reports current readiness, source-aware timing, repair intervals, blocker coverage, evidence reuse, and the next action; diagnostics exports allowlisted metadata | Explaining why Prove took time without labeling repair as wait |
-| `budget checkpoint <change>` | Reports measured remaining allowance, unfinished work, and the exact resume route | Before deciding whether an exhausted run should continue, rescope, or pause |
-| `exec <change> [--phase <phase>] -- <command…>` | Derives the phase, runs Build commands in the canonical workspace under the shared mutation policy, passes the exit code through, and records duration | Long build-phase commands (container builds, installs, full test runs) |
+| `outcomes [--pretty]` | Read-only rollup of archived changes: first-proof pass, proof runs, review attempts and repair rounds, amendments, reopened tasks, recorded user decisions, cost, and declared escaped defects (from later changes' `fixes`), grouped by workType × impact × riskSignals; unknown values stay `null` with a denominator and `unknownCount`; unreadable states are listed under `skipped` | Judging whether workflow changes improve accepted outcomes |
+| `lessons [--min-changes <n>] [--pretty]` | Read-only grouping of blocker codes and review finding codes that recur in at least `n` distinct changes (default 3, minimum 2), each with a suggested permanent check and the `/change` route; untyped blockers and uncoded findings are counted separately; never creates checks or exports free-text reasons | Turning recurring problems into checks |
+| `package <change> [--pretty]` | Writes the read-only approval package `.foundation/packages/<change>.html`: risk level, technical domains, artifacts by approver role with proof/preview labels, Mermaid diagrams, and optional suggested previews for High/Critical changes; never changes lifecycle state. `change start` and the `advance` approval question also write it and print its path, and a render failure only warns. The draft's optional `scratch` summary and typed `examples` appear first, each example with an after-Build tab read from receipts and previews; page text follows the draft language, and diagrams render with the shipped `.claude/harness/vendor/mermaid.min.js` loaded by relative path ([WORKFLOW.md](../../WORKFLOW.md#approval-package-preview-and-role-lanes)) | Showing approvers the change before they approve |
+| `preview <change> --provider <name> [--decision-ref <ref>] [--pretty]` | Optional, before Build only: runs one declared provider in `.foundation/previews/<change>/workspace` and records a `kind: "preview"` receipt bound to the contract revision. A provider marked `external: true` runs only with the user's `--decision-ref`; preview receipts never satisfy Prove or Land ([WORKFLOW.md](../../WORKFLOW.md#approval-package-preview-and-role-lanes)) | Trying a plan, dry run, mock, or screenshot before approval |
+| `budget checkpoint <change>` | Reports measured remaining allowance, unfinished work, and the exact resume route | Checking remaining allowance and the resume route |
+| `exec <change> [--phase <phase>] [--repo <id>] [--task <id>] -- <command…>` | Derives the phase, runs Build and Prove commands in the change's sandbox under the shared mutation policy, passes the exit code through, and records duration. A multi-repository change picks the sandbox from `--repo`/`--task`, else the caller's directory (a repository sandbox, the shared mirror, or the checkout's copy maps to the same relative path in that repository's sandbox), else the pending tasks when they share one repository, else the shared sandbox; never the main checkout. An unknown repository or task refuses with the known names | Long build-phase commands (container builds, installs, full test runs) and a submodule task's checks |
 | `telemetry host-import <change> <result.json>` | Imports a validated host execution result without prompt or tool payloads | Recording actual model attempts, fallback, usage, and instruction provenance |
-| `budget continue <change> --reason <reason>` | Opens one policy-gated audited completion window without deleting usage | Required model work after exhaustion |
+| `budget continue <change> --reason <reason>` | Opens one policy-gated audited window without deleting usage | Optional explicit widening; exhaustion auto-continues |
 | `change validate <change>` | Validates change artifacts | After creating or revising an agreement |
 | `change audit <change> [--json]` | Audits scenario → claim → task → provider traceability | Before Build or after contract edits |
 | `proof readiness <change>` | Returns READY or a typed blocker with exact next commands | At the end of Build and start of Prove |
@@ -247,16 +406,25 @@ claude-foundation doctor --stage prove --change <change>
 | `sandbox create <change> --unattended --attestation <file>` | Verifies and consumes one trusted host attestation | Unattended Build only |
 | `sandbox create <change> --all` | Creates selected repository sandboxes or repairs missing bindings while preserving valid worktrees | Advanced multi-repo primitive and recovery behind `advance` |
 | `sandbox sync <change> [--resolve <path,path>]` | Synchronizes a revised agreement and reconciles a moved target: a worktree replays onto the new commit, a copy fast-forwards what it left alone; `--resolve` accepts a merged double-edit | When requirements change during Build, or the target moved (another change landed) |
-| `land check <change>` | Checks proof freshness and landing readiness | Before accepting the change |
-| `land record <change> ...` | Legacy compatibility: binds a commit for an already-active commit-oriented transaction | Diagnosing/resuming a legacy transaction only |
-| `land resume <change>` | Rechecks a resumable Land saga | Diagnostic primitive; normal recovery repeats `/land` |
-| `land archive <change>` | Applies, verifies, archives, and safely cleans up | Completing an accepted change |
 | `handoff status <change>` | Shows external operations and Land disposition | Checking work owned by DevOps/SRE/security |
+| `handoff list [--open] [--owner <team>] [--environment <env>] [--json]` | Lists operational obligations across active and archived changes | Finding post-Land work without knowing a change ID |
 | `handoff packet <change> [--id H00n]` | Emits one credential-free operator packet | Sending the exact operation to its named owner |
-| `handoff record <change> ...` | Records accepted/completed/rejected with actor and evidence references | Resuming Land without turning operator work into a developer task |
+| `handoff record <change> ...` | Records accepted/completed/rejected/cancelled/superseded outcomes with durable references | Updating operational state without reopening developer tasks |
 | `migrate [legacy-id] [--apply]` | Reads legacy `.workflow/` state and optionally creates migration candidates | Recovering an older installation without promoting unverified prose |
 | `host instruction <command> --protocol 1 --format json --arguments <text>` | Resolves the package-owned command instruction | Host integration without reading consumer command files |
 | `host agent-contract --protocol 1 --format json` | Resolves the portable package-owned agent contract | Installing or refreshing a host adapter |
+
+`/land <change>` is the only user-facing Land operation. The registered
+`land check`, `land advance`, `land recover`, `land archive`, `land record`,
+`land resume`, `land plan`, and `land pointers` routes are internal compatibility
+or diagnostic primitives. The Harness invokes them through the convergent Land
+transaction; agents must not ask users to compose or run them. `land check` runs
+Land's own pre-mutation preflight read-only, so it stops on the same code Land
+would, and refuses unproven work instead of reporting it ready. `land advance`
+is only an alias of `advance <change> --through archived`: it issues no grant,
+prints that route's JSON envelope, and the phase guard rewrites it to that
+route. Land requires current passing proof
+([WORKFLOW.md § Blocking policy](../../WORKFLOW.md#blocking-policy)).
 
 Consumer-quality configuration is opt-in and remains report-only until the
 project explicitly enables enforcement. The complete installed command,
@@ -285,7 +453,7 @@ sessions, finding closure, and exact scope in a change-level hash-chained
 attempt history. Low gets one full AI review; medium and high get at most one
 full AI review plus one post-correction delta. One infrastructure retry is
 separate from delivered review waves. A final in-contract blocker is closed by
-its named claims and passing critical-case receipts, not a third AI. High-risk decisions are settled
+its named claims and passing critical-case receipts; without that binding, one closure review covers the repaired delta. High-risk decisions are settled
 in the initial Decision Sheet, not a mandatory human-final gate. Deleting a receipt, aborting, or
 renaming a provider cannot reset the circuit. Acceptance is revalidated against explicit claims, human
 identity, criteria, observation, provenance, durable evidence, contract reason,
@@ -345,7 +513,11 @@ rather than pretending packages are independently landable remotes.
 Per-change `repositories.yaml` selects access
 and dependency scope. The runtime creates child worktrees under
 `.foundation/repository-sandboxes/`, hashes them into one composite snapshot,
-and scopes provider commands and receipts with `repository`. Read-selected Git
+and scopes provider commands and receipts with `repository`. That sandbox is
+the repository's one location: `advance` EDIT tasks name it as `workspace`, the
+phase guard treats it as in-workspace, and review findings named through root
+bind to it. A declared repository's directory or gitlink in the root workspace
+is never a root change. Read-selected Git
 repositories also receive detached worktrees: they participate in proof but
 cannot contribute a Land commit. A provider that executes from one repository
 but needs several declares `repository` as its cwd and `repositories` as its
@@ -357,7 +529,8 @@ live in `handoffs.yaml` and durable state under `.foundation/handoffs/`.
 `[repo:<id>]`, `[depends:<task-ids>]`,
 `[kind:<kind>]`, `[paths:<paths>]`, and `[resources:<locks>]` are compact
 execution annotations. `agents plan` uses them to prevent same-workspace or
-shared-resource concurrency and applies the model tiers in `foundation.json`.
+shared-resource concurrency and applies the model tiers in `foundation.json` when `models.routing` is true;
+otherwise every task uses the standard tier unless it requests one.
 The complete plan is persisted under `.foundation/plans/`; stdout is a compact
 summary, or one group selected with `--group`. `packet --task` emits only the
 chosen task's claims, files, providers, and model. A one-task change recommends
@@ -381,14 +554,25 @@ starts a model process itself.
 The host copies `executionAuthority.leaseId` from the acquired task packet into
 `agents release --lease-id`. After any takeover, a generation-less release is
 refused so a late executor with the same stable owner cannot clear the current
-lease.
+lease. `agents acquire` by the lease's own owner after a graph, contract, or
+key change re-grants it under a new generation with the original write
+baseline instead of refusing, and `agents release` performs that re-grant
+itself when the graph or contract moved after acquisition, so the worker never
+runs acquire-then-release; only a task an amendment removed from the plan is
+refused. `agents release` of another owner's expired lease
+takes it over without `--force`; only a live foreign lease needs `--force
+--decision-ref`. `authority record` on a stale request records nothing, issues
+the replacement request, and names it with the `advance` resume route.
 
 JSON output is compact by default and `--pretty` is inspection-only. Plan
-schema 5 compiles a deterministic setup/service/task/provider/repository/Land
+schema 6 compiles a deterministic setup/service/task/provider/repository/Land
 graph, prioritizes the longest ready dependency path within configured resource
 and capacity bounds, resumes dependencies satisfied by completed tasks, reports
 `proof-ready` after all tasks complete, and declares the deepest model required
-by a mixed session while carrying instruction provenance. Packet schema 7 adds
+by a mixed session while carrying instruction provenance. It retains a bounded
+graph-v2 authority snapshot so compatible upgrades can resume, while missing or
+stale authority returns affected tasks and their dependants to verification as
+defined in [`WORKFLOW.md`](../../WORKFLOW.md). Packet schema 7 adds
 the active graph, lease fencing generation, execution attempt, and versioned
 result authority; it rejects unknown, cross-repository, providerless, stale, or
 out-of-scope task results. Large collections are previews plus counts and
@@ -425,29 +609,19 @@ partial binding in place and preserves every valid existing child worktree.
 
 ## Normal flow
 
-### 1. Define the agreement
+The [lifecycle contract](../../WORKFLOW.md#lifecycle-commands) owns Change,
+Build, Prove, Land, and optional Deliver. Normal agent execution uses
+`advance <change> --through build|proven|archived`. Commands listed above as
+compatibility primitives are for diagnostics and integrations.
 
-Use `/change` to create or revise `openspec/changes/<change>/`. A complete
-change declares its intent, tasks, claims, and required evidence capabilities.
-Use `/investigate` first only when the problem or direction is materially
-unclear.
+Land requires explicit authority and completes at `archived`. It preserves
+Git HEAD and index; commit, push, and PR creation need separate authority.
+For interrupted work follow [recovery and user decisions](../../WORKFLOW.md#recovery-and-user-decisions).
 
-Validate the result:
+### Sandbox setup and synchronization
 
-```bash
-claude-foundation change validate <change>
-claude-foundation change audit <change>
-claude-foundation doctor --stage build --change <change>
-```
-
-Task annotations such as `[claims:profile-owner-update]` provide the explicit
-claim link. The audit also checks exact scenario mapping, provider coverage,
-security negative paths, and migration rollback/integrity expectations.
-
-### 2. Build in isolation
-
-Use `/build <change>`. For a Git project, the harness creates an isolated
-workspace under `.foundation/sandboxes/<change>`.
+The following details are operator diagnostics; the coordinator owns routine
+preparation, synchronization, and recovery.
 
 A fresh sandbox has no installed dependencies — the copy path excludes them
 and a worktree is a bare checkout. Declare a setup command and the harness
@@ -458,16 +632,24 @@ runs it once inside every newly created sandbox:
 { "sandbox": { "setupCommand": "npm ci", "setupTimeoutMs": 600000 } }
 ```
 
-Without it, `sandbox create` prints a NOTE naming this snippet whenever the
-project has a lockfile, and the phase guard refuses linking or copying the
-checkout's `node_modules` from inside the sandbox.
+Without it, the harness runs the install the workspace lockfile pins
+(`package-lock.json`/`npm-shrinkwrap.json` → `npm ci`, `pnpm-lock.yaml`,
+`yarn.lock`, `bun.lock`/`bun.lockb` → their frozen-lockfile install) and
+records it on the workspace like a configured setup (`source: "lockfile"`).
+`{ "sandbox": { "installDependencies": false } }` opts out. A failed or missing
+install never blocks: preparation retries it, then `advance` hands it to the
+agent as a `REPAIR` with the command, directory, and log tail. Setup records a
+digest of `package.json` and the lockfiles; when a Build edit changes them, the
+next `exec`, task check, or proof run reruns the same setup first. The phase
+guard still refuses linking or copying the checkout's `node_modules` into the
+sandbox.
 
 In a multi-repository topology, each `openspec/repositories.yaml` row may
 declare its own `setupCommand`, which runs inside that repository's sandbox;
 `sandbox.setupCommand` still covers the root workspace. The outcome is
-recorded on the workspace record (`setup: ok|failed`). A failing command keeps
-the sandbox and prints a warning naming the command and workspace path — rerun
-it there manually before Prove.
+recorded on the workspace record (`setup: ok|failed`). A failing command preserves the sandbox and its setup result. Resume
+`advance`: preparation retries failed setup while reusing successful repository
+setup. Repair the declared command when the failure needs a project change.
 
 Keep the setup command to dependency installation. Anything it writes outside
 ignored directories counts toward the change's surface, exactly as if the
@@ -501,8 +683,18 @@ repository and advances the complete set together.
 For an **isolated copy**, files another change landed that this sandbox never
 touched fast-forward into the sandbox (baseline included), and a file both sides
 edited is named as a `CONFLICT` at sync rather than discovered at Land. Merge
-the target's version into the sandbox copy, then declare it with
-`--resolve <path>` (comma-separate several paths).
+the target's version into the sandbox copy and resume with `advance`: the next
+sync settles the path only when a 3-way check against the copy's stored base
+bytes proves the target's edit is in the copy and no conflict markers remain.
+`--resolve <path>` (comma-separate several paths) declares a merge explicitly.
+
+A copy keeps its base bytes in `.foundation/copy-base/`, a content-addressed
+store keyed by the baseline's sha256 and shared across changes. The declared
+surface is stored when the copy is made; any other path is stored the first
+time sync or Land sees it diverge while the target, the sandbox copy, or the
+base commit still holds the baseline bytes. Files over 8 MiB, binary files,
+and bases already gone are never stored, so their merges and restores stay
+unprovable and Land keeps the `target-edit-conflict` decision.
 
 A target that moved and could not be reconciled is always reported, never
 silent: `sandbox inspect <change>` shows the recorded base against the target's
@@ -513,111 +705,44 @@ Packet artifacts are the other direction: their source of truth is
 `openspec/changes/<change>/` in the target, so a packet file edited only in
 the sandbox blocks the sync until the edit is ported there — only `tasks.md`
 ticks merge back automatically.
-
-### 3. Prove the claims
-
-Use the resumable proof path:
-
-```bash
-claude-foundation proof advance <change>
-```
-
-It evaluates the current gate, reuses valid receipts, returns one aggregated
-repair batch when product work is needed, routes review before acceptance, and
-returns a stable external wait without polling. After repair, a fresh call
-selectively reruns invalidated evidence. Readiness, collection, direct authority
-calls, execution, finalization, and audit remain diagnostic or integration
-surfaces used by the resumable command, doctor, Land, and runtime tests; they
-are not the normal agent loop.
-
-The scheduler:
-
-- reuses receipts bound to unchanged inputs;
-- deduplicates identical commands within an execution;
-- runs independent read-only providers concurrently;
-- serializes providers that share exclusive resources;
-- marks incomplete or ambiguous evidence `inconclusive` instead of guessing.
-
-A successful command is not automatically sufficient evidence. Every declared
-claim must be covered by a valid receipt from each required capability. See
-[EVIDENCE.md](EVIDENCE.md) for adapter configuration, Playwright claim
-annotations, resource locks, and receipt reuse rules.
-
-### 4. Land transactionally
-
-Check readiness:
-
-```bash
-claude-foundation land check <change>
-```
-
-Then complete the change:
-
-```bash
-claude-foundation land archive <change>
-```
-
-`land archive` verifies the content-bound proof, applies the isolated diff when
-needed, checks state identity, synchronizes the specs, archives the OpenSpec
-change, and cleans up a safely owned sandbox. Before mutation it builds an
-immutable touched-path projection, backs up those paths, and writes an apply
-journal. Each write is verified; failure rolls the projection back while
-leaving unrelated target edits alone. The sandbox remains the proof subject
-until archive completes, so an interrupted OpenSpec archive can resume without
-invalidating proof. Transaction backups are removed only after archive audit.
-
-Change Loop does not commit, push, or open a pull request implicitly.
+Harness-owned semantic amendments stay in the sandbox until Land. Build
+preparation and base-move sync preserve them. Competing target packet edits
+stop `advance` with the `amended-agreement-conflict` decision; the user's
+answer is recorded with `advance --decision` (the primitive equivalent is
+`--resolve openspec/changes/<change>`); see the
+[Build-time amendment contract](../../WORKFLOW.md#change-intent).
 
 ## Evidence model
 
-`evidence.yaml` stores stable behavioral claims. `execution.yaml` stores
-commands, reports, services, readiness identity, and resource wiring. Legacy
-changes that keep `providers` in `evidence.yaml` remain readable; `evidence
-upgrade` separates them. Five adapters are available:
+Claims belong to `evidence.yaml`. The compiler derives ordinary provider wiring;
+`execution.yaml` is conditional on custom commands, reports, services, or
+readiness. See [EVIDENCE.md](EVIDENCE.md) for adapters, capability selection,
+claim coverage, resource scheduling, and receipt validity.
 
-| Adapter | Use |
-|---|---|
-| `command` | One deterministic command for one provider |
-| `test-discovery` | One test process that emits test and discovery receipts |
-| `playwright` | Structured browser evidence mapped to claim annotations |
-| `contract-digest` | One declared file hashed across two or more repositories, passing only when the bytes agree |
-| `external` | A receipt produced outside Change Loop |
-
-Only `external` skips execution entirely. `contract-digest` runs no command but
-still executes: it reads and hashes the declared file itself.
-
-Provider names describe what is proven, not which tool runs. The built-in
-contracts include behavioral tests, discovery, browser behavior, mutation,
-state identity, integration, compatibility, performance, security, review,
-static analysis, migration, accessibility, resilience, observability, acceptance,
-deployment, and supply-chain checks.
-
-The project selects only the capabilities required by the risk and claims of
-the change. Task size affects budgeting and slicing; it does not weaken proof.
-
-Changed-surface policy can only speak once files exist. `change resolve
---surface <glob,glob>` records the paths a change expects to touch so the same
-rules run at change time: `doctor --stage change` reports the forecast
-capabilities, names the declared glob behind each, and says whether an
-independent reviewer and reviewer diversity will be required — before a
-signature is spent on a contract that is still moving. `change validate` warns
-on the same gap. The forecast never gates: a declared surface is advisory, and
-required evidence still comes from the real changed surface.
+Use `advance <change> --through proven` for the normal agent path. It aggregates
+findings and reuses valid evidence. Diagnostic primitives do not replace the
+coordinator's recovery protocol.
 
 ## Runtime state
 
 Generated state lives under `.foundation/` and must not be treated as product
 source:
 
-This table is the canonical listing of what the runtime writes. Shorter
+This table is the canonical inventory of runtime records and working inputs.
+The ownership exceptions are described above. Shorter
 listings elsewhere name this file as their source rather than restating it.
 
 | Path | Contents |
 |---|---|
 | `.foundation/runtime/` | Runtime operation and handoff state, one file per change |
+| `.foundation/drafts/` | Agent-written semantic drafts awaiting `change start` (the seeded allowlist permits edits here) |
+| `.foundation/intake/` | One draft/source-bound semantic intake snapshot per inspected draft path |
+| `.foundation/amendments/` | Transient verify-only amendment staged by `change amend --task/--verify`; removed when the command ends |
+| `.foundation/investigations/` | Source-bound Investigate state, metrics, no-progress checkpoint, and Change handoff digest |
 | `.foundation/receipts/` | Live content-bound provider receipts and `proof.json` |
 | `.foundation/evidence/` | Immutable proof bundles: manifests, receipt copies, durable artifacts, and the hash-chained review-attempt ledger |
 | `.foundation/snapshots/` | One content snapshot descriptor per proof |
+| `.foundation/cache/` | Digest-keyed reuse of successful OpenSpec version probes and strict-lint passes across commands; safe to delete |
 | `.foundation/logs/` | Provider logs, telemetry events, receipt-reuse and budget audits |
 | `.foundation/locks/` | Recoverable per-change proof and authority mutation leases |
 | `.foundation/reviews/` | Structured reports returned by configured AI reviewers |
@@ -626,15 +751,20 @@ listings elsewhere name this file as their source rather than restating it.
 | `.foundation/plans/` | Agent execution plans |
 | `.foundation/leases/` | Task and resource leases |
 | `.foundation/transactions/` | Land apply journals and staged backups |
+| `.foundation/deliveries/` | Optional post-archive Deliver checkpoints and verified PR receipts |
 | `.foundation/authority/` | Review and acceptance requests and their completion records |
 | `.foundation/attestations/` | Unattended-execution challenges and consumed nonces |
 | `.foundation/instruction-manifests/` | Instruction provenance per command |
-| `.foundation/recovery/` | Quarantined abandoned changes and orphaned runtime state |
+| `.foundation/recovery/` | Quarantined abandoned changes, undone Lands (`land-undone/`), and orphaned runtime state |
+| `.foundation/backups/` | Commit bundles, patches, and file copies of unlanded sandbox work, written before a sandbox is removed |
+| `.foundation/agreement-drift/` | Isolated-packet edits made outside an amendment, saved when the harness restores the approved text |
 | `.foundation/prototypes/` | Disposable comparison prototypes, never admissible as evidence |
-| `.foundation/policy.json` | Optional project rules mapping paths to required capabilities |
+| `.foundation/packages/` | Read-only approval packages (`<change>.html`), regenerated on demand |
+| `.foundation/previews/` | Optional pre-Build preview workspaces and `kind: "preview"` receipts, never admissible as evidence |
+| `.foundation/policy.json` | Optional project-authored rules mapping paths to required capabilities; not generated proof |
 | `.foundation/install-manifest.txt` | Installer-owned record of managed files |
 
-`repository-sandboxes/`, `prototypes/`, `recovery/`, and `policy.json` appear
+`intake/`, `repository-sandboxes/`, `prototypes/`, `packages/`, `previews/`, `recovery/`, `agreement-drift/`, and `policy.json` appear
 only once something creates them.
 
 Receipts are reusable only while their bound inputs remain unchanged. Every
@@ -646,11 +776,14 @@ Review and acceptance receipts additionally carry the change's diff identity
 and the packet review hash. When a sandbox sync replays the change onto a
 moved base without altering either — the common shape of "another change
 landed first" — `proof run` / `proof advance` rebind the verdict to the new
-workspace hash instead of expiring it, and no review wave is consumed. A
-replay that does alter the diff expires the verdict as before; if that
-expiry would exhaust the AI review wave cap, `authority reset-base-move
-<change> --decision-ref <ref>` releases exactly the expired passing attempt
-from the count under a recorded user decision.
+workspace hash instead of expiring it, and no review wave is consumed. This
+holds for a human verdict exactly as for an AI one, so no new request opens.
+A replay that does alter the diff expires the verdict and opens a new review
+request; if that
+expiry would exhaust the AI review wave cap, the next review dispatch
+releases exactly the expired passing attempt from the count under a
+harness-owned reference; `authority reset-base-move <change> --decision-ref
+<ref>` remains the manual route.
 
 Copy sandboxes also supply a review contribution identity, computed from
 the baseline and current Apply manifests. Forwarded untouched files disappear
@@ -676,6 +809,14 @@ Use metrics to inspect the actual cost of a run:
 claude-foundation metrics <change>
 ```
 
+`hostToolProfile` (`measurement`, `total`, `byTool`, `byCategory`) counts
+imported Claude transcript `tool_use` blocks by category (harness CLI, harness
+doc reads, state reads, harness artifact writes, product writes, test runs,
+other); without transcript data every count is null. Automatic `advance` work
+is recorded as the stages `advance.evidence-wiring`, `advance.review-run`,
+`advance.sandbox-sync`, and `build.task-check`; Land work inside archive is
+recorded as `land.check`, `land.apply`, `land.archive`, and `land.cleanup`.
+
 `commandProfile` separates lifecycle mutations from read-only inspections,
 reports elapsed union time and the most expensive commands, and identifies
 repeated checks observed with the same command arguments, runtime revision,
@@ -689,7 +830,11 @@ waves with ready/executed/reused node counts, measured queueing where execution 
 harness-owned, and peak concurrency. Unknown queueing remains `null`, never zero.
 
 Context is budgeted at the control surface: plan summaries are at most 4 KiB,
-task and review packets 8 KiB, repository packets 12 KiB, and global packets 16 KiB.
+task and review packets 20 KiB, repository packets 24 KiB, and global packets 32 KiB.
+These defaults give a measured three-repository, three-task change (20 claims on
+one task) about 1.5x headroom; `foundation.json execution.packetBytes` overrides
+them within the hard `2048..65536` ceiling, and an over-budget packet blocks with
+its largest fields.
 Oversized artifacts are referenced by path and digest. The budget covers the
 exact compact bytes written to stdout. Every emitted plan and packet records
 its byte count as an atomic event below
@@ -713,21 +858,14 @@ never multiplication. Only a
 window opened by
 `budget continue` keeps its granted numbers. At 85% the packet enters `completion-only`: it
 forbids speculative investigation, scope expansion, optional refactors, and new
-subagents while allowing focused fixes and required proof work. Crossing 100%
-raises `NEEDS_USER_DECISION` on the first exhausted window. New model work waits
-for continue, explicit contract revision, or pause; the runtime never silently
-drops acceptance criteria or moves unfinished work out of the contract. Packet,
-readiness, provider execution, receipt reuse, proof-resume, metrics, Land
-recovery, and archive remain available. A user may open a fresh audited window
-with `budget continue` only when readiness identifies required model-completable
-code or configuration work. Every exhausted continuation asks again, up to the
-configured ceiling. Active leases, external evidence, infrastructure failures,
-and ready deterministic work do not qualify. The reason is audit context, not
-the policy gate; counters and requirements are never deleted or silently reset.
-`budget checkpoint` makes that pause resumable: it reports measured capacity,
-remaining tasks/provider blockers, the user prompt, and the command the agent
-will run after an approved continuation without pretending to forecast unknown
-model demand.
+subagents while allowing focused fixes and required proof work. Budget is
+advisory: crossing 100% opens a new same-size harness window every time and
+never asks the user; the runtime never silently drops acceptance criteria or
+moves unfinished work out of the contract. `budget continue` is an optional,
+audited explicit widening up to the configured ceiling; counters and
+requirements are never deleted or silently reset.
+`budget checkpoint` reports measured capacity and remaining tasks/provider
+blockers without pretending to forecast unknown model demand.
 
 A control-target HEAD move remains `control-head-moved` unless target bytes
 match the change projection or an explicit external delivery reference exists.

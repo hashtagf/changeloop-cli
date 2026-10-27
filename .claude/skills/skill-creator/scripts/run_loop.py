@@ -23,19 +23,23 @@ from scripts.utils import parse_skill_md
 
 def split_eval_set(eval_set: list[dict], holdout: float, seed: int = 42) -> tuple[list[dict], list[dict]]:
     """Split eval set into train and test sets, stratified by should_trigger."""
-    random.seed(seed)
+    if not 0 <= holdout < 1:
+        raise ValueError("holdout must be in [0, 1)")
+    rng = random.Random(seed)
 
     # Separate by should_trigger
     trigger = [e for e in eval_set if e["should_trigger"]]
     no_trigger = [e for e in eval_set if not e["should_trigger"]]
 
     # Shuffle each group
-    random.shuffle(trigger)
-    random.shuffle(no_trigger)
+    rng.shuffle(trigger)
+    rng.shuffle(no_trigger)
 
     # Calculate split points
-    n_trigger_test = max(1, int(len(trigger) * holdout))
-    n_no_trigger_test = max(1, int(len(no_trigger) * holdout))
+    def held_out_count(group):
+        return min(len(group) - 1, max(1, int(len(group) * holdout))) if holdout and len(group) > 1 else 0
+    n_trigger_test = held_out_count(trigger)
+    n_no_trigger_test = held_out_count(no_trigger)
 
     # Split
     test_set = trigger[:n_trigger_test] + no_trigger[:n_no_trigger_test]
@@ -60,6 +64,12 @@ def run_loop(
     log_dir: Path | None = None,
 ) -> dict:
     """Run the eval + improvement loop."""
+    if not eval_set or len({e["query"] for e in eval_set}) != len(eval_set):
+        raise ValueError("evaluation queries must be nonempty and unique")
+    if min(num_workers, timeout, max_iterations, runs_per_query) <= 0:
+        raise ValueError("workers, timeout, iterations and runs must be positive")
+    if not 0 <= holdout < 1 or not 0 <= trigger_threshold <= 1:
+        raise ValueError("invalid holdout or trigger threshold")
     project_root = find_project_root()
     name, original_description, content = parse_skill_md(skill_path)
     current_description = description_override or original_description
@@ -83,8 +93,8 @@ def run_loop(
             print(f"Description: {current_description}", file=sys.stderr)
             print(f"{'='*60}", file=sys.stderr)
 
-        # Evaluate train + test together in one batch for parallelism
-        all_queries = train_set + test_set
+        # Keep held-out observations unavailable until training selection is frozen.
+        all_queries = train_set
         t0 = time.time()
         all_results = run_eval(
             eval_set=all_queries,
@@ -98,6 +108,7 @@ def run_loop(
             model=model,
         )
         eval_elapsed = time.time() - t0
+        validate_results(all_results, all_queries)
 
         # Split results back into train/test by matching queries
         train_queries_set = {q["query"] for q in train_set}
@@ -109,7 +120,7 @@ def run_loop(
         train_summary = {"passed": train_passed, "failed": train_total - train_passed, "total": train_total}
         train_results = {"results": train_result_list, "summary": train_summary}
 
-        if test_set:
+        if test_result_list:
             test_passed = sum(1 for r in test_result_list if r["pass"])
             test_total = len(test_result_list)
             test_summary = {"passed": test_passed, "failed": test_total - test_passed, "total": test_total}
@@ -161,10 +172,10 @@ def run_loop(
                 neg_runs = sum(r["runs"] for r in neg)
                 tn = neg_runs - fp
                 total = tp + tn + fp + fn
-                precision = tp / (tp + fp) if (tp + fp) > 0 else 1.0
-                recall = tp / (tp + fn) if (tp + fn) > 0 else 1.0
-                accuracy = (tp + tn) / total if total > 0 else 0.0
-                print(f"{label}: {tp+tn}/{total} correct, precision={precision:.0%} recall={recall:.0%} accuracy={accuracy:.0%} ({elapsed:.1f}s)", file=sys.stderr)
+                precision = f"{tp / (tp + fp):.0%}" if tp + fp else "unknown"
+                recall = f"{tp / (tp + fn):.0%}" if tp + fn else "unknown"
+                accuracy = f"{(tp + tn) / total:.0%}" if total else "unknown"
+                print(f"{label}: {tp+tn}/{total} correct, precision={precision} recall={recall} accuracy={accuracy} ({elapsed:.1f}s)", file=sys.stderr)
                 for r in results:
                     status = "PASS" if r["pass"] else "FAIL"
                     rate_str = f"{r['triggers']}/{r['runs']}"
@@ -213,13 +224,20 @@ def run_loop(
 
         current_description = new_description
 
-    # Find the best iteration by TEST score (or train if no test set)
+    # Select using training only; test once after freezing the selected description.
+    best = max(history, key=lambda h: h["train_passed"])
+    best_score = f"{best['train_passed']}/{best['train_total']}"
     if test_set:
-        best = max(history, key=lambda h: h["test_passed"] or 0)
-        best_score = f"{best['test_passed']}/{best['test_total']}"
-    else:
-        best = max(history, key=lambda h: h["train_passed"])
-        best_score = f"{best['train_passed']}/{best['train_total']}"
+        confirmation = run_eval(
+            eval_set=test_set, skill_name=name, description=best["description"],
+            num_workers=num_workers, timeout=timeout, project_root=project_root,
+            runs_per_query=runs_per_query, trigger_threshold=trigger_threshold, model=model,
+        )
+        validate_results(confirmation, test_set)
+        best["test_results"] = confirmation["results"]
+        best["test_total"] = len(test_set)
+        best["test_passed"] = sum(r["pass"] for r in confirmation["results"])
+        best["test_failed"] = best["test_total"] - best["test_passed"]
 
     if verbose:
         print(f"\nExit reason: {exit_reason}", file=sys.stderr)
@@ -230,6 +248,8 @@ def run_loop(
         "original_description": original_description,
         "best_description": best["description"],
         "best_score": best_score,
+        "selection_metric": "train",
+        "heldout_status": "observed" if test_set else "not-run",
         "best_train_score": f"{best['train_passed']}/{best['train_total']}",
         "best_test_score": f"{best['test_passed']}/{best['test_total']}" if test_set else None,
         "final_description": current_description,
@@ -239,6 +259,15 @@ def run_loop(
         "test_size": len(test_set),
         "history": history,
     }
+
+
+def validate_results(output: dict, queries: list[dict]) -> None:
+    """An incomplete or unavailable execution cannot establish a passing score."""
+    rows = output.get("results", [])
+    if len(rows) != len(queries) or {r.get("query") for r in rows} != {q["query"] for q in queries}:
+        raise RuntimeError("evaluation returned incomplete or duplicate query results")
+    if any(type(r.get("pass")) is not bool or type(r.get("runs")) is not int or r["runs"] <= 0 for r in rows):
+        raise RuntimeError("evaluation requires observed runs and boolean outcomes")
 
 
 def main():

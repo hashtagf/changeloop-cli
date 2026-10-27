@@ -1,9 +1,12 @@
 ---
 name: concurrency-fundamentals
-description: Design or review in-process concurrency involving threads, async tasks, event loops, shared mutable state, locks, atomics, cancellation, or bounded parallelism. Use before code whose correctness depends on interleaving. Use queue-fundamentals for cross-process async and database-fundamentals for transactional writer conflicts. Skip sequential code and pure immutable transformations.
+description: "Design in-process async, threads, shared state, cancellation, atomicity, and bounded parallelism. Use when interleaving affects correctness. Record invariants and executable evidence in OpenSpec; skip harness worker scheduling, cross-process queues, and database isolation."
 ---
 
 # Concurrency fundamentals
+
+Test retries, partial failure, and restart ownership. PID alone cannot prove
+a stale lock. Harness scheduling is not application concurrency.
 
 Use this as the primary skill when multiple in-process activities can overlap.
 

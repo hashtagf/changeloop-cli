@@ -37,6 +37,20 @@ export function parseJsonOutput(value) {
   catch { return null; }
 }
 
+// A command that logs before its result: the whole output, else the last line
+// that is a JSON object. Earlier lines are logs, never a second result.
+export function parseLastJsonLine(value) {
+  const whole = parseJsonOutput(value);
+  if (whole !== null) return whole;
+  const lines = String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (!lines[index].startsWith("{")) continue;
+    const parsed = parseJsonOutput(lines[index]);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+  }
+  return null;
+}
+
 export function parseTapOutput(value) {
   const text = String(value || "");
   if (!/^(TAP version|\s*(?:ok|not ok)\b)/m.test(text)) return null;
@@ -66,6 +80,40 @@ export function parseTapOutput(value) {
   };
 }
 
+// `go test -json` prints one event object per line. Each test's (and
+// subtest's) last terminal action counts once, as `go test -v` prints one
+// `--- PASS` per subtest. A package that fails with no failing test (a build
+// error) still counts as a failure, so a broken build never reads as passing.
+const GO_TERMINAL_ACTIONS = new Set(["pass", "fail", "skip"]);
+export function parseGoTestJsonOutput(value) {
+  const tests = new Map();
+  const failedPackages = new Set();
+  let events = 0;
+  for (const line of String(value || "").split(/\r?\n/)) {
+    const text = line.trim();
+    if (!text.startsWith("{")) continue;
+    let event;
+    try { event = JSON.parse(text); } catch { continue; }
+    if (!event || typeof event.Action !== "string" || typeof event.Package !== "string") continue;
+    events += 1;
+    if (!GO_TERMINAL_ACTIONS.has(event.Action)) continue;
+    if (typeof event.Test === "string" && event.Test)
+      tests.set(`${event.Package}\0${event.Test}`, { id: event.Test, status: event.Action });
+    else if (event.Action === "fail") failedPackages.add(event.Package);
+  }
+  if (!events || (!tests.size && !failedPackages.size)) return null;
+  const rows = [...tests.values()];
+  const count = (status) => rows.filter((row) => row.status === status).length;
+  const failed = Math.max(count("fail"), failedPackages.size ? 1 : 0);
+  return {
+    totalTests: rows.length,
+    passed: count("pass"),
+    failed,
+    format: "go-test-json",
+    criticalCases: rows.map(({ id, status }) => ({ id, status }))
+  };
+}
+
 export function parseNodeTestSpecOutput(value) {
   const text = String(value || "").replace(/\x1b\[[0-9;]*m/g, "");
   const testsFooter = [...text.matchAll(/^ℹ tests\s+(\d+)\s*$/gm)].at(-1);
@@ -86,6 +134,35 @@ export function parseNodeTestSpecOutput(value) {
     format: "node-spec",
     criticalCases
   };
+}
+
+// Vitest (`Tests  2 failed | 39 passed (41)`) and Jest
+// (`Tests:       1 failed, 40 passed, 41 total`) print a counted footer,
+// usually colored. The last footer wins so a watch rerun reports once.
+export function parseRunnerSummaryOutput(value) {
+  const text = String(value || "").replace(/\x1b\[[0-9;]*m/g, "");
+  const vitest = [...text.matchAll(/^\s*Tests\s{2,}(.+?)\s+\((\d+)\)\s*$/gm)].at(-1);
+  const jest = [...text.matchAll(/^\s*Tests:\s+(.+?),?\s+(\d+) total\s*$/gm)].at(-1);
+  const unittest = [...text.matchAll(/^Ran (\d+) tests? in [\d.]+s\s*\n+(OK|FAILED)\b(.*)$/gm)].at(-1);
+  if (!vitest && !jest && unittest) {
+    const totalTests = Number(unittest[1]);
+    if (!Number.isSafeInteger(totalTests)) return null;
+    const failed = unittest[2] === "OK" ? 0 :
+      (unittest[3].match(/(?:failures|errors)=(\d+)/g) || [])
+        .reduce((sum, part) => sum + Number(part.split("=")[1]), 0) || 1;
+    return { totalTests, passed: Math.max(0, totalTests - failed), failed,
+      format: "unittest-summary", criticalCases: [] };
+  }
+  const match = vitest || jest;
+  if (!match) return null;
+  const count = (label) => {
+    const found = match[1].match(new RegExp(`(\\d+) ${label}`));
+    return found ? Number(found[1]) : 0;
+  };
+  const totalTests = Number(match[2]);
+  if (!Number.isSafeInteger(totalTests)) return null;
+  return { totalTests, passed: count("passed"), failed: count("failed"),
+    format: vitest ? "vitest-summary" : "jest-summary", criticalCases: [] };
 }
 
 // The dependency-free shell suites emit counted summaries, including when a
@@ -114,6 +191,35 @@ export function parseAssertionSummaryOutput(value) {
   }
   return { totalTests, failed, passed: totalTests - failed,
     format: "assertion-summary", criticalCases: [] };
+}
+
+// Rapid-lane fallback when no count parses: a line that only an executed,
+// passing test prints. It proves "at least one test ran", never a count, and a
+// runner line saying nothing ran vetoes every positive marker. A bare `✔` is
+// also printed by linters and builders, so it counts only beside node's own
+// runner summary reporting at least one test.
+const NODE_RUNNER_SUMMARY = /^(?:ℹ|#) (?:tests|pass)\s+[1-9]\d*\s*$/m;
+const EXECUTED_TEST_MARKERS = Object.freeze([
+  ["node-spec-pass", /^\s*✔\s+\S/m, NODE_RUNNER_SUMMARY],
+  ["tap-ok", /^\s*ok\s+[1-9]\d*\b/m],
+  ["jest-file-pass", /^\s*PASS\s+\S+/m],
+  ["go-test-pass", /^\s*--- PASS: \S+/m],
+  ["go-package-ok", /^ok\s+\S+\s+[\d.]+s\s*$/m],
+  ["unittest-case-ok", /^test\S*\s.*\.\.\.\s+ok\s*$/m],
+  ["passed-count", /(?:^|[\s,|(])[1-9]\d*\s+(?:tests?\s+)?(?:passed|passing)\b/im],
+  ["unittest-ran", /^Ran\s+[1-9]\d*\s+tests?\b/m],
+  ["rspec-examples", /^\s*[1-9]\d*\s+examples?,\s+0\s+failures\b/m]
+]);
+const NO_TESTS_RAN = /\bno tests? (?:found|ran|were run|executed|to run)\b|\bno test files found\b|^Ran\s+0\s+tests?\b|(?:^|\s)0\s+(?:tests?\s+)?(?:passed|passing)\b|^\s*0\s+examples?\b/im;
+
+export function parseExecutedTestEvidence(value) {
+  const text = String(value || "").replace(/\x1b\[[0-9;]*m/g, "");
+  if (!text.trim() || NO_TESTS_RAN.test(text)) return null;
+  for (const [marker, pattern, requires] of EXECUTED_TEST_MARKERS) {
+    const match = text.match(pattern);
+    if (match && (!requires || requires.test(text))) return { marker, line: match[0].trim().slice(0, 160) };
+  }
+  return null;
 }
 
 export function mutationProtocolResult(value) {
@@ -156,12 +262,15 @@ export function playwrightAnnotationCriticalCases(annotations) {
 }
 
 export function playwrightTestOutcome(results) {
-  const statuses = results.map((result) => result?.status).filter(Boolean);
+  const statuses = Array.isArray(results) ? results.map((result) => result?.status) : [];
   const failed = statuses.some((status) =>
     ["failed", "timedOut", "interrupted"].includes(status));
   const skipped = !failed && statuses.length > 0 &&
     statuses.every((status) => status === "skipped");
-  return { failed, skipped };
+  const inconclusive = !statuses.length || statuses.some((status) =>
+    !["passed", "failed", "timedOut", "interrupted", "skipped"].includes(status));
+  // Any failed attempt remains a failure, even when a later retry passed.
+  return { failed, skipped, inconclusive };
 }
 
 export function collectPlaywrightAttachments(attachments, destination) {
@@ -176,10 +285,14 @@ export function recordPlaywrightTest(results, carried, state) {
   const outcome = playwrightTestOutcome(results);
   if (outcome.failed) state.failed += 1;
   else if (outcome.skipped) state.skipped += 1;
-  const destination = outcome.skipped ? state.skippedClaims : state.claims;
-  for (const claim of carried.claims) destination.add(claim);
-  const caseStatus = outcome.failed ? "fail" : outcome.skipped ? "skipped" : "pass";
-  const severity = new Map([["pass", 0], ["skipped", 1], ["fail", 2]]);
+  else if (outcome.inconclusive) state.inconclusive = (state.inconclusive || 0) + 1;
+  if (outcome.skipped)
+    for (const claim of carried.claims) state.skippedClaims.add(claim);
+  else if (!outcome.failed && !outcome.inconclusive)
+    for (const claim of carried.claims) state.claims.add(claim);
+  const caseStatus = outcome.failed ? "fail" : outcome.inconclusive ? "inconclusive"
+    : outcome.skipped ? "skipped" : "pass";
+  const severity = new Map([["pass", 0], ["skipped", 1], ["inconclusive", 2], ["fail", 3]]);
   for (const id of carried.criticalCases) {
     const current = state.criticalCases.get(id);
     if (!current || severity.get(caseStatus) > severity.get(current))
@@ -206,14 +319,15 @@ export function visitPlaywrightReport(value, inherited, state, seen = new WeakSe
     criticalCases: [...inherited.criticalCases, ...ownCriticalCases]
   } : inherited;
   collectPlaywrightAttachments(value.attachments, state.attachments);
-  recordPlaywrightTest(value.results, carried, state);
+  if (Object.hasOwn(value, "results"))
+    recordPlaywrightTest(Array.isArray(value.results) ? value.results : [], carried, state);
   visitPlaywrightChildren(value, carried, state, seen);
 }
 
 export function playwrightReportSummary(report) {
   const state = {
     claims: new Set(), attachments: new Set(), skippedClaims: new Set(),
-    criticalCases: new Map(), tests: 0, failed: 0, skipped: 0
+    criticalCases: new Map(), tests: 0, failed: 0, skipped: 0, inconclusive: 0
   };
   // Annotations are carried down from suites to the tests they contain, and a
   // claim is credited only where a test actually ran. Playwright emits the
@@ -228,7 +342,8 @@ export function playwrightReportSummary(report) {
     criticalCases: [...state.criticalCases]
       .map(([id, status]) => ({ id, status }))
       .sort((left, right) => left.id.localeCompare(right.id)),
-    tests: state.tests, failed: state.failed, skipped: state.skipped
+    tests: state.tests, failed: state.failed, skipped: state.skipped,
+    inconclusive: state.inconclusive
   };
 }
 

@@ -8,8 +8,11 @@
 //
 // The OpenCode adapter install copies this file to
 // .opencode/plugins/foundation.js.
-// Blocking works by throwing: OpenCode cancels the tool call and surfaces the
-// message to the model, which is the same feedback path Claude Code's
+// The guards rewrite more than they refuse: a hook's `updatedInput` (a
+// redirected path, a routed command, a redacted secret copy) is written back
+// into OpenCode's mutable `output.args`, so the call runs as the guard meant.
+// A strict-mode refusal works by throwing: OpenCode cancels the tool call and
+// surfaces the message to the model, the same feedback path Claude Code's
 // {"decision":"block"} produces.
 
 import { spawnSync } from "node:child_process";
@@ -60,16 +63,40 @@ export const FoundationGuard = async ({ directory, worktree }) => {
     });
   };
 
-  const decision = (result) => {
-    if (!result || result.error) return null;
+  const answer = (result) => {
+    if (!result || result.error) return {};
     const stdout = String(result.stdout || "").trim();
     const start = stdout.indexOf("{");
-    if (start === -1) return null;
+    if (start === -1) return {};
     try {
       const parsed = JSON.parse(stdout.slice(start));
-      return parsed && parsed.decision === "block" ? parsed : null;
+      return {
+        blocked: parsed?.decision === "block" ? parsed : null,
+        updated: parsed?.hookSpecificOutput?.updatedInput || null,
+        context: parsed?.hookSpecificOutput?.additionalContext || null,
+      };
     } catch {
-      return null;
+      return {};
+    }
+  };
+
+  // Write a hook's rewritten Claude-shaped input back into OpenCode's args,
+  // keeping whichever argument spelling the call used. A rewrite OpenCode
+  // cannot express (it has no grep output mode) cancels the call with the
+  // guard's explanation rather than letting secret lines print.
+  const apply = (tool, args, { updated, context }) => {
+    if (!updated) return;
+    const spelled = (names, fallback) => names.find((name) => name in args) || fallback;
+    if (updated.command !== undefined) args[spelled(["command", "cmd"], "command")] = updated.command;
+    if (updated.file_path !== undefined)
+      args[spelled(["filePath", "file_path", "path"], "filePath")] = updated.file_path;
+    if (tool !== "Grep") return;
+    if (updated.path !== undefined) args.path = updated.path;
+    if (updated.glob !== undefined) args[spelled(["include", "glob"], "include")] = updated.glob;
+    if (updated.output_mode !== undefined && updated.output_mode !== "content") {
+      const mode = ["output_mode", "outputMode"].find((name) => name in args);
+      if (!mode) throw new Error(context || "secrets guard: this search could print secret lines");
+      args[mode] = updated.output_mode;
     }
   };
 
@@ -78,19 +105,37 @@ export const FoundationGuard = async ({ directory, worktree }) => {
   // leaks one small string, bounded by the session.
   const touched = new Map();
 
+  // The OpenCode session id, exported as FOUNDATION_SESSION_ID so the harness
+  // binds the main session (.claude/harness/EVIDENCE.md, Main-session
+  // identity). Provider and model identity are not exposed to these hooks, so
+  // they stay with the operator (FOUNDATION_MAIN_PROVIDER_FAMILY etc.).
+  let sessionId = "";
+
   return {
+    // Shell commands inherit the session id; hooks that run it get it too.
+    "shell.env": async (input, output) => {
+      const id = String(input?.sessionID || sessionId || "").trim();
+      if (id) output.env = { ...output.env, FOUNDATION_SESSION_ID: id };
+    },
+
     "tool.execute.before": async (input, output) => {
+      if (input.sessionID) sessionId = String(input.sessionID);
       const tool = TOOL_NAMES[String(input.tool || "").toLowerCase()];
       if (!tool) return;
       const event = { tool_name: tool, tool_input: toolInput(tool, output.args || {}) };
 
+      const args = output.args || {};
       if (tool === "Read" || tool === "Grep" || tool === "Bash") {
-        const blocked = decision(runHook("protect-secrets.sh", event, 10000));
-        if (blocked) throw new Error(blocked.reason);
+        const secrets = answer(runHook("protect-secrets.sh", event, 10000));
+        if (secrets.blocked) throw new Error(secrets.blocked.reason);
+        apply(tool, args, secrets);
+        if (secrets.updated) event.tool_input = toolInput(tool, args);
       }
       if (MUTATING.has(tool) || tool === "Bash") {
-        const blocked = decision(runHook("phase-mutation-guard.sh", event, 10000));
-        if (blocked) throw new Error(blocked.reason);
+        const phase = answer(runHook("phase-mutation-guard.sh", event, 10000));
+        if (phase.blocked) throw new Error(phase.blocked.reason);
+        apply(tool, args, phase);
+        if (phase.updated) event.tool_input = toolInput(tool, args);
         if (MUTATING.has(tool) && input.callID) {
           touched.set(input.callID, event.tool_input.file_path);
         }

@@ -8,7 +8,7 @@ one = newest `proof.json` `createdAt` under `.foundation/receipts/`; its packet
 is usually archived at `openspec/changes/archive/<date>-<id>/`. A repo-wide
 report covers every change that has receipts.
 
-The default shape is a **round ledger**: the newest finished change told as a
+The default shape is a **read-only round summary**: the newest finished change told as a
 complete story, with the currently active change appended as "next round"
 status. Name the report after the work it covers (a short product-like name),
 never "harness report".
@@ -24,10 +24,12 @@ never "harness report".
 | Review attempts | `.foundation/receipts/<id>/review-attempts/` |
 | Profile and budget config | `openspec/config.yaml`, `foundation.json` |
 | Attestations | `.foundation/attestations/` |
-| Code volume | the round's actual commits (`git show --stat`, read-only), split prod vs test/fixture, product repos vs control repo |
+| Code volume | the change's retained Land projection or bounded sandbox diff against its recorded baseline; separate product, tests/fixtures, and docs |
 
-Missing files are normal (change not yet proven or landed): render the section
-as "not yet run", never invent a status.
+Missing data may be not-run, unavailable, or not retained. Establish the reason
+before labeling it; never turn absence into zero, pass, or a guessed lifecycle state.
+Land preserves HEAD/index and creates no commit. Existing commits can be a
+separately attributed source only when they are verified to belong to this change.
 
 ## Metrics sources (read-only)
 
@@ -101,8 +103,7 @@ verdicts verbatim; never summarize a failure into a pass.
    Speed (busy time + % of span, slowest command), Token (output + cache
    write, requests, model), Cost (real, or "ไม่มีข้อมูล" with the verbatim
    `measurement` note), Harness (blocked/total commands), Code (+/− lines,
-   prod vs test split), Docs (openspec +/− lines when the harness committed a
-   docs volume), Well (overall health verdict with its evidence). Never bury
+   prod vs test split), Docs (observed openspec/documentation +/− lines), Well (overall health verdict with its evidence). Never bury
    these inside prose tables only.
 3. **Timeline**: per-phase bars using the non-overlapping attribution (time +
    % of round, with the rule stated), then a per-phase table — commands,
@@ -117,8 +118,9 @@ verdicts verbatim; never summarize a failure into a pass.
    `feedback` (reviewer execution, evidenced repair, human wait, unattributed),
    with command, phase, duration, outcome tag, cause, and evidence basis.
 6. **Code volume**: KPI mini-cards (added/removed, prod, test+fixtures), a
-   per-file table from the round's commits, and a separate table for the
-   openspec/docs commit when one exists.
+   per-file table from the same bounded change projection, with separate
+   documentation volume. A live worktree diff may contain unrelated changes;
+   do not attribute those to the round.
 7. **Gate table**: every receipt provider with status tag, claim counts,
    duration, and the `observed` value quoted verbatim + Thai gloss.
 8. **Tasks**: done/total cards from `tasks.md` for the finished round and the
@@ -136,17 +138,18 @@ verdicts verbatim; never summarize a failure into a pass.
 
 Sections whose data is absent are dropped, not faked; renumber accordingly.
 
-## Render and publish
+## Render and presentation
 
-- If the host provides an Artifact tool: load the host `artifact-design`
-  skill first, then write the HTML file and publish. Keep the favicon and
-  file path stable across re-publishes of the same change's report; pass the
-  existing artifact URL when updating a report published earlier.
-- Otherwise: write the HTML to `docs/reports/harness-report-<id>.html` and
-  tell the user the path.
+Write the self-contained HTML only in an allowed artifact path: the returned
+Build scope for an active change, or the host-provided report scope for a
+standalone request. The report is a projection, never a second status ledger.
+Share a local artifact by default. An available Artifact tool does not grant
+upload/publication authority; publish only when requested and permitted by
+host policy. Preserve an existing authorized artifact identity when updating it.
 
 HTML constraints either way: fully self-contained (inline CSS, no external
 requests), theme-aware light/dark, wide tables scroll in their own container,
 under 16 MB. This is a scanned dashboard-document: status reads from tags and
 tone (pass/warn/stop), numbers are tabular, KPI cards and chips carry the
-summary before any table.
+summary before any table. Prose style:
+[writing](../../init-project-docs/references/writing.md).

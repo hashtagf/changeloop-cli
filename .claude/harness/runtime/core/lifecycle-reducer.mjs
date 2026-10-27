@@ -3,16 +3,15 @@ export const LIFECYCLE_STATUSES = Object.freeze([
 ]);
 
 const TRANSITIONS = Object.freeze({
-  // Direct/legacy workspaces can project without first materializing a
-  // sandbox. The Land gate still proves authority and evidence before this
-  // reducer is called; preserving that historical edge is compatibility, not
-  // a permission bypass.
-  change: new Set(["change", "building", "proven", "applied", "archived"]),
+  // Land applies and archives only proven work, so nothing before `proven`
+  // reaches `applied` or `archived` directly. Direct workspaces prove in place
+  // and move to `proven` first, like every other workspace.
+  change: new Set(["change", "building", "proven"]),
   // Older runtime state used `resolved` between agreement and sandbox
   // materialization. Keep it readable and transition it through the same
   // guarded paths as `change`.
-  resolved: new Set(["change", "resolved", "building", "proven", "applied", "archived"]),
-  building: new Set(["change", "building", "proven", "applied", "archived"]),
+  resolved: new Set(["change", "resolved", "building", "proven"]),
+  building: new Set(["change", "building", "proven"]),
   proven: new Set(["building", "proven", "applied", "archived"]),
   // Archive/spec-sync recovery may require proving the already-applied bytes
   // again before the transaction can resume.
@@ -20,8 +19,28 @@ const TRANSITIONS = Object.freeze({
   archived: new Set(["archived"])
 });
 
+// `landing` was written by an older runtime between proof and apply and is no
+// longer produced. A record that still carries it is read as `proven`, which
+// leaves every Land gate (proof freshness, approval, grant) in force.
+const LEGACY_STATUS_ALIASES = Object.freeze({ landing: "proven" });
+
+export function normalizeLifecycleStatus(status) {
+  const value = String(status || "change");
+  return LEGACY_STATUS_ALIASES[value] || value;
+}
+
+// Rewrites a loaded runtime record's legacy status in place and reports
+// whether it changed, so a loader can migrate on read.
+export function normalizeLifecycleState(state) {
+  if (!state || typeof state !== "object" || !("status" in state)) return false;
+  const normalized = normalizeLifecycleStatus(state.status);
+  if (normalized === state.status) return false;
+  state.status = normalized;
+  return true;
+}
+
 export function lifecycleTransitionValue(state, target, reason = null) {
-  const from = String(state?.status || "change");
+  const from = normalizeLifecycleStatus(state?.status);
   if (!LIFECYCLE_STATUSES.includes(target))
     throw new Error(`unknown lifecycle target '${target}'`);
   if (!TRANSITIONS[from]?.has(target))

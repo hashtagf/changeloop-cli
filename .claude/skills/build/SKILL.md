@@ -1,6 +1,6 @@
 ---
 name: build
-description: Implement one existing Foundation change in its isolated workspace. Use when the user invokes build or asks Codex to continue a validated change through implementation and focused verification.
+description: "Implement or repair an approved Change Loop change through advance in its declared isolated workspace. Use for build or continuing returned EDIT/REPAIR tasks. Follow harness task ownership and resume routes; never Land or mutate Git history."
 ---
 
 Treat the text after `$build` as the command arguments. Read

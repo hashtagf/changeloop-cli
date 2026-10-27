@@ -1,6 +1,6 @@
 ---
 name: dev
-description: Run the compatibility composition from Foundation change through Build and Prove for a concrete intent. Use when the user invokes dev or requests the legacy one-command development entry point.
+description: "Run the legacy Change Loop composition from concrete intent through isolated Build and Prove, and Land only with explicit authority. Use for dev or the compatibility entry point; prefer individual lifecycle skills for targeted work."
 ---
 
 Treat the text after `$dev` as the command arguments. Read

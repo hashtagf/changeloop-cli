@@ -20,43 +20,60 @@ the active transcript's prompt starts with `/dev`.
 
 ## Answer contract
 
-- **Deny before the tool runs**: print `{"decision":"block","reason":"..."}`
-  to stdout and exit 0. The host must cancel the call and surface `reason` to
-  the model. Used by `phase-mutation-guard` and `protect-secrets.sh`.
+- **Rewrite or guide before the tool runs** (the default): print
+  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{...},"additionalContext":"..."}}`
+  and exit 0. The host runs the call with `updatedInput` (when present) and
+  surfaces `additionalContext` to the model. These guards never refuse by
+  default: `phase-mutation-guard` redirects main-checkout edits into the
+  isolated workspace, routes internal Land commands to `advance`, and turns an
+  unauthorized delivery into the question for the user; `protect-secrets.sh`
+  points secret reads at a redacted copy; `no-detached-authority` runs a
+  detached reviewer attached.
+- **Deny before the tool runs** (explicit strict modes only): print
+  `{"decision":"block","reason":"..."}` to stdout and exit 0. Used only when a
+  host sets `FOUNDATION_GUARDRAIL_MODE=block`, `FOUNDATION_SHELL_GUARD=block`,
+  or `FOUNDATION_SECRETS_GUARD=block`.
+- **Route a host-refused shell shape** (default): `shell-route-guard.sh` denies
+  only a Bash call the host would stop on an approval prompt anyway. Its
+  reason is the command to run instead: `cd <dir> && git …` → `git -C <dir> …`;
+  a direct test run while a change is in Build → `claude-foundation exec
+  <change> [--repo <id>] -- <command>`. A matching Bash allow rule,
+  `bypassPermissions`, or a command it cannot parse lets the call through.
+  `FOUNDATION_GUARDRAIL_MODE=audit` turns the denial into advice, and `off`
+  disables it.
 - **Feed back after the tool ran**: exit 2 with diagnostics on stderr. The
   host must surface stderr to the model. Used by `lint.sh`.
 - Exit 0 with no output means allow. Hooks fail open when a toolchain is
   missing (no jq, no node): absence of a guard must not brick a session.
-- **Refuse a false terminal success**: the `/dev` Stop hook returns
-  `{"decision":"block","reason":"DEV_TERMINAL ..."}` while the coordinator has
-  an automatic action available. It allows Stop when exactly one active change
-  has a passing, audited proof bound to the current workspace hash, or when the
-  coordinator returns a real `WAIT`/`ASK_USER` boundary. A boundary remains
-  recorded as incomplete and cannot be mistaken for passing proof. A host
-  permission denial is Harness-owned integration recovery: the hook keeps the
-  session active and never tells the user to run an internal command.
+- **Warn on an incomplete terminal**: the `/dev` Stop hook never blocks. When
+  no active change has a passing, audited proof bound to the current workspace
+  hash (and no real `WAIT`/`ASK_USER` boundary applies), it records the turn as
+  incomplete and returns a `systemMessage` naming the blocker and resume route.
+  A recorded incomplete verdict cannot be mistaken for passing proof.
 
 Environment: `CLAUDE_PROJECT_DIR` names the project root (default: cwd).
 `FOUNDATION_GUARDRAIL_MODE` (`off|audit|block|auto`) governs the phase guard;
+shell refusals outside Land/Deliver are audited unless `FOUNDATION_SHELL_GUARD=block`;
 phase context comes from `FOUNDATION_ACTIVE_PHASE` or `.foundation/logs/`.
 The normal slash-command path records that context through the unified
 `advance` coordinator; read-only Stop inspection uses `advance --inspect`, does
 not record a new phase, and agents do not have to prepare a packet solely to
 make a hook recognize the phase. Session identity selects the exact active
 change even when another session has a newer change.
-The default `auto` mode blocks mutations during every active lifecycle phase
-and stays out of adoption-only sessions with no phase context. A recorded Build
-phase recovers every selected repository workspace root from runtime state when
-the host does not export `FOUNDATION_WORKSPACE_ROOT`.
-Mutating Build shell commands must explicitly begin inside a granted workspace;
-unanchored package-manager/formatter commands and obvious path escapes are
-blocked before the shell starts. When the host reports the shell already inside
-the workspace, the guard pins that directory as the anchor instead of refusing.
+The default `auto` mode guides during every active lifecycle phase and stays
+out of adoption-only sessions with no phase context: a call that leaves the
+phase's rules still runs, redirected into the workspace when it can be, and the
+agent is told the route. A recorded Build phase recovers every selected
+repository workspace root from runtime state when the host does not export
+`FOUNDATION_WORKSPACE_ROOT`; each writable repository sandbox is in-workspace
+with the shared sandbox's strictness, while the shared sandbox's copy of that
+repository and read-selected sandboxes are not. Shell analysis reads command text, so its findings
+are recorded and explained, never refused, unless a host opts into strict mode.
 
-Hooks constrain unsafe mutations; they do not own lifecycle completion. A
-refusal must preserve state and point back to `claude-foundation advance
-<change>` (or its exact typed recovery), so an unavailable live hook or stale
-phase row cannot become an artificial dead end.
+Hooks guide mutations; they do not own lifecycle completion. Guidance (and a
+strict-mode refusal) must preserve state and point back to `claude-foundation
+advance <change>` (or its exact typed recovery), so an unavailable live hook or
+stale phase row cannot become an artificial dead end.
 
 ## Host wiring
 
@@ -70,6 +87,7 @@ orchestration contract and is reported separately from live mutation guards.
 | OpenCode | available | `.opencode/plugins/foundation.js` (placed by the OpenCode adapter install) replays these hooks via `tool.execute.before/after` | partial: phase live; secrets live; lint live; session digest unavailable |
 | Cursor | available | none — Cursor has no tool hooks | unavailable: phase unavailable; secrets unavailable; lint unavailable; session digest unavailable |
 | Codex CLI | available | none — Codex has no tool hooks | unavailable: phase unavailable; secrets unavailable; lint unavailable; session digest unavailable |
+| Gemini CLI | unavailable | none — no Foundation guard wiring is shipped; capabilities are declared unavailable until verified | unavailable: phase unavailable; secrets unavailable; lint unavailable; session digest unavailable |
 
 Hosts without live guards still pass through the runtime's Land gates, and
 `no-direct-main-commit.sh` remains available as an opt-in git hook. When

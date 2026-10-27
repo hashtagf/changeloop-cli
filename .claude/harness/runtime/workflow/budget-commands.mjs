@@ -1,17 +1,19 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { emitSignal } from "../core/signals.mjs";
 
-export function createBudgetReporter({ applyBudgetDecision }) {
+// `watchdogEnabled` reflects the opt-in `execution.budgetWatchdog`: off, usage
+// is still synchronized, but background syncs emit no spend-mode warning.
+export function createBudgetReporter({ applyBudgetDecision, watchdogEnabled = () => true }) {
   function reportBudget(id, state, quiet = false) {
     const decision = applyBudgetDecision(state);
     const spent = decision.measured
       ? `${(decision.ratio * 100).toFixed(1)}%` : "unmeasured";
     const message = `BUDGET ${id}: ${spent} ` +
-      `${decision.action} ${decision.recommendation} (${decision.limiter || "unknown"})` +
-      (decision.userActionRequired ? " [NEEDS_USER_DECISION]" : "");
+      `${decision.action} ${decision.recommendation} (${decision.limiter || "unknown"})`;
     if (!quiet) console.log(message);
-    else if (decision.ratio >= 0.7 || decision.mode === "operator-required")
-      console.error(`WARNING: ${message}`);
+    else if (decision.ratio >= 0.7 && watchdogEnabled())
+      emitSignal("budget-warning", `WARNING: ${message}`);
     return decision;
   }
   return { reportBudget };
@@ -22,13 +24,13 @@ export function budgetContinuationInputs(flags, fail) {
   if (!reason) fail("budget continue requires --reason <reason>");
   const decisionRef = String(flags["decision-ref"] || "").trim();
   if (!decisionRef)
-    fail("budget continue requires --decision-ref <host-user-decision>; ask the user whether to continue, rescope, or pause before opening another window");
+    fail("budget continue requires --decision-ref <host-user-decision>; the command itself is optional because exhausted windows auto-continue");
   return { reason, decisionRef };
 }
 
-export function assertBudgetContinuationAvailable(context, id, budget, decision) {
-  if (decision.mode !== "operator-required")
-    context.fail("budget continue is available only after exhaustion asks the user for a decision");
+// Budget is advisory and exhaustion auto-continues, so `budget continue` is an
+// optional explicit widening that may be used at any point up to the ceiling.
+export function assertBudgetContinuationAvailable(context, id, budget) {
   const extensionNumber = Number(budget.window.extensionNumber || 0);
   const maxContinuations = Number(
     context.foundationPolicy?.().execution?.maxContinuationWindows || 3);
@@ -84,7 +86,7 @@ function checkpointNextCommand(id, readiness) {
     return `claude-foundation packet ${id} --phase build`;
   if (readiness.status === "CONFIGURATION_ERROR")
     return `claude-foundation change validate ${id}`;
-  return `claude-foundation proof advance ${id}`;
+  return `claude-foundation advance ${id} --through proven`;
 }
 
 function checkpointForecast(decision, readiness) {
@@ -98,11 +100,6 @@ function checkpointForecast(decision, readiness) {
     confidence: "none",
     reason: "No host usage events have measured this active window."
   };
-  if (decision.userActionRequired) return {
-    status: "USER_DECISION_REQUIRED",
-    confidence: "measured-capacity",
-    reason: "The active allowance is exhausted; the harness will not infer whether to spend more or change scope."
-  };
   if (decision.mode === "completion-only") return {
     status: "AT_RISK",
     confidence: "measured-capacity",
@@ -115,27 +112,15 @@ function checkpointForecast(decision, readiness) {
   };
 }
 
-function checkpointRoute(id, readiness, budget, needsUser) {
-  const nextCommand = checkpointNextCommand(id, readiness);
-  const route = {
+function checkpointRoute(id, readiness, budget) {
+  return {
     durable: true,
     windowId: budget.window.id,
     sequence: Number(budget.window.sequence || 0),
     extensionNumber: Number(budget.window.extensionNumber || 0),
     inspectCommand: `claude-foundation budget checkpoint ${id}`,
-    resumeCommand: nextCommand,
-    afterContinuationCommand: null
+    resumeCommand: checkpointNextCommand(id, readiness)
   };
-  if (needsUser) {
-    route.resumeCommand = null;
-    route.afterContinuationCommand = nextCommand;
-  }
-  return route;
-}
-
-function checkpointUserPrompt(decision, needsUser) {
-  if (!needsUser || !decision.decision) return null;
-  return decision.decision.prompt;
 }
 
 export function budgetCheckpointValue(context, id) {
@@ -143,12 +128,12 @@ export function budgetCheckpointValue(context, id) {
   const budget = context.ensureBudgetState(state);
   const decision = context.applyBudgetDecision(state);
   const readiness = budgetContinuationReadiness(context, id, state);
-  const needsUser = decision.userActionRequired === true &&
-    readiness.budget?.eligible !== false;
+  // Budget is advisory: an exhausted window auto-continues, so a checkpoint
+  // always resumes and never asks the user.
   return {
     version: 1,
     changeId: id,
-    status: needsUser ? "NEEDS_USER_DECISION" : "READY_TO_RESUME",
+    status: "READY_TO_RESUME",
     decision,
     forecast: checkpointForecast(decision, readiness),
     remainingWork: {
@@ -158,8 +143,7 @@ export function budgetCheckpointValue(context, id) {
       unavailableProviders: readiness.unavailableProviders,
       modelBudget: readiness.budget
     },
-    checkpoint: checkpointRoute(id, readiness, budget, needsUser),
-    userPrompt: checkpointUserPrompt(decision, needsUser)
+    checkpoint: checkpointRoute(id, readiness, budget)
   };
 }
 
@@ -225,9 +209,8 @@ export function continueBudgetWindow(context, id, flags) {
   // boundary before the exhaustion precondition so calibration changes cannot
   // replace an actionable recovery route with a generic ordering error.
   assertBudgetContinuationEligible(context, id, readiness);
-  const decision = context.applyBudgetDecision(state);
-  const extensionNumber = assertBudgetContinuationAvailable(
-    context, id, budget, decision);
+  context.applyBudgetDecision(state);
+  const extensionNumber = assertBudgetContinuationAvailable(context, id, budget);
   const previous = structuredClone(budget.window);
   const { runId, window } = nextBudgetContinuationWindow(
     context, id, flags, budget, previous, extensionNumber);

@@ -2,12 +2,28 @@
   "version": 1,
   "commands": [
     {
+      "name": "investigate",
+      "usage": "investigate --template | <record.json>",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": true,
+      "description": "Validate and persist source-grounded investigation state and emit a Change-bound handoff."
+    },
+    {
       "name": "changes",
       "usage": "changes",
       "audience": "agent",
       "kind": "read",
       "idempotent": true,
       "description": "List active changes, lifecycle status, and their next useful action."
+    },
+    {
+      "name": "current",
+      "usage": "current",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Print the single active change with its status and next command; with none or several, list candidates and exit non-zero. advance, packet, feedback, and other read commands may omit <change> when exactly one is active."
     },
     {
       "name": "doctor",
@@ -35,11 +51,11 @@
     },
     {
       "name": "advance",
-      "usage": "advance <change> [--through build|proven|archived] [--host-result <result.json>] [--inspect] [--pretty]",
-      "audience": "host",
+      "usage": "advance <change> [--through build|proven|archived] [--host-result <result.json>] [--decision retry|wait|pause|merge|retain --decision-fingerprint <hash> --decision-ref <ref> --reason <approach>] [--approve-spec [--role <role>] --decision-ref <ref>] [--restore-target <path,path> [--decision-ref <ref>]] [--recover-apply settle|keep-current|restore-backup --decision-ref <ref>] [--undo-land --decision-ref <ref>] [--inspect] [--pretty]",
+      "audience": "agent",
       "kind": "write",
       "idempotent": true,
-      "description": "Run deterministic lifecycle work through a requested target and return one bounded action at the next real model, user, resource, or authority boundary."
+      "description": "Run deterministic lifecycle work through a requested target, including detected evidence wiring, safe sandbox sync, configured review, and task check completion, and return one bounded action at the next real model, user, resource, or authority boundary. --approve-spec records the user's spec approval (alias of change resolve --approve-spec); with --role it records one approval lane from foundation.json approval.roles, and the approval exists only once every required lane approved; with --through it continues in the same call. --restore-target records the target files Land restores to the sandbox base when its apply conflicts; paths other than generated artifacts clean at isolation require --decision-ref. --recover-apply settles an interrupted Land apply under the user's decision, then continues. --undo-land, under the user's decision, restores the pre-Land bytes of an archived change whose Land diff is still uncommitted and retires the change, preserving what it landed; it refuses without writing when the target was committed, staged, or edited after Land in those paths."
     },
     {
       "name": "feedback",
@@ -50,12 +66,44 @@
       "description": "Project repair-aware timing, guard provenance, evidence reuse, usage availability, and the next safe action without mutating state."
     },
     {
-      "name": "exec",
-      "usage": "exec <change> [--phase change|build|prove|land] -- <command...>",
+      "name": "outcomes",
+      "usage": "outcomes [--pretty]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Summarize every archived change (proof runs, first-proof pass, user decisions, known cost, declared escaped defects) and work type × impact × risk cohorts over known values, without writing state."
+    },
+    {
+      "name": "lessons",
+      "usage": "lessons [--min-changes <n>] [--pretty]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Group blocker and review finding codes that recur across at least --min-changes distinct changes (default 3, minimum 2) into advisory permanent-check proposals for /change, reporting uncoded totals separately, without writing state."
+    },
+    {
+      "name": "package",
+      "usage": "package <change> [--pretty]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "Write the read-only approval package .foundation/packages/<change>.html: risk level, technical domains, artifacts by approver role with proof/preview labels, the draft's plain-language scratch summary and typed examples with an after-Build tab each, optional suggested previews, and the change's Mermaid diagrams rendered by the shipped local Mermaid file, without changing lifecycle state."
+    },
+    {
+      "name": "preview",
+      "usage": "preview <change> --provider <name> [--decision-ref <ref>] [--pretty]",
       "audience": "agent",
       "kind": "write",
       "idempotent": false,
-      "description": "Run and time an external command (build, container, tests), recording its duration for metrics."
+      "description": "Optionally run one declared provider before Build in an isolated copy under .foundation/previews/<change>/ and record a preview receipt bound to the contract revision. Preview receipts never satisfy Prove or Land, never block approval or Build, and a provider marked external runs only with the user's --decision-ref."
+    },
+    {
+      "name": "exec",
+      "usage": "exec <change> [--phase change|build|prove|land] [--repo <id>] [--task <id>] -- <command...>",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Run and time an external command (build, container, tests) in the change's sandbox for the named repository or task (else the caller's directory or the pending tasks' repository), recording its duration for metrics."
     },
     {
       "name": "describe",
@@ -75,15 +123,15 @@
     },
     {
       "name": "change start",
-      "usage": "change start --template | <draft.json> [--consume-draft]",
+      "usage": "change start --template | <draft.json> [--inspect | --consume-draft] [--approve-spec --decision-ref <ref> [--through build|proven|archived]]",
       "audience": "agent",
       "kind": "write",
       "idempotent": false,
-      "description": "Create and start an isolated change from one validated draft."
+      "description": "Inspect semantic intake or create and start an isolated change from one validated draft. The bare form inspects in place and starts only when intake is DONE; otherwise it prints the intake action and changes nothing. --approve-spec records the user's spec approval in the same call; with --through it continues."
     },
     {
       "name": "change resolve",
-      "usage": "change resolve <change> [--impact low|medium|high] [--coupling isolated|coupled] [--ambiguity clear|unclear] [--surface <glob,glob>] [--security <terms>] [--review] [--size xs|s|m|l] [--acceptance-not-required | --acceptance-required --acceptance-reason <why> [--acceptance-claims <ids>]] [--reopen-grounding --decision-ref <ref> --reopen-reason <why>] [--ci-not-required --decision-ref <ref>] [--approve-spec --decision-ref <ref>] [--continue-review --decision-ref <ref>]",
+      "usage": "change resolve <change> [--impact low|medium|high] [--coupling isolated|coupled] [--ambiguity clear|unclear] [--surface <glob,glob>] [--security <terms>] [--review] [--size xs|s|m|l] [--acceptance-not-required | --acceptance-required --acceptance-reason <why> [--acceptance-claims <ids>]] [--reopen-grounding --decision-ref <ref> --reopen-reason <why>] [--ci-not-required --decision-ref <ref>] [--approve-spec [--role <role>] --decision-ref <ref>] [--continue-review --decision-ref <ref>] [--accept-target-edits --decision-ref <ref>]",
       "audience": "agent",
       "kind": "write",
       "idempotent": true,
@@ -91,11 +139,19 @@
     },
     {
       "name": "change amend",
-      "usage": "change amend <change> <amendment.json> [--consume-amendment]",
+      "usage": "change amend --template | <change> <amendment.json> [--inspect | --consume-amendment] [--approve-spec --decision-ref <ref> [--through build|proven|archived]] | <change> --task <task-key|task-id> --verify <command> [--reopen] [--reason <text>]",
       "audience": "agent",
       "kind": "write",
       "idempotent": false,
-      "description": "Transactionally add semantic requirements during Build while preserving the canonical agreement."
+      "description": "Transactionally add, revise, or remove semantic requirements during Build, withdraw unfinished tasks (removeTasks), or correct a task's verify command, while preserving the canonical agreement. --task/--verify corrects one verify command directly and keeps the spec approval; a completed task's verify changes only with --reopen (reopen: true in an amendment), which unticks the task so its verify must pass again. The bare form inspects in place and amends only when intake is DONE; otherwise it prints the intake action and changes nothing. --approve-spec records the user's spec approval in the same call. --template prints an amendment template."
+    },
+    {
+      "name": "change revise",
+      "usage": "change revise <change> <draft.json> [--merge] [--inspect | --consume-draft] [--approve-spec --decision-ref <ref> [--through build|proven|archived]]",
+      "audience": "agent",
+      "kind": "write",
+      "idempotent": false,
+      "description": "Recompile a revised semantic draft over a change that has not started Build, keeping its id and reporting the requirement delta for approval. --merge reads the file as a partial draft: only its keys and keyed entries merge into the draft the change was compiled from. The bare form inspects in place and revises only when intake is DONE; otherwise it prints the intake action and changes nothing. --approve-spec records the user's spec approval in the same call; with --through it continues."
     },
     {
       "name": "change validate",
@@ -164,7 +220,7 @@
     {
       "name": "land check",
       "usage": "land check <change>",
-      "audience": "agent",
+      "audience": "internal",
       "kind": "read",
       "idempotent": true,
       "description": "Validate that the proven projection remains landable."
@@ -172,10 +228,10 @@
     {
       "name": "land advance",
       "usage": "land advance <change>",
-      "audience": "agent",
+      "audience": "internal",
       "kind": "write",
       "idempotent": true,
-      "description": "Advance the resumable Land saga and archive when every repository is ready."
+      "description": "Compatibility alias of advance <change> --through archived; issues no grant and lands only current passing proof."
     },
     {
       "name": "handoff status",
@@ -184,6 +240,14 @@
       "kind": "read",
       "idempotent": true,
       "description": "Show permission-bound external operations without treating them as developer tasks."
+    },
+    {
+      "name": "handoff list",
+      "usage": "handoff list [--open] [--owner <team>] [--environment <env>] [--json]",
+      "audience": "agent",
+      "kind": "read",
+      "idempotent": true,
+      "description": "List operational obligations across active and archived changes."
     },
     {
       "name": "handoff packet",
@@ -195,16 +259,16 @@
     },
     {
       "name": "handoff record",
-      "usage": "handoff record <change> --id <H00n> --status accepted|completed|rejected --actor <name> --reference <ticket-or-run> [--evidence <reference,...>] [--reason <why>]",
+      "usage": "handoff record <change> --id <H00n> --status accepted|completed|rejected|cancelled|superseded --actor <name> --reference <ticket-or-run> [--evidence <reference,...>] [--reason <why>]",
       "audience": "conditional",
       "kind": "authority",
       "idempotent": false,
-      "description": "Record a named operator's tracked acceptance or completion without storing credentials."
+      "description": "Record a named operator's tracked acceptance, completion, rejection, cancellation, or supersession without storing credentials."
     },
     {
       "name": "land recover",
       "usage": "land recover <change> --decision-ref <ref> [--resolution keep-current|restore-backup]",
-      "audience": "conditional",
+      "audience": "internal",
       "kind": "authority",
       "idempotent": true,
       "description": "Settle an interrupted apply transaction after an explicit host-recorded user decision; manual recovery requires an explicit resolution."
@@ -212,10 +276,18 @@
     {
       "name": "land archive",
       "usage": "land archive <change>",
-      "audience": "agent",
+      "audience": "internal",
       "kind": "authority",
       "idempotent": true,
       "description": "Apply, synchronize, audit, archive, and clean up explicitly."
+    },
+    {
+      "name": "deliver advance",
+      "usage": "deliver advance <change>",
+      "audience": "host",
+      "kind": "authority",
+      "idempotent": true,
+      "description": "Optionally create an isolated commit and feature branch from an archived proven projection, open or reuse its pull request, and return the verified URL."
     },
     {
       "name": "agents plan",
@@ -322,6 +394,14 @@
       "description": "Acknowledge consumed reviewer infrastructure retries after the provider diagnosis passes, restoring AI review dispatch under an explicit host-recorded user decision."
     },
     {
+      "name": "authority extend-review",
+      "usage": "authority extend-review <change> --decision-ref <ref>",
+      "audience": "conditional",
+      "kind": "authority",
+      "idempotent": false,
+      "description": "Allow one more AI review wave after every routed wave is delivered, under an explicit host-recorded user decision."
+    },
+    {
       "name": "authority reset-base-move",
       "usage": "authority reset-base-move <change> --decision-ref <ref>",
       "audience": "conditional",
@@ -348,15 +428,15 @@
     {
       "name": "land record",
       "usage": "land record <change> --repo <id> --commit <sha> --decision-ref <ref> [--ci pass|fail|pending] [--ci-attestation <signed.json>] [--ci-required]",
-      "audience": "conditional",
+      "audience": "internal",
       "kind": "authority",
       "idempotent": true,
-      "description": "Bind a child repository commit after an explicit host-recorded user decision."
+      "description": "Bind a child repository commit after an explicit host-recorded user decision, only for a Land transaction the legacy commit-based saga already started; current changes use advance --through archived."
     },
     {
       "name": "land resume",
       "usage": "land resume <change>",
-      "audience": "conditional",
+      "audience": "internal",
       "kind": "write",
       "idempotent": true,
       "description": "Resume an interrupted or multi-repository Land saga."
@@ -745,14 +825,17 @@
   ],
   "runtimeCommands": [
     "describe",
+    "investigate",
     "new",
     "start",
     "resolve",
     "amend",
+    "revise",
     "abandon",
     "waive",
     "audit-change",
     "changes",
+    "current",
     "providers",
     "repos",
     "models",
@@ -772,6 +855,10 @@
     "metrics",
     "advance",
     "feedback",
+    "outcomes",
+    "lessons",
+    "package",
+    "preview",
     "budget-checkpoint",
     "budget-continue",
     "doctor",
@@ -797,11 +884,13 @@
     "authority-status",
     "authority-record",
     "authority-reset-infra",
+    "authority-extend-review",
     "authority-reset-base-move",
     "receipt",
     "run-provider",
     "prove",
     "handoff-status",
+    "handoff-list",
     "handoff-packet",
     "handoff-record",
     "land-check",
@@ -811,6 +900,7 @@
     "land-record",
     "land-pointers",
     "land-resume",
+    "delivery-advance",
     "sandbox",
     "archive",
     "event",

@@ -1,9 +1,12 @@
 ---
 name: debug-fundamentals
-description: Find the cause of an unknown failure before changing code. Use for bugs, crashes, regressions, flakes, performance cliffs, or unexpected production behavior when the cause is not already proven. Covers reproduction, evidence reading, hypothesis testing, bisection, source-layer fixes, and regression proof. Skip obvious typo/config corrections with the cause visible and greenfield work.
+description: "Use when a change's workType is bugfix and the cause is unknown: reproduce the report as a failing test, localize the cause, then fix and prove it passes. Skip obvious corrections and greenfield features; use performance-investigation for measured slowness."
 ---
 
 # Debug fundamentals
+
+Quote predicted failure content, not only assertions or exit codes. Repeated
+failed fixes sharing an assumption require a falsifying experiment.
 
 Use this before the construction skill that owns the eventual fix.
 

@@ -9,7 +9,7 @@ import {
 // when this process ran the command; naming one on the command line is a claim
 // about execution that the caller is not in a position to make.
 const EXECUTING_ADAPTERS = new Set([
-  "command", "test-discovery", "playwright", "contract-digest"
+  "command", "test-discovery", "playwright", "contract-digest", "benchmark"
 ]);
 
 // A reference stands in for evidence, so it has to be something a reader can
@@ -80,8 +80,11 @@ export function proofPlanOperation(context, id) {
   // project has no supply-chain provider" is a fact the plan's reader needs,
   // and the alternative was inventing an unsatisfiable row for it.
   for (const advisory of context.advisoryCapabilities(id))
-    context.log(`  advisory ${advisory.capability}: not blocking (inferred from ${
-      advisory.trigger || "the changed surface"}; no provider wired)`);
+    context.log(advisory.reason === "covered-by-review"
+      ? `  ${advisory.capability}: covered-by-review (only repeats test provider '${
+        advisory.aliasOf}'; ${advisory.next})`
+      : `  advisory ${advisory.capability}: not blocking (inferred from ${
+        advisory.trigger || "the changed surface"}; no provider wired)`);
 }
 
 export function rebindReusableReceiptOperation(context, id, row, snapshot, proofRunId) {
@@ -187,6 +190,23 @@ export function approvedGroundingRevision(state, currentContractFingerprint) {
   return [...(state?.groundingReopens || [])].reverse().find((row) =>
     row.completedAt && row.newDigest === state.groundingDigest &&
     row.contractFingerprint === currentContractFingerprint) || null;
+}
+
+export function approvedDecisionRevision(state, currentContractFingerprint) {
+  const grounding = approvedGroundingRevision(state, currentContractFingerprint);
+  if (grounding || state?.groundingRequired === true) return grounding;
+  const approval = state?.specApproval;
+  if (!approval?.required || !approval.decisionRef || !approval.identity ||
+      !approval.approvedAt || Number(approval.revision) !==
+        Number(state?.contractRevision || 0)) return null;
+  return {
+    decisionRef: approval.decisionRef,
+    reason: "approved non-grounding contract revision",
+    priorDigest: null,
+    newDigest: approval.identity,
+    contractFingerprint: currentContractFingerprint,
+    completedAt: approval.approvedAt
+  };
 }
 
 export function deterministicReviewClosureSource(delivered) {
@@ -328,7 +348,7 @@ export function recordDeterministicReviewClosureOperation(
     };
   const currentContractFingerprint = context.contractFingerprint(id);
   const contractChanged = prior.contractFingerprint !== currentContractFingerprint;
-  const approvedRevision = approvedGroundingRevision(
+  const approvedRevision = approvedDecisionRevision(
     context.loadRuntime(id), currentContractFingerprint);
   if (contractChanged && !approvedRevision)
     return {
@@ -342,16 +362,8 @@ export function recordDeterministicReviewClosureOperation(
       route: "AUTO_REPAIR",
       reason: "The final AI delta still describes the current workspace; repair its blocker/major findings before advancing."
     };
-  const blockers = repairClosureFindings(
-    (source.findings || []).filter((finding) =>
-      ["blocker", "major"].includes(finding.severity)),
-    (finding) => groundedRepairBinding(context.groundingForReview(id), finding));
-  if (!repairClosureBindingsComplete(blockers))
-    return {
-      closed: false,
-      route: "AUTO_REPAIR",
-      reason: "Final blocker/major findings must name a path, claimIds, and verificationCaseIds before deterministic closure is possible."
-    };
+  // Passing non-review proof is the agent-satisfiable half of closure, so it
+  // is checked before the bindings the agent cannot author.
   const { current, invalid: invalidProviders } = currentRepairProviders(context,
     id, workspaceHash);
   if (invalidProviders.length)
@@ -363,9 +375,29 @@ export function recordDeterministicReviewClosureOperation(
         provider: row.provider, validity: row.validity.validity
       }))
     };
+  const blockers = repairClosureFindings(
+    (source.findings || []).filter((finding) =>
+      ["blocker", "major"].includes(finding.severity)),
+    (finding) => groundedRepairBinding(context.groundingForReview(id), finding));
+  // Critical-case bindings come from the reviewer and the locked contract; no
+  // Build edit can create them. Without them only another delta review could
+  // close the final findings, and the wave cap forbids one: that is the
+  // review-exhausted user gate, never an unsatisfiable repair.
+  const exhausted = (reason, details = {}) => ({
+    closed: false,
+    route: "REVIEW_ROUTE_EXHAUSTED",
+    reason,
+    findingIds: blockers.map((finding) => finding.id).sort(),
+    ...details
+  });
+  if (!repairClosureBindingsComplete(blockers))
+    return exhausted("Final blocker/major findings must name a path, claimIds, and verificationCaseIds before deterministic closure is possible; the final AI delta used the last review wave.");
   const bindingResult = repairClosureEvidenceBindings(
     context, id, blockers, current);
-  if (bindingResult.error) return bindingResult.error;
+  if (bindingResult.error) {
+    const { closed: _closed, route: _route, reason, ...details } = bindingResult.error;
+    return exhausted(`${reason} No declared critical case can close it and the final AI delta used the last review wave.`, details);
+  }
   const evidenceBindings = uniqueRepairEvidenceBindings(bindingResult.bindings);
   const scopePaths = [...new Set(blockers.map((finding) => finding.path))].sort();
   const scopeDigest = context.stableHash({
@@ -411,6 +443,39 @@ export function recordDeterministicReviewClosureOperation(
     findingIds: verifiedFindingIds,
     evidenceBindings
   };
+}
+
+// A harness-executed provider that failed and then passes on byte-identical
+// inputs is nondeterministic, not fixed. Resuming unchanged must not turn the
+// second observation into proof: the pass is recorded as a failing receipt
+// carrying the flake, so the claim needs a repair (a content change) and the
+// next pass on new content is proof again. Only a prior `fail` counts; an
+// `error` is infrastructure that never produced a product verdict.
+export function executedReceiptFlake(prior, receipt) {
+  if (!prior || receipt?.status !== "pass" || receipt.execution !== "harness" ||
+      prior.execution !== "harness" || !["fail"].includes(prior.status)) return null;
+  const same = (field) => JSON.stringify(prior[field] ?? null) === JSON.stringify(receipt[field] ?? null);
+  if (!["workspaceHash", "inputIdentity", "providerFingerprint", "contractFingerprint",
+    "executionFingerprint"].every(same)) return null;
+  const first = prior.flake?.firstFailure || {
+    observed: prior.observed || null, finishedAt: prior.finishedAt || null,
+    log: prior.log || null
+  };
+  return {
+    version: 1,
+    rule: "fail-then-pass-on-unchanged-content",
+    firstFailure: first,
+    passes: Number(prior.flake?.passes || 0) + 1,
+    observedPass: { observed: receipt.observed || null, log: receipt.log || null },
+    repair: "Make the provider deterministic for this content (fix the flaky test or the code it exercises); a pass on changed content is proof again."
+  };
+}
+
+export function markExecutedFlake(prior, receipt) {
+  const flake = executedReceiptFlake(prior, receipt);
+  if (!flake) return receipt;
+  return { ...receipt, status: "fail", observedStatus: "pass", flake,
+    observed: `flaky: failed then passed on unchanged content (${receipt.observed || "pass"})` };
 }
 
 export function createReceiptRuntime({
@@ -684,7 +749,8 @@ export function createReceiptRuntime({
       providerProtocolVersion: PROVIDER_PROTOCOL_VERSION,
       contractFingerprint: contractFingerprint(id), executionFingerprint: executionFingerprint(id),
       providerFingerprint: receiptProviderFingerprint(id, provider, flags, context),
-      workspaceHash, workspaceSnapshotId: context.state.activeProofRun?.snapshotId || null,
+      workspaceHash, workspaceSnapshotId: flags.workspaceSnapshotId ||
+        context.state.activeProofRun?.snapshotId || null,
       inputIdentity,
       rebind: receiptRebind(id, context),
       claims: requestedClaims, status, observed: suppliedEvidence.observed,
@@ -717,7 +783,9 @@ export function createReceiptRuntime({
       providerFamily: String(flags["reviewer-provider-family"] || "").trim().toLowerCase() || null,
       modelFamily: String(flags["reviewer-model-family"] || "").trim().toLowerCase() || null,
       modelId: String(flags["reviewer-model"] || "").trim() || null,
-      sessionId: String(flags["reviewer-session"] || "").trim() || null
+      sessionId: String(flags["reviewer-session"] || "").trim() || null,
+      ...(String(flags["reviewer-model-tier"] || "").trim()
+        ? { modelTier: String(flags["reviewer-model-tier"]).trim() } : {})
     };
   }
 
@@ -954,10 +1022,19 @@ export function createReceiptRuntime({
       die("passing OS-input browser receipt requires foreground-required=yes and foreground-available=yes");
   }
 
-  function applyDiscoveryReceipt(status, flags, receipt) {
+  function applyDiscoveryReceipt(status, flags, receipt, context) {
     if (status !== "pass") return;
-    const discovered = Number(flags.discovered);
     const minimum = Number(flags.minimum);
+    if (flags.countMeasurement === "exit-code") {
+      // Only the harness-run rapid-lane adapter may prove "at least one test
+      // ran" without a count; it never satisfies a floor above 1.
+      if (!context.harnessExecuted || context.state?.schema !== "foundation-rapid" ||
+          minimum !== 1 || (flags.discovered !== null && flags.discovered !== undefined))
+        die("exit-code discovery receipt requires a harness-executed rapid-lane run, minimum 1, and no count");
+      receipt.discovery = { discovered: null, minimum, countMeasurement: "exit-code" };
+      return;
+    }
+    const discovered = Number(flags.discovered);
     if (!Number.isFinite(discovered) || !Number.isFinite(minimum) ||
         minimum <= 0 || discovered < minimum)
       die("passing discovery receipt requires --discovered N --minimum N with discovered >= minimum > 0");
@@ -971,7 +1048,15 @@ export function createReceiptRuntime({
     receipt.classification = flags.classification || null;
   }
 
+  // Only the harness-run benchmark adapter measured both sides; a manual
+  // receipt cannot assert a base/head comparison.
+  function applyBenchmarkReceipt(flags, receipt, context) {
+    if (context.adapter === "benchmark" && context.harnessExecuted && flags.benchmark)
+      receipt.benchmark = flags.benchmark;
+  }
+
   function applyCapabilityReceipt(id, provider, status, flags, options, receipt, context) {
+    applyBenchmarkReceipt(flags, receipt, context);
     if (context.capability === "review")
       applyReviewReceipt(id, provider, status, flags, options, receipt, receipt.references);
     if (context.capability === "acceptance")
@@ -979,7 +1064,7 @@ export function createReceiptRuntime({
     if (context.capability === "semantic-acceptance")
       applySemanticAcceptanceReceipt(id, flags, receipt, context);
     if (context.capability === "browser") validateBrowserReceipt(status, receipt);
-    if (context.capability === "discovery") applyDiscoveryReceipt(status, flags, receipt);
+    if (context.capability === "discovery") applyDiscoveryReceipt(status, flags, receipt, context);
     if (context.capability === "mutation") applyMutationReceipt(status, flags, receipt);
   }
 
@@ -993,8 +1078,11 @@ export function createReceiptRuntime({
     const suppliedEvidence = receiptEvidence(id, provider, status, preparedFlags, context);
     const receipt = baseReceipt(id, provider, status, preparedFlags, context, suppliedEvidence);
     applyCapabilityReceipt(id, provider, status, preparedFlags, options, receipt, context);
-    writeJson(receiptPath(id, provider), receipt);
-    if (!options.quiet) console.log(`RECEIPT ${id}/${provider}: ${status}`);
+    const path = receiptPath(id, provider);
+    const flaky = markExecutedFlake(readJson(path, {}), receipt);
+    writeJson(path, flaky);
+    if (!options.quiet) console.log(`RECEIPT ${id}/${provider}: ${flaky.status}${
+      flaky.flake ? " (flaky: failed then passed on unchanged content)" : ""}`);
   }
 
   const recordDeterministicReviewClosure =

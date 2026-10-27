@@ -1,6 +1,6 @@
 ---
 name: feature
-description: Run the repository's end-to-end Foundation feature workflow for a PRD or backlog group. Use when the user invokes feature, asks Codex to deliver a PRD group, or wants one intake-through-Prove run with a single Decision Sheet.
+description: "Implement and prove a selected PRD or backlog group through discovery, one Decision Sheet, compiled Change approval, and isolated Build. Use for feature intake or resume. Proven is not delivery; intake approval grants no Land authority."
 ---
 
 Treat the text after `$feature` as the command arguments. Read

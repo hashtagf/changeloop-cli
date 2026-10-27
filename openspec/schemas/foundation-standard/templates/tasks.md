@@ -1,6 +1,6 @@
 # Tasks
 
-> This is the sole implementation ledger. Semantic draft v3 generates stable
+> This is the sole implementation ledger. Semantic draft v4 generates stable
 > IDs and claim links from task keys and `covers`; do not copy them across files
 > by hand. Check an item only when its verify condition passes. Group by coherent
 > behavior, not workflow phase.

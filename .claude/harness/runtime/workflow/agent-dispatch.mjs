@@ -37,9 +37,11 @@ export function createAgentDispatchRuntime({
   serializedJson = (value, pretty) => JSON.stringify(value, null, pretty ? 2 : 0),
   fail
 }) {
-  function dispatchValue(id, options = {}) {
+  // `plannedValue` lets one coordinator read reuse the plan it compiled for
+  // this exact read instead of planning the same graph twice.
+  function dispatchValue(id, options = {}, plannedValue = null) {
     if (!id) fail("agents dispatch requires <change>");
-    const plan = agentPlanValue(id, options);
+    const plan = plannedValue || agentPlanValue(id, options);
     const active = activeChangeLeases(id)
       .sort((left, right) => String(left.taskId).localeCompare(String(right.taskId)));
     const base = {
@@ -72,6 +74,24 @@ export function createAgentDispatchRuntime({
       nextCommand: command(`agents dispatch ${id}`)
     };
 
+    // A shared resource another active change holds is queued, never a plan
+    // defect: the harness waits for the holder and resumes on its own.
+    const resourceWaits = Array.isArray(plan.resourceWaits) ? plan.resourceWaits : [];
+    if (!plan.dispatchable && !(plan.blockingReasons || []).length && resourceWaits.length) {
+      const holders = [...new Set(resourceWaits.map((row) => row.changeId).filter(Boolean))];
+      return {
+        ...base,
+        action: "wait",
+        waitKind: "cross-change-resource",
+        reason: `queued behind active change ${holders.join(", ")}: ${
+          resourceWaits.map((row) => row.reason).slice(0, 5).join("; ")}`,
+        resourceWaits: resourceWaits.slice(0, 20),
+        holders,
+        activeWorkers: [],
+        nextCommand: command(`advance ${id}`)
+      };
+    }
+
     if (!plan.dispatchable) return {
       ...base,
       action: "blocked",
@@ -95,7 +115,8 @@ export function createAgentDispatchRuntime({
       action: "run-in-session",
       reason: plan.executionReason,
       pendingTaskCount: plan.tasks.length,
-      pendingTaskIds: plan.tasks.slice(0, 20).map((task) => task.id),
+      // Wave order is dependency order: the session takes the whole chain.
+      pendingTaskIds: (plan.groups?.flat() || plan.tasks.map((task) => task.id)).slice(0, 20),
       pendingTaskIdsTruncated: plan.tasks.length > 20,
       model: plan.sessionModel,
       packetCommand: command(`packet ${id} --phase build`),

@@ -19,7 +19,7 @@ artifacts:
     generates: design.md
     description: Conditional load-bearing decisions, diagrams, integrations, and rollback
     template: design.md
-    instruction: Semantic draft v3 creates this only when durable design context exists; record no empty/default design.
+    instruction: Semantic draft v4 creates this only when durable design context exists; record no empty/default design.
     requires: [proposal, specs]
   - id: tasks
     generates: tasks.md

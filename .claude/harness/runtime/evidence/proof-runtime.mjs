@@ -1,13 +1,19 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { validityRecovery } from "./receipt-validity.mjs";
-import { singleAgentExecutionEligible } from "../core/graph-execution.mjs";
+import { proofRolloutGates } from "./provider-catalog.mjs";
+import { resolveTaskExecutionAuthority } from "../core/task-execution-authority.mjs";
 import { transitionLifecycleState } from "../core/lifecycle-reducer.mjs";
 
 export function taskPacketWasPrecompletedOperation({
   loadRuntime, activeChangePath, exists, fileDigest
 }, id) {
   const state = loadRuntime(id);
+  // Before isolation, a checked task is necessarily pre-existing packet state.
+  // Once a workspace exists, require its captured digest and fail closed when
+  // the snapshot is absent or the packet changed.
+  if (!state.workspace || (state.workspace.mode === "current" &&
+      !state.workspace.packetSnapshot)) return true;
   const expected = state.workspace?.packetSnapshot?.["tasks.md"] || null;
   const path = join(activeChangePath(id), "tasks.md");
   return Boolean(expected && exists(path) && fileDigest(path) === expected);
@@ -18,31 +24,6 @@ function passingTaskNode(node, source, resultAuthority) {
     nodeId: node.id, lifecycle: node.lifecycle, status: "pass", source, claims: node.claims,
     ...(resultAuthority ? { resultAuthority } : {})
   };
-}
-function taskResultMismatches(result, taskId, node, graph, state, pathCovered) {
-  const mismatches = [];
-  const expect = (field, actual, expected) => { if (String(actual ?? "") !== String(expected ?? "")) mismatches.push(field); };
-  expect("taskId", result.taskId, taskId);
-  expect("repository", result.repository, node.repository);
-  expect("graphRevision", result.graphRevision, graph.revision);
-  expect("graphIdentity", result.graphIdentity, graph.identity);
-  expect("contractRevision", result.contractRevision, state.contractRevision);
-  if (JSON.stringify([...(result.paths || [])].sort()) !==
-      JSON.stringify([...(node.paths || [])].sort())) mismatches.push("paths");
-  if (JSON.stringify([...(result.claimIds || [])].sort()) !==
-      JSON.stringify([...(node.claims || [])].sort())) mismatches.push("claimIds");
-  if (JSON.stringify(result.outputSchema || null) !==
-      JSON.stringify(node.outputSchema || null)) mismatches.push("outputSchema");
-  if (result.status !== "observed") mismatches.push("status");
-  for (const field of ["planDigest", "workspaceHash", "leaseId"])
-    if (!String(result[field] || "")) mismatches.push(field);
-  for (const field of ["fencingGeneration", "executionAttempt"])
-    if (!Number.isInteger(Number(result[field])) || Number(result[field]) < 1)
-      mismatches.push(field);
-  const unexpectedWrites = (result.observedWrites || [])
-    .filter((path) => !pathCovered(path, node.paths));
-  if (unexpectedWrites.length) mismatches.push("observedWrites");
-  return [...new Set(mismatches)];
 }
 function acceptedTaskResultProof(root, fileDigest, resultRecord, result, node, taskId, runRoot) {
   const destination = join(runRoot, "nodes", `${taskId}.json`);
@@ -55,32 +36,33 @@ function acceptedTaskResultProof(root, fileDigest, resultRecord, result, node, t
     sha256: fileDigest(destination), size: statSync(destination).size
   });
 }
-function singleAgentTaskProof(savedAgentPlan, id, taskId, node, graph, fail) {
-  const execution = savedAgentPlan?.(id)?.taskExecution?.[taskId];
-  const taskNodes = graph.nodes.filter((entry) => entry.kind === "task");
-  const eligible = singleAgentExecutionEligible(taskNodes, graph.claims);
-  const saved = execution?.mode === "single-agent-observed" &&
-    execution.graphRevision === graph.revision && execution.graphIdentity === graph.identity;
-  if (!saved && !eligible)
-    fail(`task node '${node.id}' lacks an accepted lease result; resume /build for its bounded repair scope`);
-  return passingTaskNode(node, "single-agent-observed");
-}
-export function taskNodeProof({ root, fileDigest, legacyExecutionPolicy, taskPacketWasPrecompleted,
-  taskResult, savedAgentPlan, pathCovered, fail
+// Every task node passes only through task execution authority. The review
+// circuit governs review dispatch, never Build verification, and a change
+// created before graph execution existed is re-verified by `advance` (its
+// ticked tasks lack execution authority) rather than trusted unchecked.
+export function taskNodeProof({ root, fileDigest, taskPacketWasPrecompleted,
+  taskResult, savedAgentPlan, contractFingerprint, taskLease, fail
 }, id, node, graph, state, runRoot) {
   const taskId = node.id.replace(/^task:/, "");
-  if (!state.graphExecutionVersion) return passingTaskNode(node, "legacy-upgrade");
-  if (legacyExecutionPolicy?.()) return passingTaskNode(node, "legacy-policy");
   if (taskPacketWasPrecompleted?.(id))
     return passingTaskNode(node, "precompleted-at-isolation");
   const resultRecord = taskResult?.(id, taskId) || null;
-  const result = resultRecord?.value || null;
-  if (!result)
-    return singleAgentTaskProof(savedAgentPlan, id, taskId, node, graph, fail);
-  const mismatches = taskResultMismatches(result, taskId, node, graph, state, pathCovered);
-  if (mismatches.length)
-    fail(`task node '${node.id}' has stale or invalid result authority: ${mismatches.join(", ")}`);
-  return acceptedTaskResultProof(root, fileDigest, resultRecord, result, node, taskId, runRoot);
+  const authority = resolveTaskExecutionAuthority({
+    id, taskId, node, graph, state, savedPlan: savedAgentPlan?.(id) || {},
+    resultRecord, taskLease: taskLease?.(id, taskId) || null,
+    currentContractFingerprint: contractFingerprint?.(id) || null
+  });
+  if (authority.status === "accepted-lease-result")
+    return acceptedTaskResultProof(root, fileDigest, resultRecord,
+      resultRecord.value, node, taskId, runRoot);
+  if (authority.status === "single-agent-observed")
+    return passingTaskNode(node, "single-agent-observed");
+  if (authority.status === "compatible-legacy-single-session") return {
+    ...passingTaskNode(node, "single-agent-observed"),
+    compatibility: authority.compatibility
+  };
+  fail(`task node '${node.id}' requires current Build verification: ${authority.reason}; ` +
+    `next: claude-foundation advance ${id} --through proven`);
 }
 
 export function createProofRuntime({
@@ -90,8 +72,8 @@ export function createProofRuntime({
   protocolDescriptor, contractFingerprint, executionFingerprint, proofPath,
   writeJson, readJson, pathInside, validateArtifact, instructionProvenance,
   agentPlanValue = null, savedAgentPlan = null, taskResult = null,
-  taskPacketWasPrecompleted = null, legacyExecutionPolicy = null,
-  selectedRepositories = () => [], git = null, now, fail
+  taskLease = null, taskPacketWasPrecompleted = null,
+  selectedRepositories = () => [], git = null, rolloutGates = () => [], now, fail
 }) {
   function assertReadRepositoriesUnchanged(id, state) {
     if (!git) return;
@@ -105,16 +87,8 @@ export function createProofRuntime({
     }
   }
 
-  function pathCovered(path, scopes) {
-    if (!(scopes || []).length) return true;
-    return scopes.some((scope) => {
-      const prefix = String(scope).replace(/\/\*\*?$/, "").replace(/\/$/, "");
-      return scope === "*" || path === prefix || path.startsWith(`${prefix}/`);
-    });
-  }
-
-  const taskNodeDependencies = { root, fileDigest, legacyExecutionPolicy, taskPacketWasPrecompleted,
-    taskResult, savedAgentPlan, pathCovered, fail };
+  const taskNodeDependencies = { root, fileDigest, taskPacketWasPrecompleted,
+    taskResult, savedAgentPlan, contractFingerprint, taskLease, fail };
 
   function assertProviderChecks(id, state, hash, checks) {
     const blockers = checks.filter((row) => row.validity !== "valid");
@@ -235,6 +209,7 @@ export function createProofRuntime({
       aggregateGraphProof: graphProof.aggregate,
       providers: checks.map((row) => row.provider),
       advisories: advisoryCapabilities?.(id) || [],
+      rolloutGates: rolloutGates(id),
       receipts: receiptEntries,
       excludedReceipts,
       artifacts: state.activeProofRun?.serviceArtifacts ||
@@ -257,13 +232,22 @@ export function createProofRuntime({
     if (!options.quiet)
       console.log(`PROVEN ${id}\n  workspace: ${hash}\n  providers: ${proof.providers.join(", ")}` +
         `${excludedReceipts.length ? `\n  excluded receipts: ${excludedReceipts.map((row) =>
-          `${row.provider}:${row.validity}`).join(", ")}` : ""}\n  next: /land ${id}`);
+          `${row.provider}:${row.validity}`).join(", ")}` : ""}${proofRolloutGates(proof, { deferred: true }).length
+          ? `\n  rollout gates (deferred): ${proofRolloutGates(proof, { deferred: true }).map((row) =>
+            row.capability).join(", ")}` : ""}\n  next: /land ${id}`);
   }
 
   function finalize(id, requestedProofRunId, suppliedOptions) {
     const options = Object.assign({}, suppliedOptions);
     const state = loadRuntime(id);
     const { snapshot, hash, checks } = finalizeReadiness(id, state);
+    // The audit rejects a proof without receipts (`missing-receipt-manifest`),
+    // so writing one would report PROVEN for a change Land cannot accept.
+    if (!checks.length)
+      fail(`missing-receipt-manifest: change '${id}' has no required evidence left, so its proof ` +
+        "would carry no receipts and Land would refuse it. A recorded waiver may have withdrawn " +
+        `every required capability: revoke it with claude-foundation change waive ${id} ` +
+        "--capability <capability> --revoke --decision-ref <ref>, or amend the agreement");
     const proofRunId = requestedProofRunId || state.activeProofRun?.id || `proof-${Date.now()}`;
     const runRoot = proofRunRoot(id, proofRunId);
     const receiptEntries = copyProofReceipts(id, runRoot, checks);

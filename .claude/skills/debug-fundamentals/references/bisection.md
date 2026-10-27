@@ -2,6 +2,11 @@
 
 Reading code linearly is O(n); bisecting is O(log n) — a 200-commit regression is 8 steps, not 200. Almost *any* search space bisects, not just commits.
 
+Git bisect changes checkout state. Use it only with authorized Git mutation
+in a disposable host/harness-provided history scope, never the active target or
+Build workspace. Otherwise compare sources read-only and reproduce the suspected
+change through permitted fixtures. No manual worktree creation is implied.
+
 ## The general shape
 
 Works when: (1) there's a **search space** (commits, lines, fields, items, configs, versions); (2) you can **test any point** for a binary good/bad; (3) the answer is **monotonic** — flips once at a boundary, never back. Then find the boundary in log₂(n) steps.

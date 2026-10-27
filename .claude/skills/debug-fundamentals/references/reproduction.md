@@ -25,7 +25,7 @@ Needs a DB/network/queue? Write an *integration* test against a real instance �
 
 Smallest input/sequence/state that still triggers the bug — minimization often reveals the cause ("it's specifically `total === 0`").
 - Remove one field/header/param/step; re-run. Still fails → leave it out. Now passes → the trigger touches that piece.
-- Long inputs → binary-search: chop in half, keep the failing half, repeat (see `references/bisection.md`).
+- Long inputs → binary-search: chop in half, keep the failing half, repeat (see [bisection](bisection.md)).
 
 ## When it's "flaky"
 
@@ -56,3 +56,5 @@ Too sensitive to log values? Log the *shape* — types, lengths, field presence.
 - Re-running until it passes teaches CI to hide the bug; it's not a fix.
 - Repros needing your branch + laptop aren't portable — bake into the repo.
 - Don't lose the repro after the fix; promote it to the suite (principle 7).
+
+Two failed fixes on the same gate, or a decision to add or remove a guard → read [root cause](root-cause.md).

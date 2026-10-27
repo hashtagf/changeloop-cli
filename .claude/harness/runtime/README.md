@@ -11,7 +11,6 @@ implementation is grouped by domain:
 - `workflow/` — change, agent, repository, sandbox, authority, Land, and archive state machines.
 - `observability/` — telemetry ingestion, normalization, and read-only metrics reporting.
 - `contracts/` — portable schemas for instruction provenance and host execution results.
-- `reliability/` — opt-in bounded primitives for explicitly idempotent infrastructure operations.
 
 ## Dependency rules
 
@@ -29,7 +28,7 @@ growing back into a monolith.
 The deterministic architecture suite enforces this graph:
 
 ```text
-contracts / core / reliability
+   contracts / core
             ^
  evidence / observability
             ^

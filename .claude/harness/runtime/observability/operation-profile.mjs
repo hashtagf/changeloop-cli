@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { canonicalJson } from "../core/trust.mjs";
 
 const SENSITIVE_FLAGS = new Set([
   "--decision-ref", "--reason", "--token", "--secret", "--password", "--key"
@@ -8,13 +9,6 @@ export const REPEATABLE_CHECK_OPERATIONS = new Set([
   "validate", "proof-plan", "proof-readiness", "proof-preflight",
   "proof-audit", "land-check", "evidence-doctor", "quality-doctor"
 ]);
-
-function stableJson(value) {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object") return `{${Object.keys(value).sort()
-    .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
-  return JSON.stringify(value);
-}
 
 export function sanitizedCommandArgs(values = []) {
   const result = [];
@@ -65,7 +59,7 @@ export function operationInputFingerprint({
     foundationConfigDigest,
     projectPolicyDigest
   };
-  return `sha256:${createHash("sha256").update(stableJson(projection)).digest("hex")}`;
+  return `sha256:${createHash("sha256").update(canonicalJson(projection)).digest("hex")}`;
 }
 
 function measured(value) {

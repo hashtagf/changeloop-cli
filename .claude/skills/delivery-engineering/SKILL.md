@@ -1,9 +1,12 @@
 ---
 name: delivery-engineering
-description: Design or change CI/CD, builds, containers, artifacts, environment configuration, deployment, rollout, rollback, or release automation. Covers meaningful merge gates, reproducible build-once promotion, externalized secrets/config, reversible rollout, and delivery observability. Skip local-only scripts and product-code changes that do not alter delivery behavior.
+description: "Design or repair CI/CD, builds, artifacts, configuration, deploy, rollout, and rollback. Use for reproducible delivery pipelines and failing checks. Project tools produce evidence; Change Loop owns proof/Land, and external effects require separate authority."
 ---
 
 # Delivery engineering
+
+Aggregate independent CI findings and repair in dependency order. Never push,
+weaken protection, or change expectations merely to make checks green.
 
 Use this for the path from source to a running or published artifact. Foundation
 controls change/evidence/Land; the project pipeline remains the delivery system
@@ -41,3 +44,5 @@ weaken Land authority in pipeline code.
 Reference: read `references/pipeline-and-deploy.md` for pipeline structure,
 caching, artifact promotion, configuration, deploy strategies, flags, and
 delivery metrics. Use `git-workflow` for branch/commit/PR operations.
+
+For failed CI or review findings, read [repair procedure](references/ci-and-review-repair.md).

@@ -82,7 +82,8 @@ export function createArtifactStore({
     let decoded = decodedEvidencePath(value);
     if (!decoded) return false;
     const slashPath = decoded.replaceAll("\\", "/").toLowerCase();
-    if (/(^|\/)\.foundation\/prototypes(?:\/|$)/.test(slashPath)) return true;
+    // Preview runs are pre-Build scratch output, as non-authoritative as prototypes.
+    if (/(^|\/)\.foundation\/(?:prototypes|previews)(?:\/|$)/.test(slashPath)) return true;
     if (/^file:/i.test(decoded)) {
       try { decoded = fileURLToPath(decoded); }
       catch { return false; }
@@ -91,7 +92,9 @@ export function createArtifactStore({
     }
     const roots = [...new Set([
       prototypesRoot,
-      join(workspace, ".foundation", "prototypes")
+      join(workspace, ".foundation", "prototypes"),
+      join(root, ".foundation", "previews"),
+      join(workspace, ".foundation", "previews")
     ].map((path) => resolve(path)))];
     const candidates = isAbsolute(decoded)
       ? [resolve(decoded)]
@@ -113,7 +116,7 @@ export function createArtifactStore({
     const rejected = values.find((value) =>
       evidenceInputTargetsPrototype(value, workspace));
     if (rejected)
-      fail(`prototype artifacts and references are non-authoritative and cannot satisfy evidence: ${rejected}`);
+      fail(`prototype artifacts and references are non-authoritative and cannot satisfy evidence (preview runs included): ${rejected}`);
   }
 
   function receiptPrototypeEvidence(id, provider, receipt) {

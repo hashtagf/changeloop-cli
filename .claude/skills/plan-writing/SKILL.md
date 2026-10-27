@@ -1,34 +1,32 @@
 ---
 name: plan-writing
-description: Write or improve an active OpenSpec change's design.md and tasks.md after proposal and delta requirements are clear. Use when implementation needs meaningful sequencing, compatibility, migration, rollback, cross-component decisions, or task dependencies. Skip rapid changes whose agreement and implementation path are already obvious.
+description: "Prepare design and task inputs for an OpenSpec change after requirements are settled. Use for dependencies, compatibility, migration, rollback, or consequential architecture. Use Change revision/amendment to update compiled agreements; skip obvious rapid work and parallel plans."
 ---
 
-# OpenSpec design and tasks
+# OpenSpec planning inputs
 
-Planning produces no parallel plan artifact. It completes the active OpenSpec
-change.
+Read the current agreement and verified source anchors. Compare alternatives
+only when uncertainty warrants it. Reuse settled choices.
 
-## `design.md`
+## Design
 
-Record only load-bearing information:
+Prepare load-bearing decisions: constraints, boundary ownership, compatibility,
+persisted-data consequences, rollout/recovery, and risks with evidence owners.
+Do not repeat requirements or create a separate architecture/status document.
 
-- verified current-state anchors;
-- decisions and the constraints that forced them;
-- public compatibility and persisted-data consequences;
-- rollout and rollback;
-- risks mapped to evidence owners.
+## Tasks
 
-Do not repeat proposal or requirement prose. Do not narrate a lifecycle.
+Propose coherent implementation outcomes with allowed paths, focused checks,
+and dependency order. Group by provable behavioral slice. Encode parallel
+eligibility only when changed files/symbols and checks are independent.
+These are compiler inputs, never a worker schedule or manual task completion.
 
-## `tasks.md`
+Before Build use Change intake/revision; after it starts use amendment for
+agreement changes. Never hand-edit compiled design/tasks, claim IDs, provider
+contracts, or checkboxes. The compiler owns stable links and the harness marks
+verified tasks. In-contract implementation findings need repair, not a new plan.
 
-This is the sole ledger. Each checkbox is a coherent implementation outcome with
-an affected surface and a focused verification. Order dependencies first. Mark
-parallel work only when files/symbols and verification are genuinely independent.
-Group large changes by behavioral slice; each slice must be provable.
-
-Do not create one native task per checkbox, agent-role handoffs, planning/testing
-phases, or a second status store. Finish by checking that every delta scenario has
-an implementation owner and an evidence claim. Use harness task annotations only
-for real repository, dependency, path, provider, or resource constraints; do not
-encode speculative concurrency.
+Verify that each scenario has an implementation owner and evidence claim.
+Use only necessary repository/path/provider/resource constraints. Resume the
+returned harness action; create no native task per checkbox or second ledger.
+Planning grants no Git or Land authority.

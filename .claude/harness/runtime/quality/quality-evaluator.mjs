@@ -30,12 +30,6 @@ export function pathMatches(path, patterns = []) {
   return patterns.some((pattern) => globToRegExp(pattern.replace(/^\.\//, "")).test(path));
 }
 
-export function scopeViolations(changedPaths, { include = [], allowedSupportingChanges = [], exclude = [] }) {
-  const allowed = [...include, ...allowedSupportingChanges];
-  return changedPaths.filter((path) =>
-    pathMatches(path, exclude) || !pathMatches(path, allowed));
-}
-
 function exceptionFor(exceptions, repository, target, metric, now = new Date()) {
   return exceptions.find((entry) => entry.repository === repository &&
     entry.target === target && entry.metric === metric &&

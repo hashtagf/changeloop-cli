@@ -4,6 +4,22 @@ import { join } from "node:path";
 import { measuredNumber } from "../core/measured-number.mjs";
 import { createModelDriftInspector } from "./host-execution-contract.mjs";
 import { commandProfile, operationPhaseRows } from "./operation-profile.mjs";
+import { toolCallProfile } from "./telemetry.mjs";
+
+// Host tool calls observed in imported Claude transcript rows. Rows imported
+// before tool calls were recorded carry no `toolCalls` array: they make the
+// profile partial, and with no observable row every count stays null.
+export function hostToolProfile(events = []) {
+  const transcript = events.filter((event) => event?.source === "claude-transcript");
+  const observed = transcript.filter((event) => Array.isArray(event.toolCalls));
+  const measurement = !observed.length ? "unavailable"
+    : observed.length < transcript.length ? "partial" : "measured";
+  return {
+    measurement,
+    source: observed.length ? "claude-transcript" : null,
+    ...toolCallProfile(observed.length ? observed.flatMap((event) => event.toolCalls) : null)
+  };
+}
 
 export function runtimeSourceDigest(directory) {
   const digest = createHash("sha256");
@@ -71,6 +87,26 @@ export function evidenceObservationGroups(providers = {}) {
     independent: names.length === 1
   })).sort((left, right) =>
     left.commandExecutionId.localeCompare(right.commandExecutionId));
+}
+
+// Where a change stopped: blocked operations by code, phase, and operation,
+// with the latest locally recorded reason for each code.
+export function blockerMetrics(operations = []) {
+  const byCode = {};
+  let total = 0;
+  for (const row of operations) {
+    if (row?.status !== "blocked") continue;
+    total += 1;
+    const code = row.blocker?.code || "untyped";
+    const current = byCode[code] ||= { count: 0, phases: {}, operations: {}, latestReason: null };
+    current.count += 1;
+    const phase = row.phase || "unknown";
+    current.phases[phase] = (current.phases[phase] || 0) + 1;
+    const operation = row.operation || "unknown";
+    current.operations[operation] = (current.operations[operation] || 0) + 1;
+    if (row.blocker?.reason) current.latestReason = row.blocker.reason;
+  }
+  return { total, byCode };
 }
 
 export function lifecycleStageMetrics(operations = []) {
@@ -622,6 +658,7 @@ export function createMetricsRuntime({
         "transcript was never ingested remain inside unattributedWaitMs",
       phases, providers,
       stages: lifecycleStageMetrics(operations),
+      blockers: blockerMetrics(operations),
       schedulers: lifecycleSchedulerMetrics(operations),
       evidenceObservationGroups: evidenceObservationGroups(providers),
       evidenceExecutionTimeMs,
@@ -691,6 +728,16 @@ export function createMetricsRuntime({
           inputFingerprint: row.inputFingerprint || null
         }))
       },
+      // Semantic intake is captured before its resumable draft snapshot is
+      // retired. Older and non-semantic changes truthfully report unavailable.
+      semanticIntake: state.semanticIntakeEffectiveness || null,
+      semanticAmendmentIntake: (state.amendments || [])
+        .filter((row) => row?.semanticIntakeEffectiveness)
+        .map((row) => ({
+          revision: row.revision,
+          appliedAt: row.appliedAt || null,
+          effectiveness: row.semanticIntakeEffectiveness
+        })),
       rework: {
         expectedStops: operations.filter((row) => row.status === "blocked").length,
         unexpectedFailures: operations.filter((row) => row.status === "failed").length,
@@ -698,6 +745,7 @@ export function createMetricsRuntime({
         providerRebindings: reuseRows.length
       },
       commandProfile: commandProfile(operations, inspections),
+      hostToolProfile: hostToolProfile(events),
       orchestratorTokenShare: tokenTotal > 0 ? orchestratorTokens / tokenTotal : null,
       orchestratorCostShare: totalCost > 0 && orchestratorCost !== null
         ? orchestratorCost / totalCost : null,

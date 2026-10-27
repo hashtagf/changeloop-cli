@@ -20,9 +20,11 @@
 // They get an explicit bucket rather than a phantom phase named after whichever
 // command happened to run.
 
-export const LIFECYCLE_PHASES = ["change", "build", "prove", "land"];
+export const LIFECYCLE_PHASES = ["investigate", "change", "build", "prove", "land"];
+export const OPTIONAL_OPERATION_PHASES = ["deliver"];
 
 export const PHASE_BY_COMMAND = {
+  investigate: "investigate",
   new: "change",
   start: "change",
   resolve: "change",
@@ -37,6 +39,7 @@ export const PHASE_BY_COMMAND = {
   "quality-discover": "change",
   "quality-init": "change",
   "quality-doctor": "change",
+  preview: "change",
 
   sandbox: "build",
   "agent-plan": "build",
@@ -59,6 +62,7 @@ export const PHASE_BY_COMMAND = {
   "authority-status": "prove",
   "authority-record": "prove",
   "authority-reset-infra": "prove",
+  "authority-extend-review": "prove",
   "authority-reset-base-move": "prove",
   "evidence-verify-ci": "prove",
   receipt: "prove",
@@ -69,6 +73,7 @@ export const PHASE_BY_COMMAND = {
   "quality-baseline": "prove",
   "quality-debt": "prove",
 
+  "handoff-list": "land",
   "handoff-status": "land",
   "handoff-packet": "land",
   "handoff-record": "land",
@@ -82,6 +87,8 @@ export const PHASE_BY_COMMAND = {
   "land-resume": "land",
   archive: "land",
 
+  "delivery-advance": "deliver",
+
   "budget-continue": "meta",
   "budget-checkpoint": "meta",
   event: "meta",
@@ -89,6 +96,7 @@ export const PHASE_BY_COMMAND = {
   "telemetry-import": "meta",
   advance: "meta",
   amend: "change",
+  revise: "change",
   feedback: "meta"
 };
 
@@ -102,5 +110,5 @@ export function phaseForCommand(command) {
 // attribute a whole cursor chunk to a command that built nothing.
 export function telemetryPhaseForCommand(command) {
   const phase = phaseForCommand(command);
-  return LIFECYCLE_PHASES.includes(phase) ? phase : null;
+  return [...LIFECYCLE_PHASES, ...OPTIONAL_OPERATION_PHASES].includes(phase) ? phase : null;
 }

@@ -3,6 +3,52 @@
 # Shared adapter-install support. Callers define adapter_scope_root(), mapping
 # the manifest's small scope vocabulary to an absolute root they own.
 
+# shellcheck source=.claude/harness/adapters/install-paths.sh
+. "$SOURCE_PATH/.claude/harness/adapters/install-paths.sh"
+
+adapter_manifest_preflight() {
+  local host="$1" target="$2" manifest scope rel src name base
+  ADAPTER_MANIFEST_HOST="$host"
+  manifest="$target/.foundation/adapter-manifests/$host.txt"
+  install_assert_destination "$target" ".foundation/adapter-manifests/$host.txt"
+  if [ -f "$manifest" ]; then
+    while IFS="$(printf '\t')" read -r scope rel; do
+      [ -n "$scope" ] || continue
+      adapter_manifest_validate_entry "$scope" "$rel"
+    done < "$manifest"
+  fi
+  case "$host" in
+    codex)
+      install_assert_destination "$target" .agents/skills
+      install_assert_destination "$target" .codex
+      base="$(adapter_scope_root codex-home)"
+      install_assert_destination "$base" prompts
+      for src in "$SOURCE_PATH/.claude/skills/"*/SKILL.md; do
+        name="$(basename "$(dirname "$src")")"
+        install_assert_destination "$target" ".agents/skills/$name" yes
+      done
+      for rel in .codex/foundation-rules .codex/hooks; do
+        install_assert_destination "$target" "$rel" yes
+      done
+      for src in "$SOURCE_PATH/.claude/commands/"*.md; do
+        install_assert_destination "$base" "prompts/$(basename "$src")"
+      done ;;
+    cursor|opencode)
+      install_assert_destination "$target" ".$host/commands"
+      for src in "$SOURCE_PATH/.claude/commands/"*.md; do
+        install_assert_destination "$target" ".$host/commands/$(basename "$src")" yes
+      done
+      if [ "$host" = cursor ]; then
+        for rel in .cursor/orchestrator.md .cursor/rules/fundamentals.mdc .cursor/rules/foundation-human-guidance.mdc; do
+          install_assert_destination "$target" "$rel" yes
+        done
+        install_assert_destination "$target" .cursor/agents
+      else
+        install_assert_destination "$target" .opencode/plugins/foundation.js yes
+      fi ;;
+  esac
+}
+
 adapter_manifest_init() {
   ADAPTER_MANIFEST_HOST="$1"
   ADAPTER_MANIFEST_TARGET="$2"
@@ -51,6 +97,11 @@ adapter_manifest_validate_entry() {
   esac
   adapter_scope_root "$scope" >/dev/null ||
     fail "adapter manifest scope is unavailable: $scope"
+  # Adapter-owned leaf links are unlinked, never followed. Global Codex prompts
+  # are written directly and therefore cannot be writable symlink aliases.
+  local allow_leaf_link=yes
+  [ "$scope" != codex-home ] || allow_leaf_link=no
+  install_assert_destination "$(adapter_scope_root "$scope")" "$rel" "$allow_leaf_link"
 }
 
 adapter_manifest_owned() {

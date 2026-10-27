@@ -1,0 +1,463 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-10-09",
+  "scope": "Curated reference metadata and original adaptation notes; no third-party implementation or media is bundled.",
+  "catalog_snapshot": {
+    "source_url": "https://raw.githubusercontent.com/qiuyiwu1989-star/opendesign/main/catalog.json",
+    "observed_count": 1486,
+    "observed_has_pack_count": 920,
+    "counts_are_dated": true
+  },
+  "attribution": [
+    {
+      "provider": "opendesign.cc",
+      "authors": "Qiu Yiwu and OpenDesign contributors",
+      "project_url": "https://opendesign.cc/",
+      "license_information_url": "https://github.com/qiuyiwu1989-star/opendesign#license",
+      "spec_license_reported_by_upstream": "CC BY 4.0",
+      "original_assets": "Respective site owners; not imported",
+      "changes": "Selected references with newly written task mappings, caveats and descriptions."
+    },
+    {
+      "provider": "open-design.ai",
+      "authors": "OpenDesign / nexu-io/open-design contributors; inspect each package author and license before reuse",
+      "project_url": "https://github.com/nexu-io/open-design",
+      "license_information_url": "https://github.com/nexu-io/open-design/blob/main/LICENSE",
+      "repository_default_license": "Apache-2.0; local package licenses may differ",
+      "changes": "Reference-only catalogue with original descriptions; no template source is copied."
+    }
+  ],
+  "excluded_catalog_examples": [
+    {
+      "slug": "tesla",
+      "reason": "Catalog summary describes an access-denied server error, not product content."
+    },
+    {
+      "slug": "perplexity",
+      "reason": "Catalog summary describes security verification, not the product/search interface."
+    }
+  ],
+  "entries": [
+    {
+      "id": "ODC01",
+      "provider": "opendesign.cc",
+      "slug": "linear",
+      "title": "Linear",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "P02"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/linear",
+      "upstream_spec_url": "https://opendesign.cc/packs/linear/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/linear/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Dark technical product presentation and structured product sections.",
+      "caveat": "Public marketing material does not establish the authenticated application's task layout."
+    },
+    {
+      "id": "ODC02",
+      "provider": "opendesign.cc",
+      "slug": "stripe",
+      "title": "Stripe",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "M03"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/stripe",
+      "upstream_spec_url": "https://opendesign.cc/packs/stripe/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/stripe/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Split product hero and clear hierarchy for a technical financial offering.",
+      "caveat": "Do not transfer source colors or screenshot-specific 'no dark mode' advice as universal rules."
+    },
+    {
+      "id": "ODC03",
+      "provider": "opendesign.cc",
+      "slug": "vercel",
+      "title": "Vercel",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "E01"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/vercel",
+      "upstream_spec_url": "https://opendesign.cc/packs/vercel/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/vercel/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Monochrome hierarchy, technical typography and a centered product presentation.",
+      "caveat": "Source mentions both shadows and no shadows; resolve against screenshot/computed evidence before adopting tokens."
+    },
+    {
+      "id": "ODC04",
+      "provider": "opendesign.cc",
+      "slug": "mercury",
+      "title": "Mercury",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "M04"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/mercury",
+      "upstream_spec_url": "https://opendesign.cc/packs/mercury/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/mercury/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Photographic hero with serif display and restrained supporting content.",
+      "caveat": "This public promotional surface is not a verified banking dashboard."
+    },
+    {
+      "id": "ODC05",
+      "provider": "opendesign.cc",
+      "slug": "supabase",
+      "title": "Supabase",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "E01"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/supabase",
+      "upstream_spec_url": "https://opendesign.cc/packs/supabase/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/supabase/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Developer-product presentation with clear section hierarchy and code-oriented context.",
+      "caveat": "Verify actual route, theme and source measurements before importing values."
+    },
+    {
+      "id": "ODC06",
+      "provider": "opendesign.cc",
+      "slug": "raycast",
+      "title": "Raycast",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "U02"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/raycast",
+      "upstream_spec_url": "https://opendesign.cc/packs/raycast/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/raycast/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Productivity-product reference for product story and recognizable technical identity.",
+      "caveat": "A launcher marketing page does not prove command-palette keyboard behavior."
+    },
+    {
+      "id": "ODC07",
+      "provider": "opendesign.cc",
+      "slug": "headspace",
+      "title": "Headspace",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "M02",
+        "B01"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/headspace",
+      "upstream_spec_url": "https://opendesign.cc/packs/headspace/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/headspace/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Friendly wellness presentation and approachable visual tone.",
+      "caveat": "Check Thai font coverage and actual text/control contrast independently."
+    },
+    {
+      "id": "ODC08",
+      "provider": "opendesign.cc",
+      "slug": "regrocery",
+      "title": "Regrocery",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "C01",
+        "C02"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/regrocery",
+      "upstream_spec_url": "https://opendesign.cc/packs/regrocery/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/regrocery/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Warm image-led consumer product presentation.",
+      "caveat": "Catalog/spec review does not verify cart or payment interactions."
+    },
+    {
+      "id": "ODC09",
+      "provider": "opendesign.cc",
+      "slug": "cubitts",
+      "title": "Cubitts",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "C01",
+        "C02",
+        "E01"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/cubitts",
+      "upstream_spec_url": "https://opendesign.cc/packs/cubitts/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/cubitts/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Editorial product imagery and typography for crafted objects.",
+      "caveat": "Product commerce mapping is an adaptation hypothesis, not a verified checkout."
+    },
+    {
+      "id": "ODC10",
+      "provider": "opendesign.cc",
+      "slug": "lusion",
+      "title": "Lusion",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/lusion",
+      "upstream_spec_url": "https://opendesign.cc/packs/lusion/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/lusion/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Expressive studio/portfolio direction and visual storytelling.",
+      "caveat": "Account for motion preferences, content access and rendering performance."
+    },
+    {
+      "id": "ODC11",
+      "provider": "opendesign.cc",
+      "slug": "cowboy",
+      "title": "Cowboy",
+      "evidence": "detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M04",
+        "C02"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/cowboy",
+      "upstream_spec_url": "https://opendesign.cc/packs/cowboy/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/cowboy/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Neutral image-and-form composition.",
+      "caveat": "Reviewed spec centers on a newsletter modal; do not treat it as the whole storefront layout."
+    },
+    {
+      "id": "ODC12",
+      "provider": "opendesign.cc",
+      "slug": "gleap",
+      "title": "Gleap",
+      "evidence": "catalog-only",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "M05"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/gleap",
+      "upstream_spec_url": "https://opendesign.cc/packs/gleap/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/gleap/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Potential reference for an AI-support product proposition.",
+      "caveat": "Detail fetch failed; visual/layout suitability remains unverified."
+    },
+    {
+      "id": "ODC13",
+      "provider": "opendesign.cc",
+      "slug": "framer",
+      "title": "Framer",
+      "evidence": "catalog-only",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/framer",
+      "upstream_spec_url": "https://opendesign.cc/packs/framer/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/framer/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Potential creative-tool marketing reference with expressive motion.",
+      "caveat": "Detail fetch failed; inspect actual content and reduced-motion behavior before adoption."
+    },
+    {
+      "id": "ODC14",
+      "provider": "opendesign.cc",
+      "slug": "getdooapp",
+      "title": "Getdooapp",
+      "evidence": "catalog-only",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "U02"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/getdooapp",
+      "upstream_spec_url": "https://opendesign.cc/packs/getdooapp/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/getdooapp/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Potential minimal productivity-app marketing reference.",
+      "caveat": "Detail fetch failed; device mockups are not validated native-app screens."
+    },
+    {
+      "id": "ODC15",
+      "provider": "opendesign.cc",
+      "slug": "stripe-press",
+      "title": "Stripe Press",
+      "evidence": "catalog-only",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "E01",
+        "C02"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/stripe-press",
+      "upstream_spec_url": "https://opendesign.cc/packs/stripe-press/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/stripe-press/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Potential publishing/product editorial reference.",
+      "caveat": "Detail fetch failed; inspect long-form reading and purchase flow separately."
+    },
+    {
+      "id": "ODC16",
+      "provider": "opendesign.cc",
+      "slug": "light",
+      "title": "Light",
+      "evidence": "catalog-only",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01",
+        "E01"
+      ],
+      "source_url": "https://opendesign.cc/en/sites/light",
+      "upstream_spec_url": "https://opendesign.cc/packs/light/DESIGN_SPEC.en.md",
+      "upstream_tokens_url": "https://opendesign.cc/packs/light/spec.json",
+      "pack_endpoints_verified": false,
+      "description": "Potential developer-infrastructure marketing reference.",
+      "caveat": "Only catalog metadata was reviewed; token and layout claims require pack inspection."
+    },
+    {
+      "id": "ODA01",
+      "provider": "open-design.ai",
+      "slug": "example-dashboard",
+      "title": "Dashboard",
+      "evidence": "plugin-detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "D01",
+        "A01"
+      ],
+      "source_url": "https://open-design.ai/plugins/example-dashboard/",
+      "description": "Sidebar, header, indicators and chart regions.",
+      "caveat": "Pick indicators from decisions; add real states and compact navigation.",
+      "implementation_inspected": false,
+      "runtime_tested": false
+    },
+    {
+      "id": "ODA02",
+      "provider": "open-design.ai",
+      "slug": "example-pricing-page",
+      "title": "Pricing Page",
+      "evidence": "plugin-detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M03"
+      ],
+      "source_url": "https://open-design.ai/plugins/example-pricing-page/",
+      "description": "Plan options, comparison and frequently asked questions.",
+      "caveat": "Specify recurring costs, limits and billing-period semantics.",
+      "implementation_inspected": false,
+      "runtime_tested": false
+    },
+    {
+      "id": "ODA03",
+      "provider": "open-design.ai",
+      "slug": "example-finance-report",
+      "title": "Finance Report",
+      "evidence": "plugin-detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "D03"
+      ],
+      "source_url": "https://open-design.ai/plugins/example-finance-report/",
+      "description": "Financial summary, charts and a profit/loss table.",
+      "caveat": "Add units, reporting period, provisional status and source traceability.",
+      "implementation_inspected": false,
+      "runtime_tested": false
+    },
+    {
+      "id": "ODA04",
+      "provider": "open-design.ai",
+      "slug": "example-flowai-live-dashboard-template",
+      "title": "Flowai Live Dashboard Template",
+      "evidence": "plugin-detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "A04",
+        "D01"
+      ],
+      "source_url": "https://open-design.ai/plugins/example-flowai-live-dashboard-template/",
+      "description": "Team views, member table, role breakdown and activity.",
+      "caveat": "Actual permissions, export and chart keyboard behavior still require implementation checks.",
+      "implementation_inspected": false,
+      "runtime_tested": false
+    },
+    {
+      "id": "ODA05",
+      "provider": "open-design.ai",
+      "slug": "example-kanban-board",
+      "title": "Kanban Board",
+      "evidence": "plugin-detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "P02"
+      ],
+      "source_url": "https://open-design.ai/plugins/example-kanban-board/",
+      "description": "Column-based work organization.",
+      "caveat": "Provide non-drag movement and distinguish persisted state from optimistic state.",
+      "implementation_inspected": false,
+      "runtime_tested": false
+    },
+    {
+      "id": "ODA06",
+      "provider": "open-design.ai",
+      "slug": "example-meeting-notes",
+      "title": "Meeting Notes",
+      "evidence": "plugin-detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "E01",
+        "P05"
+      ],
+      "source_url": "https://open-design.ai/plugins/example-meeting-notes/",
+      "description": "Meeting context, agenda, decisions and owned action items.",
+      "caveat": "Use accessible table semantics and explicit owner/date fields.",
+      "implementation_inspected": false,
+      "runtime_tested": false
+    },
+    {
+      "id": "ODA07",
+      "provider": "open-design.ai",
+      "slug": "example-wireframe-annotated",
+      "title": "Wireframe Annotated",
+      "evidence": "plugin-detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "M01"
+      ],
+      "source_url": "https://open-design.ai/plugins/example-wireframe-annotated/",
+      "description": "Low-fidelity page regions with numbered specification notes.",
+      "caveat": "Treat annotations as handoff aids; they are not live interaction verification.",
+      "implementation_inspected": false,
+      "runtime_tested": false
+    },
+    {
+      "id": "ODA08",
+      "provider": "open-design.ai",
+      "slug": "example-social-media-dashboard",
+      "title": "Social Media Dashboard",
+      "evidence": "plugin-detail-text-reviewed",
+      "reviewed_on": "2026-10-09",
+      "layout_ids": [
+        "D01",
+        "D02"
+      ],
+      "source_url": "https://open-design.ai/plugins/example-social-media-dashboard/",
+      "description": "Platform context, engagement indicators, growth and content panels.",
+      "caveat": "Define metric meaning, data freshness and cross-platform comparability.",
+      "implementation_inspected": false,
+      "runtime_tested": false
+    }
+  ]
+}

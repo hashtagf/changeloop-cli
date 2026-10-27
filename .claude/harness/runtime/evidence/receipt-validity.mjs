@@ -16,7 +16,7 @@ const VALIDITY_RECOVERY = {
   // "Re-run" is correct when the gate caught a real defect and useless when
   // the gate itself is wrong, so all three honest exits are stated. There is
   // deliberately no route that lands a failing proof.
-  fail: (id, provider) => `provider '${provider}' executed and failed. Fix the cause and re-run: claude-foundation proof run ${id}. If the gate itself is wrong, rewire it in openspec/changes/${id}/execution.yaml. If the user decides to land without it, withdraw it on record: claude-foundation change waive ${id} --capability <capability> --reason <why> --decision-ref <ref>`,
+  fail: (id, provider) => `provider '${provider}' executed and failed. Fix the cause and re-run: claude-foundation proof run ${id}. If an unfinished task's verify command is wrong, correct it directly (claude-foundation change amend ${id} --task <task> --verify <command>); a wrong evidence gate needs a semantic amendment (claude-foundation change amend ${id} <amendment.json>). If the user decides to land without it, withdraw it on record: claude-foundation change waive ${id} --capability <capability> --reason <why> --decision-ref <ref>`,
   stale: (id) => `the workspace moved after this receipt was earned; re-run: claude-foundation proof run ${id}. A provider that declares "inputs" in its config keeps its receipt when the edit falls outside them, and a review or acceptance verdict rebinds automatically when the change's diff and packet are unchanged on the moved base`,
   "reusable-diff": (id) => `the change's diff and packet are unchanged on the moved base, so the verdict rebinds without a new review; run: claude-foundation proof run ${id}`,
   "provider-inputs-stale": (id) => `the provider's declared inputs changed; re-run: claude-foundation proof run ${id}`,
@@ -34,8 +34,15 @@ const VALIDITY_RECOVERY = {
   "external-evidence-missing": () => "a passing external receipt must carry an artifact or reference (--artifact or --reference)",
   "execution-log-missing": (id) => `a harness-executed receipt must carry its command log; re-run: claude-foundation proof run ${id}`,
   "invalid-artifacts": (id) => `a required artifact is missing or altered since it was recorded; re-run: claude-foundation proof run ${id}`,
-  "prototype-evidence": () => "prototype output cannot serve as evidence; prove the real implementation"
+  "prototype-evidence": () => "prototype output cannot serve as evidence; prove the real implementation",
+  "preview-evidence": (id) => `a preview receipt is a pre-Build reading aid and never proof; run the provider in Prove: claude-foundation advance ${id} --through proven`
 };
+
+// A preview receipt (`kind: "preview"`) is refused wherever it appears, even
+// when copied into the receipt store.
+export function receiptIsPreview(value) {
+  return value?.kind === "preview";
+}
 
 export function validityRecovery(validity, id, provider) {
   const route = VALIDITY_RECOVERY[validity];
@@ -122,6 +129,7 @@ export function createReceiptValidity({
     ({ provider, validity, status: value.status });
 
   function protocolValidity(id, provider, value) {
+    if (receiptIsPreview(value)) return invalidReceipt(provider, "preview-evidence", value);
     if (String(value.providerProtocolVersion || "") !== providerProtocolVersion)
       return invalidReceipt(provider, "provider-version-stale", value);
     if (receiptPrototypeEvidence(id, provider, value))
@@ -365,7 +373,14 @@ export function createReceiptValidity({
 
   function completionValidity(context) {
     const { id, provider, value } = context;
-    if (value.status !== "pass") return { provider, validity: value.status };
+    // An inconclusive executed receipt already names its exact repair (for
+    // example the reporter that makes a test count parseable); carry it so the
+    // repair batch states it instead of a bare validity code.
+    if (value.status !== "pass") return {
+      provider, validity: value.status,
+      ...(value.status === "inconclusive" && String(value.observed || "").trim()
+        ? { reason: String(value.observed).trim() } : {})
+    };
     const requiredClaims = claimsForProvider(id, provider).map((claim) => claim.id);
     const covered = new Set(value.claims || []);
     if (requiredClaims.some((claim) => !covered.has(claim)))

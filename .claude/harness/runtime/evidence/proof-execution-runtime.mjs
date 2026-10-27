@@ -1,13 +1,18 @@
 import { acquireProcessLock } from "../core/process-lock.mjs";
-import { effectiveReviewAttemptLimit } from "../core/authority-policy.mjs";
+import {
+  effectiveReviewAttemptLimit, reviewClosureWaveAvailable
+} from "../core/authority-policy.mjs";
 import {
   compareGateProgress,
   gateProgressValue,
   gateRepairPlan,
-  noProgressDecision
+  noProgressDecision,
+  noProgressRepair
 } from "../core/convergent-gate.mjs";
 import { createServiceSessions } from "./proof-execution/service-sessions.mjs";
 import { derivedReviewRepairGraph } from "./repair-runtime.mjs";
+import { blockedOutcomeStop } from "../core/blocked-decision.mjs";
+import { authorityRunCommand, authorityStatusCommand } from "../core/authority-run-command.mjs";
 
 export function requestSummary(id, request) {
   if (!request) return null;
@@ -83,7 +88,7 @@ export function proofExecutionAdvanceValue(id, options, snapshot, proofRunId, no
     executedProviders: nodes.map((node) => node.provider),
     next: audit.valid ? [{
       kind: "land",
-      command: `claude-foundation land check ${id}`
+      command: `claude-foundation advance ${id} --through archived`
     }] : []
   };
 }
@@ -103,6 +108,14 @@ export function writeProofExecutionAdvance(
   if (advance) context.writeAdvance(id, advance);
 }
 
+// Identifies one gate pass's cursor. Every pass bumps `repairCycle` or writes a
+// new fingerprint, so a caller that read a different token decided to run
+// before another pass recorded this one.
+export function proofCursorToken(cursor) {
+  return `${Number(cursor?.repairCycle || 0)}:${cursor?.progressFingerprint || ""}:${
+    cursor?.updatedAt || ""}`;
+}
+
 export function proofExecutionResult(audit, proofRunId) {
   return { status: audit.valid ? "PASS" : "ACTION_REQUIRED", proofRunId };
 }
@@ -119,7 +132,7 @@ export function stopProofRun(context, readiness, options = {}) {
     completed: false
   };
   if (!options.quiet) context.printOutcome(stopped);
-  context.markBlocked();
+  context.markBlocked(blockedOutcomeStop(stopped));
   context.runtimeProcess.exitCode = 2;
   return readiness;
 }
@@ -144,14 +157,14 @@ export function stopProofCollection(context, readiness, options = {}) {
     completed: false
   };
   if (!options.quiet) context.printOutcome(stopped);
-  context.markBlocked();
+  context.markBlocked(blockedOutcomeStop(stopped));
   context.runtimeProcess.exitCode = 2;
   return readiness;
 }
 
-export function beginProofCollection(context, id, snapshot) {
+export function beginProofCollection(context, id, snapshot, explicitRunId = null) {
   const state = context.loadRuntime(id);
-  const proofRunId = `collect-${context.timestamp()}`;
+  const proofRunId = explicitRunId || `collect-${context.timestamp()}`;
   state.activeProofRun = {
     id: proofRunId,
     snapshotId: snapshot.id,
@@ -178,7 +191,8 @@ export function rebindProofCollectionReceipts(
 export function assertProofCollectionOutcomes(outcomes) {
   const failed = outcomes.filter((row) => row.status !== "pass");
   if (failed.length) {
-    const summary = failed.map((row) => `${row.provider}:${row.status}`).join(", ");
+    const summary = failed.map((row) =>
+      `${row.provider}:${row.status}${row.detail ? ` (${row.detail})` : ""}`).join(", ");
     const critical = failed.flatMap((row) => (row.observations || [])
       .filter((observation) => observation.kind === "critical-case" &&
         !["pass", "passed", "success", "ok"].includes(observation.status))
@@ -248,7 +262,19 @@ export function createProofExecutionRuntime({
   reviewPolicy = () => ({ tier: "low", requiresHumanFinal: false }),
   deliveredAiAttempts = () => [], recordDeterministicReviewClosure = () => null,
   authorityStatusValue = () => ({ requests: [] }), requestAuthority = () => null,
-  stableHash = (value) => JSON.stringify(value), die, markBlocked = () => {}
+  // (id, request, command) => Promise | null. Starts the harness-runnable
+  // configured review in the foreground; null means the route is a handoff.
+  startConcurrentReview = null,
+  stableHash = (value) => JSON.stringify(value), die, markBlocked = () => {},
+  // Brings the change's sandboxes current (the root sandbox's nested
+  // repository paths) before any provider runs in them.
+  prepareWorkspace = () => {},
+  // (id, workspaceHash) => { status: pass|fail|not-applicable, findings }.
+  // Whether the change's tests fail on the base source (test-discrimination.mjs).
+  testDiscrimination = null,
+  // (id, provider) => finding | null. The performance-regression finding a
+  // failed benchmark receipt carries (benchmark-runtime.mjs).
+  performanceRegression = () => null
 }) {
   const memoryAdvance = new Map();
   const activeAdvance = new Set();
@@ -289,6 +315,33 @@ export function createProofExecutionRuntime({
     return path ? readJson(path, {}) : (memoryAdvance.get(id) || {});
   }
 
+  // Merges one scheduler event into a RUNNING record's progress: the wave's
+  // providers while they run, and each finished provider with its status and
+  // duration. Status, stage, and workspaceHash stay untouched for recovery.
+  function recordProofProgress(id, event) {
+    const record = readAdvance(id);
+    if (record.status !== "RUNNING") return;
+    const prior = record.progress || {};
+    const progress = { startedAt: prior.startedAt || now(), wave: prior.wave || 0,
+      running: [...(prior.running || [])], finished: [...(prior.finished || [])] };
+    if (event.event === "wave") Object.assign(progress, { wave: event.wave, running: [...event.providers] });
+    else if (event.event === "provider") {
+      progress.running = progress.running.filter((provider) => provider !== event.provider);
+      progress.finished.push({ provider: event.provider, status: event.status, durationMs: event.durationMs });
+    } else return;
+    const path = proofAdvancePath(id);
+    const next = { ...record, progress };
+    if (path) writeJson(path, next); else memoryAdvance.set(id, next);
+  }
+
+  // The progress a waiting caller sees, with the elapsed time since start.
+  function proofProgressView(id) {
+    const progress = readAdvance(id).progress;
+    if (!progress) return null;
+    const started = Date.parse(progress.startedAt);
+    return { ...progress, elapsedMs: Number.isFinite(started) ? Math.max(0, Date.now() - started) : null };
+  }
+
   function writeAdvance(id, outcome) {
     const requestIds = (outcome.requests || [])
       .map((request) => request.requestId).filter(Boolean).sort();
@@ -315,6 +368,9 @@ export function createProofExecutionRuntime({
       repairGraph: outcome.repairGraph || null,
       invalidation: outcome.invalidation || null,
       attemptedStrategies: outcome.attemptedStrategies || [],
+      // Advisory only: excluded from `comparable`, so it never counts as
+      // lifecycle progress or changes recovery.
+      ...(outcome.progress ? { progress: outcome.progress } : {}),
       updatedAt: now()
     };
     const prior = readAdvance(id);
@@ -376,10 +432,10 @@ export function createProofExecutionRuntime({
         next: [{
           kind: "decide-indeterminate-execution",
           reason: "A prior command stopped after reserving provider execution but before proving its receipt. Inspect side effects before retrying.",
-          command: `claude-foundation proof advance ${id} --retry-indeterminate --decision-ref <host-decision-reference>`
+          command: `claude-foundation advance ${id} --through proven`
         }]
       });
-      markBlocked();
+      markBlocked(blockedOutcomeStop(outcome));
       process.exitCode = 2;
       if (!options.quiet) printOutcome(outcome);
       return outcome;
@@ -409,6 +465,7 @@ export function createProofExecutionRuntime({
     if (!["READY", "NEEDS_USER_DECISION"].includes(readiness.status))
       return stopProofCollection(
         { printOutcome, markBlocked, runtimeProcess: process }, readiness, options);
+    prepareWorkspace(id);
     const snapshot = options.snapshot || relevantSnapshot(id, null, true);
     const execution = options.execution || executionNodes(id, snapshot.workspaceHash);
     const { nodes, unavailable } = execution;
@@ -421,7 +478,8 @@ export function createProofExecutionRuntime({
       collectable.nodes.map((node) => node.provider), options);
     if (reservation) return reservation;
     const proofRunId = beginProofCollection(
-      { loadRuntime, saveRuntime, now, timestamp: Date.now }, id, snapshot);
+      { loadRuntime, saveRuntime, now, timestamp: Date.now }, id, snapshot,
+      options.proofRunId);
     rebindProofCollectionReceipts({
       requiredProviders, receiptValidity, rebindReusableReceipt,
       rebindDiffBoundReceipt
@@ -431,10 +489,25 @@ export function createProofExecutionRuntime({
       sessions = await startTrackedServices(id, collectable.nodes, proofRunId);
       const outcomes = collectable.nodes.length
         ? await runExecutionDag(id, collectable.nodes, proofRunId, {
-            quiet: options.quiet
+            quiet: options.quiet,
+            onProgress: (event) => recordProofProgress(id, event)
           })
         : [];
-      assertProofCollectionOutcomes(outcomes);
+      try { assertProofCollectionOutcomes(outcomes); } catch (error) {
+        // An open merge of another change's landed edit explains a failing
+        // check better than the run itself: the sandbox no longer carries
+        // that change's work, which only the agent's merge can restore.
+        const open = loadRuntime(id).workspace?.landedConflicts || {};
+        if (Object.keys(open).length) Object.assign(error, {
+          owner: "agent", boundary: "conflict",
+          message: `${error.message}; the sandbox still has an open merge of earlier landed ` +
+            `work in ${Object.keys(open).sort().join(", ")}: merge onto the target's bytes, ` +
+            "keeping every landed and user edit, then resume",
+          details: { conflicts: Object.entries(open).map(([path, row]) =>
+            ({ repository: "root", path, landedBy: row.landedBy })) }
+        });
+        throw error;
+      }
       persistProofCollectionArtifacts({
         stopAll, durableArtifact, loadRuntime, saveRuntime
       }, id, proofRunId, sessions);
@@ -449,13 +522,15 @@ export function createProofExecutionRuntime({
       // Before die(), not after: a stale activeProofRun makes the next receipt
       // bind the pre-failure workspace hash and land in a dead run directory.
       clearActiveProofRun(id);
-      die(error.message);
+      die(error.message, 1, error.owner ? { owner: error.owner, boundary: error.boundary,
+        details: error.details } : undefined);
     } finally {
       clearActiveProofRun(id);
     }
   }
   
   async function proofExecuteUnlocked(id, options = {}) {
+    prepareWorkspace(id);
     const { snapshot, proofRunId } = prepareProofExecutionFor(id, options);
     let sessions = [];
     try {
@@ -491,7 +566,8 @@ export function createProofExecutionRuntime({
     } catch (error) {
       stopAll(sessions);
       clearActiveProofRun(id);
-      die(error.message);
+      die(error.message, 1, error.owner ? { owner: error.owner, boundary: error.boundary,
+        details: error.details } : undefined);
     } finally {
       clearActiveProofRun(id);
     }
@@ -553,7 +629,9 @@ export function createProofExecutionRuntime({
         ? { fingerprint: advanceStart.progressFingerprint } : null,
       progress);
     const noProgress = advanceStart.stage === stage && !progressComparison.progressed;
-    const decision = noProgress ? noProgressDecision({
+    // An unchanged coding repair cycle is a strategy change for the agent, not
+    // a user decision; the advance recovery ladder counts repetitions.
+    const stall = noProgress ? noProgressRepair({
       changeId: id,
       phase: "prove",
       gate,
@@ -570,8 +648,9 @@ export function createProofExecutionRuntime({
       version: 1,
       changeId: id,
       command: "proof advance",
-      status: noProgress ? "NEEDS_USER_DECISION" : "ACTION_REQUIRED",
-      route: noProgress ? "NO_PROGRESS_DECISION" : route,
+      status: "ACTION_REQUIRED",
+      // The caller's route stands: a contract decision it already raised stays one.
+      route,
       stage,
       completed: false,
       workspaceHash: readiness.workspaceHash,
@@ -586,12 +665,19 @@ export function createProofExecutionRuntime({
       ...(repairBatch ? { repairGraph: derivedReviewRepairGraph(
         deliveredAiAttempts(id).at(-1), stableHash
       ) } : {}),
-      ...(decision ? { decision: decision.decision,
-        attemptedStrategies: decision.attemptedStrategies } : {}),
+      ...(stall ? { noProgress: {
+        reason: stall.reason,
+        progressFingerprint: stall.progressFingerprint,
+        findingIds: stall.next[0].findingIds
+      }, attemptedStrategies: stall.attemptedStrategies } : {}),
       executedProviders,
-      next: noProgress ? decision.next : [{
+      next: noProgress ? stall.next : [{
         kind: gate === "review" ? "correct-workspace" : "correct-failed-evidence",
-        reason: nextReason,
+        // Lead with the first finding's own diagnosis so the agent can act on
+        // the returned envelope instead of reading receipts.
+        reason: [nextReason, (findings.find((finding) => finding?.message || finding?.reason) || {})
+          .message || (findings.find((finding) => finding?.reason) || {}).reason]
+          .filter(Boolean).join(": "),
         command: `claude-foundation packet ${id} --phase build`
       }]
     });
@@ -605,7 +691,11 @@ export function createProofExecutionRuntime({
       providerCapability(provider, providerConfig(id, provider)) === "review") || "review";
     const subjectHash = currentProviderHash(id, reviewProvider, readiness.workspaceHash);
     const repairBatch = reviewRepairBatch(id);
-    const findings = repairBatch?.findings || failures.map((failure) => ({
+    // Review findings and executable failures at the same workspace are one
+    // repair batch; neither hides the other.
+    const findings = repairBatch ? [...repairBatch.findings, ...evidenceFailureFindings(
+      failures.filter((failure) => failure.capability && failure.capability !== "review"))]
+      : failures.map((failure) => ({
       id: `${failure.provider || "review"}:${failure.validity || "invalid"}`,
       provider: failure.provider || reviewProvider,
       classification: failure.validity === "unavailable" ? "infrastructure" : "product",
@@ -639,8 +729,46 @@ export function createProofExecutionRuntime({
     }));
   }
 
+  // Executable evidence passed, but for behavior-changing work no new or
+  // modified test fails on the base source: the suite cannot tell the change
+  // from the original code. The agent strengthens the tests; this is the same
+  // convergent evidence gate, so changed tests are progress and an unchanged
+  // rerun reaches the existing no-progress boundary.
+  async function discriminationRepairStop(id, readiness, advanceStart, executedProviders,
+    early = null) {
+    if (!testDiscrimination || !["READY", "NEEDS_USER_DECISION"].includes(readiness.status))
+      return null;
+    // A result computed beside the concurrent review binds to the hash it ran
+    // on; any other hash is evaluated again.
+    const result = early?.workspaceHash === readiness.workspaceHash
+      ? early.result : await testDiscrimination(id, readiness.workspaceHash);
+    if (result?.status !== "fail" || !result.findings?.length) return null;
+    return stopProofAdvance(writeConvergentRepairStop(id, readiness, advanceStart, {
+      gate: "evidence", stage: "tests-not-discriminating", findings: result.findings,
+      failures: result.findings.map((finding) => ({
+        provider: finding.provider, repositoryId: finding.repositoryId,
+        validity: "passes-on-base", reason: finding.message
+      })),
+      executedProviders,
+      strategy: "strengthen-discriminating-tests",
+      nextReason: "The change's tests pass on the original code, so they do not verify the change. Add or strengthen a test that fails without the change and passes with it, then resume this same gate"
+    }));
+  }
+
   function writeEvidenceRepairStop(id, readiness, advanceStart, failures) {
-    const findings = evidenceFailureFindings(failures);
+    // A benchmark whose head ran cleanly but slower than its threshold is a
+    // performance repair with its measured medians, not a generic failure.
+    const regressions = failures.filter((failure) => failure.validity === "fail")
+      .map((failure) => performanceRegression(id, failure.provider)).filter(Boolean);
+    const regressed = new Set(regressions.map((finding) => finding.provider));
+    const findings = [...regressions, ...evidenceFailureFindings(
+      failures.filter((failure) => !regressed.has(failure.provider)))];
+    if (regressions.length && regressions.length === failures.length)
+      return writeConvergentRepairStop(id, readiness, advanceStart, {
+        gate: "evidence", stage: "performance-regression", findings, failures,
+        strategy: "repair-performance-regression",
+        nextReason: "Head is slower than base beyond the benchmark threshold. Remove the slowdown in product code, then resume this same gate; base and head are measured again"
+      });
     return writeConvergentRepairStop(id, readiness, advanceStart, {
       gate: "evidence", stage: "evidence-failed", findings, failures,
       strategy: "repair-failed-evidence",
@@ -704,23 +832,31 @@ export function createProofExecutionRuntime({
     // command guaranteed to block. Route the exhausted case to the external
     // recording template (a human verdict) instead.
     const delivered = deliveredAiAttempts(id);
-    return requests.map((request) => ({
-      requestId: request.requestId,
-      provider: request.provider,
-      status: request.status,
-      owner: request.status === "infrastructure-exhausted" ? "harness" :
-        stage === "review" ? "harness" : "external",
-      command: stage === "review" && request.status === "requested" &&
-          delivered.length < effectiveReviewAttemptLimit(
-            reviewPolicy(id), delivered, request.workspaceHash).maxAiAttempts &&
-          request.mainSessionFallback
-        ? `claude-foundation authority run ${id} --request ${request.requestId} --subject-actor ${request.mainSessionFallback.subject?.identity || "<implementer>"} --main-session-model-family <family> --main-session-model <model>`
-        : stage === "review" && request.status === "requested" &&
-            delivered.length < effectiveReviewAttemptLimit(
-              reviewPolicy(id), delivered, request.workspaceHash).maxAiAttempts
-          ? `claude-foundation authority run ${id} --request ${request.requestId} --subject-actor implementation-agent`
-        : `claude-foundation authority status ${id} --request ${request.requestId} --template`
-    }));
+    return requests.map((request) => {
+      const maxAiAttempts = stage === "review" && request.status === "requested"
+        ? effectiveReviewAttemptLimit(reviewPolicy(id), delivered, request.workspaceHash).maxAiAttempts
+        : null;
+      const runnable = maxAiAttempts !== null && delivered.length < maxAiAttempts;
+      return {
+        requestId: request.requestId,
+        provider: request.provider,
+        status: request.status,
+        // Distinguishes "every AI wave is used" (a user decision) from "no
+        // reviewer can start" (a wait) for the advance router.
+        ...(maxAiAttempts !== null && !runnable
+          ? { aiReviewExhausted: { delivered: delivered.length, maxAiAttempts } } : {}),
+        owner: request.status === "infrastructure-exhausted" ? "harness" :
+          stage === "review" ? "harness" : "external",
+        ...(() => {
+          if (!runnable)
+            return { command: authorityStatusCommand(id, request.requestId) };
+          const run = authorityRunCommand(id, request);
+          return { command: run.command,
+            ...(run.placeholders.length ? { placeholders: run.placeholders } : {}),
+            ...(run.unresolved.length ? { unresolved: run.unresolved } : {}) };
+        })()
+      };
+    });
   }
 
   function requestMissingAuthority(id, providers, type, workspaceHash, knownRequests) {
@@ -743,19 +879,99 @@ export function createProofExecutionRuntime({
   }
 
   function stopProofAdvance(outcome) {
-    markBlocked();
+    markBlocked(blockedOutcomeStop(outcome));
     process.exitCode = 2;
     return printOutcome(outcome);
   }
 
+  // During `advance --through proven|archived`, a required configured review
+  // that the harness can run starts beside the executable providers for the
+  // same workspace hash. Anything else (handoff routes, external reviewers,
+  // the bounded-closure route, several review providers) keeps the serial
+  // path. The returned promise never rejects: an unsettled review stays an
+  // open request that the next pass routes exactly as before.
+  function startAdvanceReview(id, flags, snapshot, readiness, authorityRequests,
+    proofRunId) {
+    if (!flags.concurrentReview || !startConcurrentReview) return null;
+    if (readiness.status !== "NEEDS_USER_DECISION" ||
+        snapshot.workspaceHash !== readiness.workspaceHash) return null;
+    const reviewProviders = missingByCapability(id, readiness, "review");
+    if (reviewProviders.length !== 1) return null;
+    const subjectHash = currentProviderHash(id, reviewProviders[0], readiness.workspaceHash);
+    const delivered = deliveredAiAttempts(id);
+    // A failed final wave first tries deterministic closure in this pass; its
+    // closure review, if still needed, is requested only after that.
+    if (delivered.length >= 2 && delivered.at(-1)?.resultStatus === "fail") return null;
+    if (delivered.length >= effectiveReviewAttemptLimit(
+      reviewPolicy(id), delivered, subjectHash).maxAiAttempts) return null;
+    const known = authorityRequests.length ? authorityRequests : statusRequests(id);
+    if (currentRequests(id, reviewProviders, readiness.workspaceHash,
+      ["dispatched", "pending", "infrastructure-exhausted", "rejected"], known).length)
+      return null;
+    let request = null;
+    let running = null;
+    try {
+      [request] = requestMissingAuthority(
+        id, reviewProviders, "review", readiness.workspaceHash, known);
+      if (request?.status !== "requested" || request.mainSessionFallback ||
+          request.workspaceHash !== subjectHash) return null;
+      // The receipt binds this pass's run and snapshot explicitly; reading
+      // activeProofRun when the review finishes would depend on whether the
+      // providers had already cleared it.
+      running = startConcurrentReview(
+        id, request, authorityNext(id, "review", [request])[0]?.command, {
+          proofRunId, workspaceSnapshotId: snapshot.id || null,
+          workspaceHash: subjectHash
+        });
+    } catch { return null; }
+    return running ? Promise.resolve(running).then(() => true, () => false) : null;
+  }
+
+  // Executable evidence failed while the concurrent review rejected the same
+  // workspace: report both in one repair stop instead of the provider error.
+  function concurrentFailureStop(id, advanceStart) {
+    const readiness = proofReadinessValue(id, "prove");
+    const failed = terminalEvidence(id, readiness);
+    if (!failed.some((row) => row.capability === "review") ||
+        !failed.some((row) => row.capability !== "review")) return null;
+    return stopProofAdvance(writeReviewRepairStop(
+      id, readiness, advanceStart, { failures: failed }));
+  }
+
+  async function discriminationBesideReview(id, readiness, review) {
+    let discrimination = null;
+    try {
+      if (["READY", "NEEDS_USER_DECISION"].includes(readiness.status) &&
+          testDiscrimination) {
+        discrimination = {
+          workspaceHash: readiness.workspaceHash,
+          result: await testDiscrimination(id, readiness.workspaceHash)
+        };
+      }
+    } finally {
+      // Recovery must never return while this pass still owns a reviewer.
+      await review;
+    }
+    return discrimination;
+  }
+
   async function collectAdvanceExecution(id, flags, snapshot, readiness,
-    authorityRequests) {
+    authorityRequests, advanceStart = {}) {
     const execution = executionNodes(id, snapshot.workspaceHash);
     const collectable = collectableExecutionNodes(
       id, execution.nodes, snapshot.workspaceHash);
     let executedProviders = [];
-    if (!collectable.nodes.length)
-      return { readiness, authorityRequests, executedProviders };
+    if (!collectable.nodes.length) {
+      // Build may already have supplied every executable receipt. Review can
+      // still overlap the base-source check without rerunning those providers.
+      const review = startAdvanceReview(id, flags, snapshot, readiness,
+        authorityRequests, `review-${Date.now()}`);
+      if (!review) return { readiness, authorityRequests, executedProviders };
+      const discrimination = await discriminationBesideReview(id, readiness, review);
+      readiness = proofReadinessValue(id, "prove");
+      authorityRequests = readiness.status === "NEEDS_USER_DECISION" ? statusRequests(id) : [];
+      return { readiness, authorityRequests, executedProviders, discrimination };
+    }
 
     const priorAdvance = readAdvance(id);
     const retryIndeterminate = Boolean(flags["retry-indeterminate"]);
@@ -780,7 +996,7 @@ export function createProofExecutionRuntime({
         next: [{
           kind: "decide-indeterminate-execution",
           reason: "A prior controller stopped after reserving provider execution but before proving its receipt. Inspect side effects before retrying.",
-          command: `claude-foundation proof advance ${id} --retry-indeterminate --decision-ref <host-decision-reference>`
+          command: `claude-foundation advance ${id} --through proven`
         }]
       });
       return { outcome: stopProofAdvance(outcome) };
@@ -798,19 +1014,43 @@ export function createProofExecutionRuntime({
       workspaceHash: readiness.workspaceHash,
       providers: collectable.nodes.map((node) => node.provider),
       requests: [],
-      recoveryDecisionRef: decisionRef || null
+      recoveryDecisionRef: decisionRef || null,
+      progress: { startedAt: now(), wave: 0, running: [], finished: [] }
     });
-    const collection = await proofCollectUnlocked(id, {
-      readiness,
-      snapshot,
-      execution,
-      collectable,
-      quiet: true,
-      includeReadiness: true,
-      manageReservation: false
-    });
+    const proofRunId = `collect-${Date.now()}`;
+    const review = startAdvanceReview(
+      id, flags, snapshot, readiness, authorityRequests, proofRunId);
+    let collection;
+    try {
+      collection = await proofCollectUnlocked(id, {
+        proofRunId,
+        readiness,
+        snapshot,
+        execution,
+        collectable,
+        quiet: true,
+        includeReadiness: true,
+        manageReservation: false
+      });
+    } catch (error) {
+      if (!review) throw error;
+      await review;
+      const combined = concurrentFailureStop(id, advanceStart);
+      if (combined) return { outcome: combined };
+      throw error;
+    }
     executedProviders = collection.executedProviders || [];
     readiness = collection.readiness;
+    // The base-source discrimination run is read-only on the workspace (it
+    // builds its own scratch tree), so its async child runs beside the review
+    // without blocking reviewer preparation or result collection.
+    const discrimination = review
+      ? await discriminationBesideReview(id, readiness, review) : null;
+    // Join before classifying: the review verdict is bound to this same
+    // workspace hash and belongs to this pass's readiness.
+    if (review) {
+      readiness = proofReadinessValue(id, "prove");
+    }
     authorityRequests = readiness.status === "NEEDS_USER_DECISION"
       ? statusRequests(id) : [];
     if (!["READY", "NEEDS_USER_DECISION"].includes(readiness.status)) {
@@ -824,7 +1064,7 @@ export function createProofExecutionRuntime({
       });
       return { outcome: stopProofAdvance(outcome) };
     }
-    return { readiness, authorityRequests, executedProviders };
+    return { readiness, authorityRequests, executedProviders, discrimination };
   }
 
   async function finishProofAdvance(id, advanceStart, readiness,
@@ -842,7 +1082,7 @@ export function createProofExecutionRuntime({
         requests: [],
         executedProviders,
         reused: false,
-        next: [{ kind: "land", command: `claude-foundation land check ${id}` }]
+        next: [{ kind: "land", command: `claude-foundation advance ${id} --through archived` }]
       }));
     }
 
@@ -936,6 +1176,76 @@ export function createProofExecutionRuntime({
     die(`proof advance could not classify readiness for '${id}'`);
   }
 
+  // Every allowed AI wave is delivered, the last one still raised findings the
+  // agent has since repaired, current non-review proof passes, and no declared
+  // critical case can close those findings deterministically. Only a person
+  // can end this: the same review-exhausted gate `REVIEW_ROUTE_COMPLETE`
+  // names, never a REPAIR the agent cannot satisfy.
+  function writeReviewExhaustedStop(id, readiness, exhausted, executedProviders) {
+    const delivered = deliveredAiAttempts(id);
+    const findingIds = [...new Set(exhausted.flatMap((row) => row.findingIds || []))].sort();
+    const findings = (delivered.at(-1)?.findings || [])
+      .filter((finding) => findingIds.includes(finding.id));
+    const progress = gateProgressValue({
+      phase: "prove", gate: "review", findings,
+      strategy: { route: "review-route-exhausted" },
+      workspaceHash: readiness.workspaceHash
+    });
+    const decision = noProgressDecision({
+      changeId: id,
+      phase: "prove",
+      gate: "review",
+      progress,
+      findings,
+      attemptedStrategies: [{
+        id: "repair-final-review-findings",
+        result: "repaired-without-remaining-review-wave"
+      }],
+      recommended: "human-verdict",
+      options: [{
+        id: "human-verdict",
+        outcome: "A person reviews the final repair; request a review, dispatch it to them, then record the verdict they gave.",
+        command: `claude-foundation authority request ${id} --type review`
+      }, {
+        id: "one-more-ai-attempt",
+        outcome: "Allow one more AI review wave on the user's recorded decision; advance then runs it.",
+        command: `claude-foundation authority extend-review ${id} --decision-ref <user-decision>`
+      }, {
+        id: "revise-agreement",
+        outcome: "Amend the agreement to declare a critical case that proves the repaired findings, then resume."
+      }, {
+        id: "pause",
+        outcome: "Preserve the change and all completed work."
+      }],
+      resumeCommand: `claude-foundation advance ${id} --through proven`
+    });
+    return writeAdvance(id, {
+      version: 1,
+      changeId: id,
+      command: "proof advance",
+      status: "NEEDS_USER_DECISION",
+      route: "NO_PROGRESS_DECISION",
+      stage: "review-repair-closure",
+      completed: false,
+      workspaceHash: readiness.workspaceHash,
+      progressFingerprint: progress.fingerprint,
+      closures: exhausted,
+      decision: {
+        ...decision.decision,
+        kind: "review-route-exhausted",
+        summary: `All ${delivered.length} AI review wave(s) are delivered and the last one raised ${findingIds.join(", ") || "findings"}. The repair is in place and current tests pass, but no review wave or declared critical case remains to close those findings.`
+      },
+      attemptedStrategies: decision.attemptedStrategies,
+      requests: [],
+      executedProviders,
+      next: [{
+        kind: "review-route-exhausted",
+        reason: "Report the repaired findings, passing checks, and the unreviewed final repair; let the user choose a human verdict, one more AI wave, a revised agreement, or a pause.",
+        command: `claude-foundation authority extend-review ${id} --decision-ref <user-decision>`
+      }, ...decision.next]
+    });
+  }
+
   function closeBoundedReviewAttempts(id, readiness, authorityRequests,
     executedProviders) {
     const delivered = deliveredAiAttempts(id);
@@ -944,12 +1254,31 @@ export function createProofExecutionRuntime({
         boundedReviewProviders.length))
       return { readiness, authorityRequests };
 
-    const closures = boundedReviewProviders.map((provider) =>
-      recordDeterministicReviewClosure(id, provider,
-        currentProviderHash(id, provider, readiness.workspaceHash)))
+    const closureProviders = new Map();
+    const closures = boundedReviewProviders.map((provider) => {
+      const closure = recordDeterministicReviewClosure(id, provider,
+        currentProviderHash(id, provider, readiness.workspaceHash));
+      if (closure) closureProviders.set(closure, provider);
+      return closure;
+    })
       .filter(Boolean);
     const blockedClosures = closures.filter((row) => !row.closed);
     if (blockedClosures.length) {
+      const exhausted = blockedClosures.filter((row) =>
+        row.route === "REVIEW_ROUTE_EXHAUSTED");
+      if (exhausted.length && !blockedClosures.some((row) =>
+        row.route === "CONTRACT_DECISION_REQUIRED")) {
+        // The repaired final delta gets one closure review before any person
+        // is asked to accept it unreviewed.
+        // A user-granted extra wave reviews it the same way.
+        if (exhausted.every((row) => reviewClosureWaveAvailable(delivered,
+          currentProviderHash(id, closureProviders.get(row), readiness.workspaceHash))) ||
+            delivered.length < effectiveReviewAttemptLimit(
+              reviewPolicy(id), delivered, null).maxAiAttempts)
+          return { readiness, authorityRequests };
+        return { outcome: stopProofAdvance(
+          writeReviewExhaustedStop(id, readiness, exhausted, executedProviders)) };
+      }
       const outcome = writeAdvance(id, {
         version: 1,
         changeId: id,
@@ -966,7 +1295,11 @@ export function createProofExecutionRuntime({
         executedProviders,
         next: [{
           kind: "repair-final-review-findings",
-          reason: "Repair the final finding batch inside the locked contract and bind each blocker to a current declared critical case; do not dispatch another AI or open a generic choice interview.",
+          // The closure's own reason names what is still unmet (unchanged
+          // workspace, failing proof, or a contract decision).
+          reason: ["Repair the final finding batch inside the locked contract; do not dispatch another AI or open a generic choice interview",
+            ...new Set(blockedClosures.map((row) => row.reason).filter(Boolean))]
+            .join(": "),
           command: `claude-foundation packet ${id} --phase build`
         }]
       });
@@ -985,7 +1318,11 @@ export function createProofExecutionRuntime({
     let readiness = proofReadinessValue(id, "prove");
     const audit = proofAudit(id, true);
     let forcedSnapshot = null;
-    if (readiness.status === "READY" && audit.valid) {
+    // A pass that will run providers (or a concurrent review) binds to the
+    // forced snapshot, so a readiness hash read from a snapshot cached before
+    // the latest edits is re-derived here, not discovered mid-pass.
+    if ((readiness.status === "READY" && audit.valid) ||
+        readiness.status === "NEEDS_USER_DECISION") {
       // Audit authenticates the copied evidence, while this forced snapshot
       // establishes that it still belongs to the current workspace.
       forcedSnapshot = relevantSnapshot(id, null, true);
@@ -1078,6 +1415,17 @@ export function createProofExecutionRuntime({
     const refreshed = refreshedAdvanceReadiness(id);
     const { advanceStart, audit, forcedSnapshot } = refreshed;
     let { readiness } = refreshed;
+    // Another process recorded a gate pass after this caller chose to run:
+    // the same findings are not "no progress", since nobody has repaired yet.
+    if (Object.hasOwn(flags, "cursor-token") &&
+        flags["cursor-token"] !== proofCursorToken(advanceStart))
+      advanceStart.progressFingerprint = null;
+    // A user who answered the no-progress decision chose to repair again:
+    // compare this pass with nothing, once, instead of asking again.
+    if (flags["reset-progress"]) {
+      if (!flags["decision-ref"]) die("proof advance --reset-progress requires --decision-ref");
+      advanceStart.progressFingerprint = null;
+    }
     if (readiness.status === "READY" && audit.valid && forcedSnapshot &&
         audit.proof.workspaceHash === forcedSnapshot.workspaceHash &&
         readiness.workspaceHash === forcedSnapshot.workspaceHash) {
@@ -1123,16 +1471,19 @@ export function createProofExecutionRuntime({
           executedProviders: [],
           reusedProviders: reusable.map((row) => row.provider)
         });
-        markBlocked();
+        markBlocked(blockedOutcomeStop(outcome));
         process.exitCode = 2;
         return printOutcome(outcome);
       }
     }
     const executionResult = await collectAdvanceExecution(
-      id, flags, snapshot, readiness, authorityRequests);
+      id, flags, snapshot, readiness, authorityRequests, advanceStart);
     if (executionResult.outcome) return executionResult.outcome;
     ({ readiness, authorityRequests } = executionResult);
     const { executedProviders } = executionResult;
+    const discrimination = await discriminationRepairStop(
+      id, readiness, advanceStart, executedProviders, executionResult.discrimination);
+    if (discrimination) return discrimination;
 
     // Two delivered AI waves are the end of the open-review route, not the
     // beginning of a human/third-AI loop. If the final delta found an
@@ -1164,7 +1515,15 @@ export function createProofExecutionRuntime({
       stage: "controller",
       completed: false,
       progressed: false,
-      owner: locked.owner?.pid ? { pid: locked.owner.pid } : null,
+      // Keep the lock's state and grace period so a caller can tell an
+      // initializing owner from a dead one.
+      owner: locked.owner ? {
+        pid: locked.owner.pid ?? null,
+        ...(locked.owner.state ? { state: locked.owner.state } : {}),
+        ...(locked.owner.recoverableAfter ? { recoverableAfter: locked.owner.recoverableAfter } : {})
+      } : null,
+      // Where the running proof is, so a waiting caller need not poll blind.
+      ...(proofProgressView(id) ? { progress: proofProgressView(id) } : {}),
       next: recovery
     });
   }

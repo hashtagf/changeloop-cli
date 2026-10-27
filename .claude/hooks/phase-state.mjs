@@ -18,6 +18,7 @@ export function recordedPhaseContext(context) {
     if (!context.pathExists(logs)) return "";
     let newest = null;
     let newestForSession = null;
+    let newestUnbound = null;
     for (const entry of context.readDirectory(logs)) {
       if (!entry.isDirectory()) continue;
       const path = join(logs, entry.name, "phase-context.jsonl");
@@ -36,8 +37,14 @@ export function recordedPhaseContext(context) {
       if (context.sessionId && row.sessionId === context.sessionId &&
           (!newestForSession || at > newestForSession.at))
         newestForSession = { at, phase: String(row.phase || ""), changeId };
+      if (!row.sessionId && (!newestUnbound || at > newestUnbound.at))
+        newestUnbound = { at, phase: String(row.phase || ""), changeId };
     }
-    if (context.sessionId) newest = newestForSession;
+    // A row recorded without a session identity (the host's exported session
+    // never reached the CLI) belongs to no other session either. Without this
+    // fallback such a /dev session never saw its own phase and every edit was
+    // refused as "phase unavailable".
+    if (context.sessionId) newest = newestForSession || newestUnbound;
     if (!newest || context.nowMs() - newest.at > context.freshnessMs) return "";
     return newest;
   } catch {

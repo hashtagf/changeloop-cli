@@ -1,13 +1,16 @@
 ---
 name: architecture-fundamentals
-description: Design or review relationships between runtime components, services, processes, deployable units, APIs, and events. Use for service extraction, cross-component ownership, sync versus async calls, consistency, resilience, scaling, and contract evolution. Use ddd-strategic first when business meaning or bounded contexts are unclear. Skip module/class boundaries inside one process; use programming-fundamentals for those.
+description: "Design runtime, service, deployment, ownership, and failure boundaries after business meaning is settled. Use for cross-component communication, consistency, resilience, and contract evolution. Record decisions in OpenSpec; skip local module design and harness orchestration."
 ---
 
 # Architecture fundamentals
 
+Compare distinct designs for consequential uncertainty; reconcile accepted
+deviations through OpenSpec before dependent work continues.
+
 Use this as the primary skill when the hard decision crosses a runtime,
-deployment, ownership, or failure boundary. Decide architecture; let the
-Change Loop owns lifecycle, scope, evidence, and Land.
+deployment, ownership, or failure boundary. Decide architecture; Change Loop
+owns lifecycle, scope, evidence, and Land.
 
 ## Rules
 

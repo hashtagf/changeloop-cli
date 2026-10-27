@@ -27,19 +27,11 @@ In rough priority order:
 
 ## Edge-case checklist
 
-The requirement usually spells out the happy path. These are the inputs that break code in production anyway. Walk the list against the *actual code under test* — skip any case the type system or a guard already makes impossible (don't test illegal states you've made unrepresentable; that's noise).
-
-- **Emptiness / absence** — empty string, empty list/map, `null`/`undefined`/`None`, missing optional field, zero rows returned.
-- **Boundaries** — min, max, and ±1 around every limit (`0, 1, n-1, n, n+1`); off-by-one is the classic bug. First/last element, single-element collection.
-- **Numbers** — negative, zero, very large (overflow), floating-point rounding, division by zero, money in the smallest unit.
-- **Strings / text** — unicode, emoji, combining chars, leading/trailing whitespace, very long input, injection-ish payloads (`'`, `<`, `;`, `../`), mixed newline styles.
-- **Time** — timezone boundaries, DST, leap year/second, clock skew, expiry exactly at `now`, events with equal timestamps.
-- **Collections / ordering** — duplicates, unsorted input where sorted is assumed, ordering not guaranteed, pagination at the boundary.
-- **Concurrency / repetition** — same request twice (idempotency), retry after partial success, two writers racing one row, out-of-order delivery.
-- **Failure / partial state** — dependency times out or errors mid-operation, network drops between a DB write and its side effect, transaction rolls back.
-- **Auth / tenancy** — unauthenticated, authenticated-but-unauthorized, one tenant reaching another's data.
-
-For each case the code under test can actually reach, decide one of three: **covered** (a test already asserts it), **specified-but-untested** (the requirement is clear — write the test), or **reachable-but-undefined** (the requirement never says what should happen — surface it as a gap, don't guess the assertion).
+The canonical boundary, sequence, interaction, and Covered/Specified/Undefined
+checklist lives in
+[testing-fundamentals/references/test-design.md](../../testing-fundamentals/references/test-design.md#edge-case-checklist).
+Read it when the task needs systematic edge discovery; keep this programming
+reference focused on code-level testability.
 
 ## Fast tests vs slow tests
 

@@ -65,6 +65,24 @@ implementation is complicated.
 - Generic names such as `Manager`, `Helper`, `Context`, or `Utils` conceal a
   collection of unrelated responsibilities.
 
+## Skip signals: the domain model is missing
+
+These signs mean a data structure should have owned the rule. Reach for a state
+machine, discriminated union, lookup table, or typed model that makes invalid
+states unrepresentable; keep plain code when the shape is already local, clear,
+and unlikely to grow.
+
+- A feature grows an existing if/else or switch by one more branch, and the same
+  discriminant is tested elsewhere.
+- A second boolean must stay in sync with another; their combinations include
+  states the domain forbids.
+- Modules are named after phases rather than domain concepts, so each phase
+  re-checks the same rules.
+
+**30-second reader test:** a new reader can answer "where does X come from?"
+and "what can change X?" in under 30 seconds. If not, collapse pass-through
+layers or shrink mutable scope until they can.
+
 ## Example
 
 ```ts

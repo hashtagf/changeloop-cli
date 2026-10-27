@@ -1,6 +1,6 @@
 ---
 name: grill-task-gu-please
-description: Deprecated compatibility name for grill-task-gu. Use the same full-discovery, one Decision Sheet, dependency-ordered backlog flow; never run a one-question-at-a-time interview.
+description: "Compatibility alias for grill-task-gu. Use only for the old name; follow full discovery, one Decision Sheet, and dependency-ordered backlog handoff. Do not restore one-question interviews or reopen settled choices."
 ---
 
 # Compatibility redirect

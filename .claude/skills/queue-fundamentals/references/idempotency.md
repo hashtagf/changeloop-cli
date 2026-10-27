@@ -2,6 +2,8 @@
 
 Companion to principle 3 of [[queue-fundamentals]]. If duplicates can't break you, retries and redeliveries stop being dangerous — most operational concerns become routine.
 
+Before choosing a layer, answer the three rerun questions (twice, crashed halfway, overlapping runs) in [concurrency Principle 5](../../concurrency-fundamentals/references/shared-state-and-async.md#principle-5-from-skillmd-make-operations-idempotent-and-cancellable).
+
 ## Principle 3, in full: make consumers idempotent
 
 **Rule:** Every message handler must produce the same observable effect whether called once, twice, or N times with the same message.

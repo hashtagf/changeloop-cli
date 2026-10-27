@@ -44,13 +44,28 @@ export function executionSurfaceBudgetScale(profile = {}) {
   );
 }
 
+// Two delivered waves end the open review route. When the second still
+// failed and its findings were repaired, one closure wave reviews only that
+// repaired delta, so the final diff is never left unreviewed.
+export function reviewClosureWaveAvailable(delivered = [], workspaceHash = null) {
+  const latest = delivered.at(-1) || null;
+  return delivered.length === 2 && latest?.resultStatus === "fail" &&
+    Boolean(workspaceHash) && workspaceHash !== latest.workspaceHash;
+}
+
 export function effectiveReviewAttemptLimit(routing = {}, delivered = [], workspaceHash = null) {
   const latest = delivered.at(-1) || null;
   const promotesLow = routing.tier === "low" && delivered.length >= 1 &&
     Boolean(workspaceHash) && workspaceHash !== latest?.workspaceHash;
+  const base = promotesLow ? 2 : Number(routing.maxAiAttempts || 2);
+  const closureWave = base === 2 && reviewClosureWaveAvailable(delivered, workspaceHash);
+  // An `authority extend-review` grant allows exactly one wave beyond those
+  // delivered when the user granted it.
+  const granted = Math.max(0, Number(routing.grantedAiWaveCap || 0));
   return {
     promotesLow,
-    maxAiAttempts: promotesLow ? 2 : Number(routing.maxAiAttempts || 2)
+    closureWave,
+    maxAiAttempts: Math.max(closureWave ? 3 : base, granted)
   };
 }
 

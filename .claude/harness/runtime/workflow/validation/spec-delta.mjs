@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { normalizedTraceLabel } from "../../evidence/traceability.mjs";
 import { join, relative } from "node:path";
 import {
   parseSpecDocument, parseSpecRequirements, specDeltaOperation
@@ -62,7 +63,7 @@ export function createSpecDeltaValidator({ root, activeChangePath, walk, fail })
           name: match[1].trim(),
           requirement: requirementAt(match.index),
           path: relative(root, path).replaceAll("\\", "/"),
-          key: match[1].trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+          key: normalizedTraceLabel(match[1])
         });
     });
     return scenarios.sort((left, right) =>

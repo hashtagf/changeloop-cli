@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { canonicalJson } from "../core/trust.mjs";
 
 export const QUALITY_PROTOCOLS = Object.freeze({
   capabilities: "foundation-quality-capabilities-v1",
@@ -21,15 +22,8 @@ export const MUTANT_SURFACES = new Set([
   "semantic-required", "unknown"
 ]);
 
-export function stableJson(value) {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object") return `{${Object.keys(value).sort()
-    .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
-  return JSON.stringify(value);
-}
-
 export function configDigest(value) {
-  return `sha256:${createHash("sha256").update(stableJson(value)).digest("hex")}`;
+  return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
 }
 
 export function crapScore(complexity, coveragePercent) {

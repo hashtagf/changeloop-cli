@@ -56,8 +56,28 @@ export function declaredPathMatcher(globs) {
   if (scopes.includes("*")) return () => true;
   const prefixes = scopes.map((scope) =>
     scope.replace(/\/\*\*?$/, "").replace(/\/$/, ""));
+  // Validation accepts globs such as `tsconfig*.json`; a prefix-only match
+  // left those files out of the proven hash.
+  const patterns = scopes.filter((scope) => /[*?]/.test(scope.replace(/\/\*\*?$/, "")))
+    .map(globPattern);
   return (rel) => prefixes.some((prefix) =>
-    rel === prefix || rel.startsWith(`${prefix}/`));
+    rel === prefix || rel.startsWith(`${prefix}/`)) ||
+    patterns.some((pattern) => pattern.test(rel));
+}
+
+function globPattern(glob) {
+  const raw = glob.replace(/^\.\//, "");
+  let pattern = "";
+  for (let index = 0; index < raw.length; index += 1) {
+    const character = raw[index];
+    if (character === "*" && raw[index + 1] === "*") {
+      pattern += raw[index + 2] === "/" ? "(?:.*/)?" : ".*";
+      index += raw[index + 2] === "/" ? 2 : 1;
+    } else if (character === "*") pattern += "[^/]*";
+    else if (character === "?") pattern += "[^/]";
+    else pattern += character.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${pattern}$`);
 }
 
 // The change packet: proposal, design, tasks, spec deltas, evidence contract.
@@ -70,6 +90,17 @@ export function declaredPathMatcher(globs) {
 export function isChangePacketPath(rel, changeId) {
   const base = `openspec/changes/${changeId}`;
   return rel === base || rel.startsWith(`${base}/`);
+}
+
+// Investigation records, notes, and generated reports. They are control-plane
+// documents written in the target checkout during Investigate or Change, never
+// Land targets, so no sandbox carries, projects, or replays them.
+const INVESTIGATIONS_PREFIX = "openspec/investigations/";
+
+export function isInvestigationPath(rel) {
+  const path = String(rel || "");
+  return path === INVESTIGATIONS_PREFIX.slice(0, -1) ||
+    path.startsWith(INVESTIGATIONS_PREFIX);
 }
 
 // The git pathspec separating a change's own code work from everything a
@@ -85,6 +116,7 @@ export function sandboxCodePathspec(changeId, submoduleRelativePaths = []) {
   return [
     ".",
     `:(exclude)openspec/changes/${changeId}/**`,
+    `:(exclude)${INVESTIGATIONS_PREFIX}**`,
     ":(exclude)coverage/**", ":(exclude)test-results/**",
     ":(exclude)playwright-report/**", ":(exclude).foundation/**",
     ...submoduleRelativePaths.map((rel) => `:(exclude)${rel}`)
@@ -110,4 +142,47 @@ export function trackedPathSet(relativePaths) {
       set.add(segments.slice(0, index).join("/"));
   }
   return set;
+}
+
+// `surfaceAdditions` are repository-qualified: a path recorded for one
+// repository must not widen another repository's manifest, hash, or Land
+// deletion guard. Legacy runtime state stored bare repository-relative strings,
+// which always meant the root workspace.
+//
+// Two optional flags keep a recorded path visible to Land instead of refused
+// at Prove: `protected` (control-plane, CI, or secret path; a property of the
+// path, so it is sticky) and `deleted` (the sandbox removed the path; the
+// latest observation wins, so a restored file stops reading as a deletion).
+// Unflagged entries keep their two-field shape.
+export function surfaceAdditionEntries(value) {
+  const entries = new Map();
+  for (const entry of Array.isArray(value) ? value : []) {
+    const row = typeof entry === "string"
+      ? { repositoryId: "root", path: entry }
+      : entry && typeof entry.path === "string"
+        ? { repositoryId: String(entry.repositoryId || "root"), path: entry.path }
+        : null;
+    if (!row?.path) continue;
+    const key = `${row.repositoryId}\0${row.path}`;
+    const prior = entries.get(key);
+    if (entry?.protected === true || prior?.protected) row.protected = true;
+    const deleted = typeof entry?.deleted === "boolean" ? entry.deleted : prior?.deleted;
+    if (deleted === true) row.deleted = true;
+    entries.set(key, row);
+  }
+  // Code-unit order, locale-independent, so persisted state is stable.
+  const order = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+  return [...entries.values()].sort((left, right) =>
+    order(left.repositoryId, right.repositoryId) || order(left.path, right.path));
+}
+
+export function mergeSurfaceAdditions(...values) {
+  return surfaceAdditionEntries(values.flatMap((value) =>
+    Array.isArray(value) ? value : []));
+}
+
+export function surfaceAdditionPaths(value, repositoryId = "root") {
+  return surfaceAdditionEntries(value)
+    .filter((entry) => entry.repositoryId === repositoryId)
+    .map((entry) => entry.path);
 }

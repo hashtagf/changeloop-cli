@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { assertSpecApproval } from "./runtime/core/user-decisions.mjs";
+import { assertSpecApproval, preserveSpecApprovalAcross } from "./runtime/core/user-decisions.mjs";
 
 import {
-  appendFileSync, existsSync, lstatSync, mkdirSync, rmSync
+  appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { delimiter, dirname, join } from "node:path";
@@ -11,6 +11,9 @@ import {
   createMetricsRuntime, createSourceCohortProvider
 } from "./runtime/observability/metrics-runtime.mjs";
 import { createExecRuntime } from "./runtime/observability/exec-runtime.mjs";
+import { createOutcomesRuntime } from "./runtime/observability/outcomes-runtime.mjs";
+import { createLessonsRuntime } from "./runtime/observability/lessons-runtime.mjs";
+import { createApprovalPackageRuntime, routeForState } from "./runtime/workflow/approval-package.mjs";
 import {
   createFeedbackRuntime, FEEDBACK_SCHEMA_VERSION
 } from "./runtime/observability/feedback-runtime.mjs";
@@ -54,11 +57,16 @@ import { createInstructionRecorder } from "./runtime/core/instruction-recorder.m
 import { createAgentPlanner, createModelRouter } from "./runtime/workflow/agent-planning.mjs";
 import { createAgentDispatchRuntime } from "./runtime/workflow/agent-dispatch.mjs";
 import {
-  ADVANCE_PROTOCOL_VERSION, createAdvanceRuntime, hasValidLandGrant,
+  ADVANCE_PROTOCOL_VERSION, advanceFailureAction, createAdvanceRuntime, hasValidLandGrant,
   prepareAdvanceBuild, runAdvanceProof
 } from "./runtime/workflow/advance-runtime.mjs";
-import { createSandboxRuntime } from "./runtime/workflow/sandbox-runtime.mjs";
+import { automaticReviewRun, currentDeliveryProof } from "./runtime/workflow/advance-recovery.mjs";
+import {
+  copySandboxEntries, createSandboxRuntime, sandboxCopyPlan
+} from "./runtime/workflow/sandbox-runtime.mjs";
+import { createPreviewRuntime } from "./runtime/workflow/preview-runtime.mjs";
 import { createSandboxCleanup } from "./runtime/workflow/sandbox-cleanup.mjs";
+import { assertLandedProjection } from "./runtime/workflow/land-verification.mjs";
 import {
   createLandJournal, transactionJournals as readTransactionJournals
 } from "./runtime/workflow/land-journal.mjs";
@@ -66,11 +74,14 @@ import {
   createProofRuntime, taskPacketWasPrecompletedOperation
 } from "./runtime/evidence/proof-runtime.mjs";
 import { createRepositoryTopology } from "./runtime/workflow/repository-topology.mjs";
+import { nestedRepositoryRelativePaths } from "./runtime/core/repository-binding.mjs";
 import { createRepositorySnapshot } from "./runtime/workflow/repository-snapshot.mjs";
 import { createPacketRuntime } from "./runtime/workflow/packet-runtime.mjs";
 import { createChangePolicy } from "./runtime/workflow/change-policy.mjs";
 import { taskBlocks, taskMetadata } from "./runtime/contracts/change-artifacts.mjs";
 import { createChangeLifecycle } from "./runtime/workflow/change-lifecycle.mjs";
+import { amendTaskVerifyOperation } from "./runtime/workflow/semantic-amendment.mjs";
+import { createInvestigationRuntime } from "./runtime/workflow/investigation-runtime.mjs";
 import { createLeaseRuntime } from "./runtime/workflow/lease-runtime.mjs";
 import { createAuthorityRuntime } from "./runtime/workflow/authority-runtime.mjs";
 import { createHandoffRuntime } from "./runtime/workflow/handoff-runtime.mjs";
@@ -89,25 +100,40 @@ import {
   REVIEW_FORCING_CAPABILITIES,
   REVIEW_DIVERSITY_CAPABILITIES
 } from "./runtime/evidence/evidence-contract.mjs";
-import { createChangeValidationRuntime } from "./runtime/workflow/change-validation.mjs";
+import {
+  createChangeValidationRuntime, postReleaseRolloutGates
+} from "./runtime/workflow/change-validation.mjs";
 import { routeRuntimeCommand } from "./runtime/core/cli-router.mjs";
+import { impliedChangeValues } from "./runtime/core/implied-change.mjs";
 import { createProviderScheduler } from "./runtime/evidence/provider-scheduler.mjs";
 import { createReviewProtocol } from "./runtime/evidence/review-protocol.mjs";
 import { createArtifactStore } from "./runtime/evidence/artifact-store.mjs";
 import { createReviewAttemptStore } from "./runtime/evidence/review-attempt-store.mjs";
-import { createProofReadinessRuntime } from "./runtime/evidence/proof-readiness.mjs";
+import {
+  createProofReadinessRuntime, upgradeEvidenceOperation
+} from "./runtime/evidence/proof-readiness.mjs";
 import { createReceiptRuntime } from "./runtime/evidence/receipt-runtime.mjs";
 import { createReceiptValidity } from "./runtime/evidence/receipt-validity.mjs";
 import { createAdapterRuntime } from "./runtime/evidence/adapter-runtime.mjs";
 import { createProofExecutionRuntime } from "./runtime/evidence/proof-execution-runtime.mjs";
+import {
+  createTestDiscriminationRuntime, prepareBaseTree
+} from "./runtime/evidence/test-discrimination.mjs";
+import {
+  createBenchmarkRuntime, receiptRegressionFinding
+} from "./runtime/evidence/benchmark-runtime.mjs";
+import { changeWorkTypes, taskChangeIssue } from "./runtime/workflow/task-change.mjs";
+import { lightKind } from "./runtime/workflow/validation/dev-document.mjs";
+import { repositoryBaseHead } from "./runtime/core/repository-binding.mjs";
 import { createConfiguredReviewerRuntime } from "./runtime/evidence/codex-reviewer.mjs";
-import { createBlockedDecision } from "./runtime/core/blocked-decision.mjs";
+import { createBlockedDecision, createDetachedBlockScope } from "./runtime/core/blocked-decision.mjs";
 import { createLandGrantRuntime } from "./runtime/core/land-grant.mjs";
 import {
   assertExecutionPreparationReady, ensureProjectOpenSpec,
   executionPreparationValue, prependFoundationToolPath
 } from "./runtime/core/tool-preparation.mjs";
 import { createAbandonRuntime } from "./runtime/workflow/abandon-runtime.mjs";
+import { createLandUndo } from "./runtime/workflow/land-undo.mjs";
 import { RUNTIME_MODULE_API } from "./runtime/version.mjs";
 import { createBootstrap } from "./runtime/composition/bootstrap.mjs";
 import {
@@ -117,10 +143,19 @@ import {
   ADAPTERS, INPUT_MODES, PROVIDER_CONTRACTS, PROVIDERS, providerCapability
 } from "./runtime/evidence/provider-catalog.mjs";
 import { SECURITY_TERMS } from "./runtime/workflow/security-policy.mjs";
+import {
+  landAppliedOutput, otherLandedOutput, targetEditIssues as targetEditFindings
+} from "./runtime/workflow/target-edits.mjs";
+import {
+  createSessionLeaseRuntime, isSessionOwner, runTaskCheck
+} from "./runtime/workflow/session-lease.mjs";
 import { createQualityRuntime } from "./runtime/quality/quality-runtime.mjs";
+import {
+  createPullRequestRuntime, DELIVERY_PROTOCOL_VERSION, DELIVERY_RECEIPT_SCHEMA_VERSION
+} from "./runtime/workflow/pull-request-runtime.mjs";
 
-const VERSION = "3.5.17";
-const RUNTIME_API_VERSION = "36";
+const VERSION = "3.6.8";
+const RUNTIME_API_VERSION = "42";
 // Checked here, at load, rather than only inside `doctor`: a torn install —
 // this file from one revision, runtime/** from another — otherwise passed
 // every command up to `archive` and then threw partway through Land.
@@ -132,17 +167,17 @@ if (RUNTIME_MODULE_API !== RUNTIME_API_VERSION) {
   process.exit(1);
 }
 const PROVIDER_PROTOCOL_VERSION = "13";
-const ADAPTER_PROTOCOL_VERSION = "6";
+const ADAPTER_PROTOCOL_VERSION = "7";
 const PROOF_PROTOCOL_VERSION = "7";
-const PACKET_SCHEMA_VERSION = "11";
-const AGENT_PLAN_SCHEMA_VERSION = "5";
+const PACKET_SCHEMA_VERSION = "12";
+const AGENT_PLAN_SCHEMA_VERSION = "6";
 const CONTEXT_EVENT_SCHEMA_VERSION = "2";
-const METRICS_SCHEMA_VERSION = "9";
+const METRICS_SCHEMA_VERSION = "10";
 const COMMAND_TELEMETRY_SCHEMA_VERSION = "5";
 const REVIEW_PROTOCOL_VERSION = "4";
 const ACCEPTANCE_PROTOCOL_VERSION = "2";
 const SEMANTIC_ACCEPTANCE_PROTOCOL_VERSION = "1";
-const REVIEW_PACKET_SCHEMA_VERSION = "5";
+const REVIEW_PACKET_SCHEMA_VERSION = "6";
 const ATTESTATION_PROTOCOL_VERSION = "1";
 const AUTHORITY_PROTOCOL_VERSION = "2";
 const CI_EVIDENCE_PROTOCOL_VERSION = "1";
@@ -154,11 +189,16 @@ const AUTOMATED_MUTATION_PROTOCOL_VERSION = "1";
 let operationBlocked = false;
 let operationBlocker = null;
 let trappedFailureDepth = 0;
+// Work that runs beside an operation (the concurrent review in `advance`)
+// records its own refusal here instead of marking the whole process blocked:
+// its failure is an open request the next pass routes, not this command's stop.
+const detachedBlockScope = createDetachedBlockScope();
 // A command that prints a structured non-ready result and returns has also
 // ended in a refusal, not a crash — but it never reaches `die`. `block()` is
 // that second spelling: it records the decision without exiting, so the exit
 // handler reports what the command decided instead of inferring it.
 function markBlocked(message) {
+  if (detachedBlockScope.capture(message)) return;
   operationBlocked = true;
   operationBlocker = blockerTelemetryValue(message, {
     changeId: operationChangeId,
@@ -199,9 +239,10 @@ const {
   paths: {
     runtime: RUNTIME, receipts: RECEIPTS, logs: LOGS, evidenceVault: EVIDENCE_VAULT,
     snapshots: SNAPSHOTS, transactions: TRANSACTIONS, plans: PLANS, leases: LEASES,
-    prototypes: PROTOTYPES, attestations: ATTESTATIONS, authority: AUTHORITY,
+    prototypes: PROTOTYPES, packages: PACKAGES, previews: PREVIEWS,
+    attestations: ATTESTATIONS, authority: AUTHORITY,
     handoffs: HANDOFFS, instructionManifests: INSTRUCTION_MANIFESTS,
-    recovery: RECOVERY, changes: CHANGES
+    recovery: RECOVERY, deliveries: DELIVERIES, changes: CHANGES, reviews: REVIEWS
   },
   readJson, readJsonOrNull, writeJson, canonicalPath, pathInside, now
 } = createBootstrap({
@@ -234,10 +275,10 @@ let operationFingerprint = null;
 // Lifecycle commands stay: metrics derives rework and typed-stop signals from
 // their rows, so proof-* and land-* are measurements, not inspections.
 const READ_ONLY_OPERATIONS = new Set([
-  "metrics", "feedback", "hash", "changes", "providers", "repos", "models", "describe",
-  "budget-checkpoint",
+  "metrics", "feedback", "outcomes", "lessons", "hash", "changes", "current", "providers", "repos", "models", "describe",
+  "package", "budget-checkpoint",
   "packet", "agent-task", "audit-change", "authority-status",
-  "handoff-status", "handoff-packet", "evidence-detect", "evidence-doctor",
+  "handoff-list", "handoff-status", "handoff-packet", "evidence-detect", "evidence-doctor",
   "doctor", "quality-discover", "quality-doctor", "quality-report",
   "api-version", "version"
 ]);
@@ -308,7 +349,9 @@ const {
     ciEvidenceProtocol: CI_EVIDENCE_PROTOCOL_VERSION,
     qualityCapabilitiesProtocol: QUALITY_CAPABILITIES_PROTOCOL_VERSION,
     crapProtocol: CRAP_PROTOCOL_VERSION,
-    automatedMutationProtocol: AUTOMATED_MUTATION_PROTOCOL_VERSION
+    automatedMutationProtocol: AUTOMATED_MUTATION_PROTOCOL_VERSION,
+    deliveryProtocol: String(DELIVERY_PROTOCOL_VERSION),
+    deliveryReceiptSchema: String(DELIVERY_RECEIPT_SCHEMA_VERSION)
   },
   readJson,
   fail: die
@@ -330,7 +373,9 @@ const { recordInstructionManifest } = createInstructionRecorder({
 const {
   reviewerConfig,
   reviewerStatus,
-  runReview: runConfiguredReview
+  reviewerInstalled,
+  runReview: runConfiguredReview,
+  runReviewAsync: runConfiguredReviewAsync
 } = createConfiguredReviewerRuntime({
   root: ROOT,
   foundationPolicy,
@@ -414,7 +459,9 @@ const {
   deliveredAiAttempts,
   infrastructureAiAttempts,
   acknowledgeInfrastructureAttempts,
-  acknowledgeBaseMoveAttempts
+  grantExtraAiWave,
+  acknowledgeBaseMoveAttempts,
+  autoReleaseReviewBudget
 } = createReviewAttemptStore({
   receiptsRoot: RECEIPTS,
   evidenceVault: EVIDENCE_VAULT,
@@ -425,7 +472,6 @@ const {
   stableHash,
   reviewReceiptBinding,
   now,
-  blockWithDecision,
   fail: die
 });
 const hostAttestation = createHostAttestationRuntime({
@@ -460,7 +506,10 @@ const {
   eventUsage,
   synchronizeBudgetUsage
 } = createBudgetRuntime({ policy: foundationPolicy, now });
-const { reportBudget } = createBudgetReporter({ applyBudgetDecision });
+const { reportBudget } = createBudgetReporter({
+  applyBudgetDecision,
+  watchdogEnabled: () => foundationPolicy().execution.budgetWatchdog === true
+});
 const { metricsValue, showMetrics } = createMetricsRuntime({
   logs: LOGS,
   receipts: RECEIPTS,
@@ -481,9 +530,18 @@ const { metricsValue, showMetrics } = createMetricsRuntime({
 });
 const { execObserved } = createExecRuntime({
   assertApproval: (id, state) => assertSpecApproval(ROOT, id, state),
+  root: ROOT,
+  // Task repositories decide which sandbox an exec child starts in.
+  changeTasks: (id, state) => {
+    const path = join(activeChangePath(id, state), "tasks.md");
+    return existsSync(path)
+      ? taskBlocks(readFileSync(path, "utf8")).filter((task) => task.id).map(taskMetadata)
+      : [];
+  },
   logs: LOGS,
   loadRuntime,
   now,
+  prepareWorkspace: (id) => projectRootRepositories(id),
   fail: die
 });
 const repositoryTopology = createRepositoryTopology({
@@ -506,6 +564,9 @@ const {
   byId: repositoryById,
   show: showRepositories
 } = repositoryTopology;
+// Every declared nested repository's root-relative path; its gitlink in the
+// root workspace is that repository's pointer, never root task content.
+const declaredRepositoryPaths = () => nestedRepositoryRelativePaths(repositoryCatalog());
 const { relevantSnapshot, relevantHash } = createRepositorySnapshot({
   root: ROOT,
   runtimePath,
@@ -524,9 +585,11 @@ const {
   canonicalChangedSurface,
   changedSurfaceResolvable,
   policyCapabilities,
+  policyRolloutCapabilities,
   policyCapabilityTrigger,
   capabilitiesForPaths,
   forecastCapabilities,
+  policyProviderSetupActions,
   clearPolicyCache
 } = createChangePolicy({
   root: ROOT,
@@ -541,7 +604,8 @@ const {
   isCurrentChangePath,
   readJson,
   fileDigest,
-  fail: die
+  fail: die,
+  declaredRepositoryPaths
 });
 // clearSnapshotCache is what every surface mutation already calls; the policy
 // cache invalidates with it or not at all.
@@ -624,7 +688,8 @@ const handoffRuntime = createHandoffRuntime({
   stableHash,
   defaultOwner: () => foundationPolicy().workflow.handoffDefaultOwner,
   now,
-  fail: die
+  fail: die,
+  capture: trapFailures
 });
 const {
   handoffContract,
@@ -655,6 +720,7 @@ const evidenceContract = createEvidenceContract({
   filesystemEntryIdentity,
   stableHash,
   policyCapabilities,
+  policyCapabilityTrigger,
   foundationPolicy,
   handoffContract,
   git,
@@ -729,6 +795,7 @@ const { receiptValidity } = createReceiptValidity({
   changeDiffIdentity: (id, state) => sandboxRuntime.changeDiffIdentity(id, state)
 });
 const changeValidationRuntime = createChangeValidationRuntime({
+  policyProviderSetupActions,
   relevantHash,
   markBlocked,
   root: ROOT,
@@ -898,6 +965,14 @@ const {
   recordReceipt,
   recordDeterministicReviewClosure
 } = receiptRuntime;
+const { measure: measureBenchmark } = createBenchmarkRuntime({
+  prepareBaseTree,
+  isProductPath: (path) => !lightKind(path),
+  fileDigest,
+  runCommand,
+  removeTree: (path) => rmSync(path, { recursive: true, force: true }),
+  stableHash
+});
 const adapterRuntime = createAdapterRuntime({
   ROOT,
   LOGS,
@@ -933,7 +1008,9 @@ const adapterRuntime = createAdapterRuntime({
   maxParallelServices: maxParallelProviders,
   recordScheduler: commandPhaseRecorder.scheduler,
   timestamp: Date.now,
-  die
+  measureBenchmark,
+  die,
+  clearSnapshotCache
 });
 const {
   runProvider,
@@ -1032,8 +1109,10 @@ const {
   requestAuthority,
   dispatchAuthority,
   runAuthorityReviewer,
+  runAuthorityReviewerAsync,
   abortAuthority,
   resetInfrastructureAuthority,
+  extendReviewAuthority,
   recoverReviewBindings,
   resetBaseMoveAuthority,
   authorityStatusValue,
@@ -1073,9 +1152,14 @@ const {
   foundationPolicy,
   reviewerConfig,
   reviewerStatus,
+  reviewerInstalled,
   runConfiguredReview,
+  runConfiguredReviewAsync,
   acknowledgeInfrastructureAttempts,
+  grantExtraAiWave,
   acknowledgeBaseMoveAttempts,
+  autoReleaseReviewBudget,
+  clearSnapshotCache,
   writeJson,
   receiptPath,
   recordReceipt,
@@ -1087,7 +1171,14 @@ const {
   gitHead,
   validateSignedCiEnvelope,
   providerClaims,
-  fail: die
+  fail: die,
+  reviewDiffContext: {
+    git,
+    pathExists: existsSync,
+    readFile: readFileSync,
+    readDirectory: readdirSync,
+    isDirectory: (path) => lstatSync(path).isDirectory()
+  }
 });
 const {
   planValue: agentPlanValue,
@@ -1122,6 +1213,17 @@ const {
   resourcesConflict,
   authorityPreflight,
   executionContract,
+  taskResult: (id, taskId) => {
+    const path = join(LEASES, "results", id, `${taskId}.json`);
+    return existsSync(path) ? { path, value: readJson(path, null) } : null;
+  },
+  taskLease: (id, taskId) => {
+    const path = join(LEASES, "tasks", id, `${taskId}.json`);
+    return existsSync(path) ? readJson(path, null) : null;
+  },
+  taskPacketWasPrecompleted: (id) => taskPacketWasPrecompletedOperation({
+    loadRuntime, activeChangePath, exists: existsSync, fileDigest
+  }, id),
   relevantHash,
   contractFingerprint,
   stableHash,
@@ -1141,6 +1243,7 @@ const {
   leasePath,
   acquire: acquireAgentLease,
   release: releaseAgentLease,
+  discard: discardAgentLease,
   active: activeChangeLeases,
   cleanup: cleanupChangeLeases
 } = createLeaseRuntime({
@@ -1172,12 +1275,34 @@ const {
   showDispatch: showAgentDispatch
 } = createAgentDispatchRuntime({
   agentPlanValue,
-  activeChangeLeases,
+  // A lease `advance` holds for its session task is not a live worker: the
+  // same task is still the frontier and dispatch returns it again.
+  activeChangeLeases: (id) => activeChangeLeases(id)
+    .filter((lease) => !isSessionOwner(lease.owner)),
   stableHash,
   policy: foundationPolicy,
   serializedJson,
   fail: die
 });
+
+// Issues and notices must judge the same edits: bytes a Land wrote (this
+// change's, or another change's landed but uncommitted diff) are not edits
+// made outside the sandbox. Both views read this one computation.
+function targetEditsFor(state) {
+  const landedElsewhere = Object.fromEntries(Object.entries(otherLandedOutput({
+    transactions: TRANSACTIONS, changeId: state.id, readJson
+  })).map(([path, row]) => [path, row.after]));
+  return targetEditFindings({
+    root: ROOT, state, dirtyNow: preexistingDirty(ROOT),
+    landOutput: { ...landedElsewhere,
+      ...landAppliedOutput(readTransactionJournals(TRANSACTIONS, state.id, readJson)) },
+    // Only the paths this change's Land would apply can stop it.
+    // An unresolvable surface throws (trapped) and the stop stays fail-closed.
+    projectionPaths: () => trapFailures(() => new Set(canonicalChangedSurface(state.id, state)
+      .filter((row) => (row.repositoryId || "root") === "root").map((row) => row.path)))
+  });
+}
+
 const {
   activeWorkRecovery,
   changedSurfaceIssues,
@@ -1192,9 +1317,10 @@ const {
   topologyIssues,
   unavailableProviderRecovery,
   workspaceIsolationIssues,
-  upgradeEvidence
+  upgradeEvidence: upgradeTargetEvidence
 } = createProofReadinessRuntime({
   root: ROOT,
+  targetEditIssues: (state) => targetEditsFor(state).issues,
   markBlocked,
   evidence,
   loadRuntime,
@@ -1226,8 +1352,32 @@ const {
   saveRuntime,
   authorityPreflight,
   executionContract,
+  clearSnapshotCache,
   fail: die
 });
+// Evidence upgrade is wiring-only: it rewrites the target packet, mirrors the
+// same rewrite into an isolated packet (which Prove reads), and keeps spec
+// approval that was valid before it.
+function upgradeEvidence(id) {
+  preserveSpecApprovalAcross(ROOT, id, { loadRuntime, saveRuntime, now }, () => {
+    const workspace = loadRuntime(id).workspace?.path;
+    upgradeTargetEvidence(id);
+    if (!workspace || workspace === ROOT ||
+        !existsSync(join(workspace, "openspec", "changes", id))) return;
+    upgradeEvidenceOperation({
+      loadRuntime: () => ({ status: "active" }),
+      fail: die,
+      changePath: (change) => join(workspace, "openspec", "changes", change),
+      proofPath: () => null,
+      readJson,
+      writeJson,
+      saveRuntime: () => {},
+      pathExists: (path) => Boolean(path) && existsSync(path),
+      remove: () => {},
+      output: { log: () => {} }
+    }, id);
+  }, "evidence-upgrade");
+}
 const { continueBudget, checkpointBudget } = createBudgetContinuation({
   logs: LOGS,
   loadRuntime,
@@ -1249,10 +1399,11 @@ const { continueBudget, checkpointBudget } = createBudgetContinuation({
 const {
   cleanupAppliedSandbox,
   cleanupRepositorySandboxes
-} = createSandboxCleanup({ root: ROOT, canonicalPath, git });
+} = createSandboxCleanup({ root: ROOT, canonicalPath, git, now });
 const sandboxRuntime = createSandboxRuntime({
   markBlocked,
   recordScheduler: commandPhaseRecorder.scheduler,
+  declaredSurfaceMatcher,
   root: ROOT,
   policy: foundationPolicy,
   excludedWorkspaceDirs: EXCLUDED_WORKSPACE_DIRS,
@@ -1296,6 +1447,14 @@ const {
   mergeTaskProgress,
   sync: syncSandbox
 } = sandboxRuntime;
+// Root checks consume declared nested repositories through their root path.
+// Every exec, task check, and proof run first brings those paths current, and
+// reinstalls Build dependencies whose manifest or lockfile changed since setup.
+function projectRootRepositories(id) {
+  const projected = sandboxRuntime.projectRepositories(id);
+  sandboxRuntime.refreshChangedDependencies(id);
+  return projected;
+}
 function rollbackAtomicStart(id) {
   const issues = [];
   const state = readJson(runtimePath(id), {
@@ -1365,6 +1524,41 @@ function rollbackAtomicStart(id) {
   }
   return issues;
 }
+const approvalPackage = createApprovalPackageRuntime({
+  root: ROOT,
+  runtimeDir: RUNTIME,
+  packagesDir: PACKAGES,
+  previewsDir: PREVIEWS,
+  receiptsDir: RECEIPTS,
+  loadRuntime,
+  activeChangePath,
+  changeWorkTypes,
+  evidence,
+  providerCapability,
+  receiptValidity,
+  fail: die,
+  trap: trapFailures
+});
+const approvalPackageLink = (id) => trapFailures(() => approvalPackage.tryWritePackage(id));
+const preview = createPreviewRuntime({
+  root: ROOT,
+  runtimeDir: RUNTIME,
+  previewsDir: PREVIEWS,
+  loadRuntime,
+  evidence,
+  providerCapability,
+  // A preview copy never carries Git or harness state: it is a scratch tree.
+  copyWorkspace: (source, destination) => copySandboxEntries({
+    root: source, requestedPath: destination, fail: die,
+    plan: sandboxCopyPlan({
+      root: source, carriesGit: false, git,
+      sandboxCopyExcludedDirs: SANDBOX_COPY_EXCLUDED_DIRS,
+      excludedWorkspaceDirs: EXCLUDED_WORKSPACE_DIRS
+    })
+  }),
+  now,
+  fail: die
+});
 const {
   templateDir,
   instantiate,
@@ -1372,12 +1566,25 @@ const {
   materializeDraft,
   createChange,
   rapidStartTemplate,
+  amendmentTemplate,
+  inspectDraft,
+  inspectAmendment,
   startAtomic,
+  inspectRevision,
+  reviseChange,
   amendChange,
-  resolveChange
+  resolveChange,
+  openQuestionsDecision
 } = createChangeLifecycle({
   root: ROOT,
   policy: foundationPolicy,
+  approvalPackageLink,
+  approvalLanes: (id, state) => {
+    const configured = foundationPolicy().approval?.roles || [];
+    if (!configured.length) return { configured, required: [] };
+    const routed = routeForState(state, changeWorkTypes(activeChangePath(id, state))).roles;
+    return { configured, required: configured.filter((role) => routed.includes(role)) };
+  },
   securityTerms: SECURITY_TERMS,
   fail: die,
   pathInside,
@@ -1385,10 +1592,12 @@ const {
   writeJson,
   slugify,
   changePath,
+  activeChangePath,
   loadRuntime,
   saveRuntime,
   setOperationChangeId(id) { operationChangeId = id; },
   initialBudget,
+  git,
   gitHead,
   preexistingDirty,
   now,
@@ -1396,8 +1605,29 @@ const {
   validate,
   showPacket,
   measureStage: commandPhaseRecorder.measure,
+  receiptPath,
+  receiptValidity,
+  contractFingerprint,
+  requiredProviders,
+  providerConfig,
+  claimsForProvider,
+  providerWorkspaceHash,
+  providerInputIdentity,
+  relevantHash,
+  stableHash,
   trapFailures,
-  rollbackStart: rollbackAtomicStart
+  rollbackStart: rollbackAtomicStart,
+  repositoryCatalog
+});
+const amendTaskVerify = amendTaskVerifyOperation.bind(null, { root: ROOT, amendChange });
+const { inspectInvestigation, investigationRecordTemplate } = createInvestigationRuntime({
+  root: ROOT,
+  readJson,
+  writeJson,
+  now,
+  git,
+  setOperationChangeId(id) { operationChangeId = id; },
+  fail: die
 });
 function unresolvedApplyTransactions(id) {
   return readTransactionJournals(TRANSACTIONS, id, readJson).filter((journal) =>
@@ -1409,6 +1639,7 @@ const {
   doctor,
   migrate,
   showChanges,
+  showCurrent,
   showProviders,
   usage
 } = createDiagnosticsRuntime({
@@ -1470,6 +1701,7 @@ const {
   providerCapability,
   reviewerStatus,
   unverifiedDrift: (id) => modelDriftInspector.changeDrift(id).unverified,
+  evidenceDetection: evidenceDetectionValue,
   parseFlags,
   parseStrictCommandFlags,
   fail: die
@@ -1514,7 +1746,13 @@ const { recoverPendingApply, pendingApplyTransactions } = createApplyRecovery({
 const taskPacketWasPrecompleted = taskPacketWasPrecompletedOperation.bind(null, {
   loadRuntime, activeChangePath, exists: existsSync, fileDigest
 });
+// One set of deferred post-release gates for Prove and the archive appendix.
+function changeRolloutGates(id) {
+  return postReleaseRolloutGates(
+    { evidence, providerCapability, policyRolloutCapabilities, loadRuntime, relevantHash }, id);
+}
 const { finalize: prove, audit: proofAudit } = createProofRuntime({
+  rolloutGates: changeRolloutGates,
   root: ROOT,
   protocolVersion: PROOF_PROTOCOL_VERSION,
   loadRuntime,
@@ -1553,13 +1791,23 @@ const { finalize: prove, audit: proofAudit } = createProofRuntime({
     const path = join(LEASES, "results", id, `${taskId}.json`);
     return existsSync(path) ? { path, value: readJson(path, null) } : null;
   },
+  taskLease: (id, taskId) => {
+    const path = join(LEASES, "tasks", id, `${taskId}.json`);
+    return existsSync(path) ? readJson(path, null) : null;
+  },
   taskPacketWasPrecompleted,
-  legacyExecutionPolicy: () =>
-    foundationPolicy().workflow?.reviewCircuit === "legacy",
   selectedRepositories,
   git,
   now,
   fail: die
+});
+const testDiscrimination = createTestDiscriminationRuntime({
+  LOGS, requiredProviders, providerConfig, providerCapability, providerRepository,
+  selectedRepositories, repositoryBaseHead,
+  changedSurface: (id, state) => canonicalChangedSurface(id, state),
+  pathKind: lightKind,
+  changeWorkTypes: (id) => changeWorkTypes(activeChangePath(id)),
+  receiptValidity, configuredCommand, fileDigest, stableHash, loadRuntime
 });
 const {
   authorityNext,
@@ -1602,7 +1850,25 @@ const {
   recordDeterministicReviewClosure,
   authorityStatusValue,
   requestAuthority,
+  // Only the exact placeholder-free `authority run` route `advance` would run
+  // inline qualifies; it runs under the proof lock the caller already holds.
+  startConcurrentReview: (id, _request, command, proofRun = null) => {
+    const flags = automaticReviewRun(id, command);
+    return flags ? detachedBlockScope.run(() => trapFailuresAsync(() =>
+      runAuthorityReviewerAsync(id, { ...flags, ...(proofRun ? { proofRun } : {}) })))
+      : null;
+  },
   stableHash,
+  prepareWorkspace: projectRootRepositories,
+  // An unresolvable surface or repository is no verdict: it never blocks.
+  testDiscrimination: async (id, workspaceHash) => {
+    try {
+      if (!changedSurfaceResolvable(id)) return null;
+      return await trapFailuresAsync(() => testDiscrimination.evaluateAsync(id, workspaceHash));
+    } catch { return null; }
+  },
+  performanceRegression: (id, provider) =>
+    receiptRegressionFinding(provider, readJsonOrNull(receiptPath(id, provider))),
   die
 });
 const guardPublicProofMutation = (command, operation) =>
@@ -1619,6 +1885,8 @@ const guardedAbortAuthority = guardPublicProofMutation(
   "authority abort", abortAuthority);
 const guardedResetInfrastructureAuthority = guardPublicProofMutation(
   "authority reset-infra", resetInfrastructureAuthority);
+const guardedExtendReviewAuthority = guardPublicProofMutation(
+  "authority extend-review", extendReviewAuthority);
 const guardedResetBaseMoveAuthority = guardPublicProofMutation(
   "authority reset-base-move", resetBaseMoveAuthority);
 const guardedRecordAuthority = guardPublicProofMutation(
@@ -1663,6 +1931,7 @@ const {
   clearSnapshotCache,
   relevantHash,
   workspaceIsolationIssues,
+  targetEditNotices: (state) => targetEditsFor(state).notices,
   reviewPolicy,
   requiredProviders,
   receiptValidity,
@@ -1683,6 +1952,14 @@ const {
   blockWithDecision,
   deliveryObservation: (_id, state) =>
     targetProjectionObservationValue({ root: ROOT, state, git, fileDigest }),
+  // One preflight for `land check` and Land: the landed-projection binding
+  // first (an uninitialized submodule answers Git for its superproject), then
+  // every Apply, repository-delivery, and spec-sync refusal.
+  landPreflight: (id, state, options) => {
+    assertLandedProjection({ root: ROOT, id, state, fail: die, preflight: true });
+    applyRuntime.landPreflight(id, state, options);
+  },
+  assertApproval: (id, state, options) => assertSpecApproval(ROOT, id, state, options),
   fail: die
 });
 const landGrantRuntime = createLandGrantRuntime({
@@ -1694,14 +1971,20 @@ const landGrantRuntime = createLandGrantRuntime({
   writeJson,
   stableHash,
   now,
-  landCheck
+  landCheck,
+  workspaceHash: (id) => relevantHash(id, null, true),
+  archiveRecoveryReady: (id) => applyRuntime.archiveRecoveryReady(id)
 });
 const applyRuntime = createApplyRuntime({
+  // Archive appendices: review rounds and post-release rollout gates.
+  reviewAttemptRecords: (id) => reviewAttemptRecords(id),
+  rolloutGates: changeRolloutGates,
   root: ROOT,
   transactions: TRANSACTIONS,
   loadRuntime,
   saveRuntime,
   selectedRepositories,
+  mergeTaskProgress,
   workspaceManifest,
   declaredSurfaceMatcher,
   currentChangeRelativePath,
@@ -1735,26 +2018,54 @@ const applyRuntime = createApplyRuntime({
   cleanupRepositorySandboxes,
   recoverPendingApply,
   landCheck,
-  assertMultiRepositoryArchiveReady,
+  // Records say what Land applied; the target says what landed. Both must agree.
+  assertMultiRepositoryArchiveReady: (id, state) => {
+    assertMultiRepositoryArchiveReady(id, state);
+    assertLandedProjection({ root: ROOT, id, state, fail: die });
+  },
   archivedChangeRelativePath,
   pendingTasks,
   assertOpenSpecCli,
   proofAudit,
   cleanupChangeLeases,
   now,
+  measure: commandPhaseRecorder.measure,
   assertLandGrant: landGrantRuntime.assert,
   consumeLandGrant: landGrantRuntime.consume,
   blockWithDecision,
-  fail: die
+  fail: die,
+  declaredRepositoryPaths
 });
 const {
   gitApplyInputs,
+  recordTargetRestore,
   buildApplyEntries,
   prepareApplyTransaction,
   refreshAppliedProjection,
   applySandbox,
   archive
 } = applyRuntime;
+const pullRequestRuntime = createPullRequestRuntime({
+  root: ROOT,
+  deliveriesRoot: DELIVERIES,
+  loadRuntime,
+  activeChangePath,
+  proofPath,
+  transactionJournalPath,
+  pathIdentity,
+  readJson,
+  writeJson,
+  stableHash,
+  git,
+  transactions: TRANSACTIONS,
+  selectedRepositories,
+  foundationPolicy,
+  // `/deliver` on a proven change is Land authority: the normal Land route.
+  landChange: (id) => advanceThrough(id, "archived"),
+  now,
+  fail: die
+});
+const { showAdvance: showDeliveryAdvance } = pullRequestRuntime;
 const advanceLand = advanceLandOperation.bind(null, {
   loadRuntime, landCheck, archive, resumeLand, landPlanValue,
   selectedRepositories,
@@ -1778,12 +2089,14 @@ function preparationProviders(id) {
 }
 
 function prepareExecution(id, { stage = "build" } = {}) {
+  if (stage !== "land") projectRootRepositories(id);
   const state = loadRuntime(id);
   const repositories = selectedRepositories(id, state);
   const openSpec = ensureProjectOpenSpec({
     root: ROOT,
     status: openSpecCliStatus,
-    spawn: spawnSync
+    spawn: spawnSync,
+    stage
   });
   const prior = readJsonOrNull(preparationPlanPath(id));
   const plan = executionPreparationValue({
@@ -1815,13 +2128,103 @@ async function runAdvanceQuietly(operation) {
     console.log = priorLog;
   }
 }
-const { advanceValue, showAdvance } = createAdvanceRuntime({
+const sessionLeases = createSessionLeaseRuntime({
+  loadRuntime, activeChangeLeases, stableHash, saveRuntime,
+  // D5: advance runs the handed-off task's own verify check and ticks it.
+  runCheck: (id, check) => commandPhaseRecorder.measure("build.task-check", () => {
+    projectRootRepositories(id);
+    return adapterRuntime.runTaskCheckAsEvidence(id, check) ||
+      runTaskCheck({ loadRuntime }, id, check);
+  }),
+  taskChangeIssue: (id, taskId) => {
+    try {
+      const state = loadRuntime(id);
+      const task = (agentPlanValue(id)?.tasks || []).find((row) => row.id === taskId);
+      if (!task || !changedSurfaceResolvable(id, state)) return null;
+      const repositoryId = trapFailures(() =>
+        repositoryById(id, task.repository || "root", state).id);
+      return taskChangeIssue({
+        workTypes: changeWorkTypes(activeChangePath(id)), task, changeId: id,
+        changedPaths: trapFailures(() => canonicalChangedSurface(id, state))
+          .filter((row) => row.repositoryId === repositoryId).map((row) => row.path)
+      });
+    } catch { return null; }
+  },
+  acquire: acquireAgentLease, release: releaseAgentLease, discard: discardAgentLease
+});
+const { advanceValue, advanceThrough, showAdvance } = createAdvanceRuntime({
+  approvalPackageLink,
+  pendingApprovalDecisions: (id) => trapFailures(() => {
+    const preflight = authorityPreflight(id);
+    const authority = preflight.status === "READY" ? [] : preflight.blockers.map((blocker) => ({
+      code: blocker.code, summary: blocker.summary, next: blocker.next
+    }));
+    // External evidence nobody can wire automatically is the same Prove-time
+    // question; review and acceptance have their own routes.
+    const state = loadRuntime(id);
+    const providers = changedSurfaceResolvable(id, state) ? requiredProviders(id) : [];
+    const external = providers.flatMap((provider) => {
+      const config = providerConfig(id, provider);
+      if (config && config.adapter !== "external") return [];
+      if (["review", "acceptance"].includes(providerCapability(provider, config))) return [];
+      const recovery = externalEvidenceRecovery(id, provider);
+      if (recovery.kind !== "user-decision" ||
+          recovery.wiring?.kind === "configure-provider") return [];
+      return [{
+        code: "EXTERNAL_EVIDENCE_REQUIRED", summary: recovery.decision.summary,
+        next: `wire provider '${provider}' in openspec/changes/${id}/execution.yaml or agree how its external result will be supplied`
+      }];
+    });
+    return [...authority, ...external];
+  }),
+  settleSessionLeases: sessionLeases.settle,
+  reverifyCompletedTasks: (id) => {
+    sessionLeases.tickAccepted(id, agentPlanValue(id, { inspect: true }).resultReady || []);
+    return sessionLeases.reverify(id, agentPlanValue(id, { inspect: true }).verification || []);
+  },
+  issueSessionLease: sessionLeases.issue,
+  changePath,
+  projectRoot: ROOT,
   assertApproval: (id, state, options) => assertSpecApproval(ROOT, id, state, options),
   inspectSnapshots,
   capture: trapFailures,
   captureAsync: trapFailuresAsync,
   markBlocked,
   loadRuntime,
+  saveRuntime,
+  recoverSandbox: (id) => commandPhaseRecorder.measureAsync("advance.sandbox-sync",
+    () => runAdvanceQuietly(() => syncSandbox(id))),
+  // Non-destructive interrupted-apply resolutions only (settle|keep-current),
+  // recorded under the Land route that started the apply.
+  recoverApply: (id, resolution) => runAdvanceQuietly(() => recoverLand(id, {
+    "decision-ref": `harness:automatic-apply-recovery:${resolution}`,
+    ...(resolution === "settle" ? {} : { resolution })
+  })),
+  synchronizeAgreement: async (id, flags = {}) => flags.resolve || sandboxRuntime.agreementStale(id)
+    ? commandPhaseRecorder.measureAsync("advance.sandbox-sync",
+      () => runAdvanceQuietly(() => sandboxRuntime.synchronizeAgreement(id, flags)))
+    : false,
+  // Detected provider wiring is a write, not a question: upgrade a legacy
+  // packet, write the recommended providers, then sync the revised agreement
+  // into Build so Land never sees an edited-after-sync packet.
+  wireEvidence: (id) => commandPhaseRecorder.measureAsync("advance.evidence-wiring",
+    () => runAdvanceQuietly(async () => {
+      if (readJson(join(changePath(id), "evidence.yaml"), {}).version === 1) upgradeEvidence(id);
+      // Wiring-only, like `evidence upgrade`: an approval valid before the
+      // write stays valid; the agreement's behavior did not change.
+      preserveSpecApprovalAcross(ROOT, id, { loadRuntime, saveRuntime, now },
+        () => initializeEvidence(id, { write: true }), "evidence-wiring");
+      if (loadRuntime(id).status === "building") prepareBuildSandbox(id);
+      else await sandboxRuntime.synchronizeAgreement(id);
+    })),
+  runReview: (id, flags) => commandPhaseRecorder.measureAsync("advance.review-run",
+    () => runAdvanceQuietly(() => guardedRunAuthorityReviewer(id, { ...flags }))),
+  recoverWorkspace: (id) => runAdvanceQuietly(() => sandboxRuntime.recoverReplay(id)),
+  recoverArchive: (id) => runAdvanceQuietly(() =>
+    applyRuntime.recoverArchive(id, landGrantRuntime.issue)),
+  proofIsCurrent: currentDeliveryProof.bind(null, {
+    proofAudit, relevantHash, requiredProviders, receiptValidity, receiptPath, fileDigest
+  }),
   agentDispatchValue,
   agentPlanValue,
   relevantHash,
@@ -1829,7 +2232,6 @@ const { advanceValue, showAdvance } = createAdvanceRuntime({
   authorityStatusValue,
   authorityNext,
   proofReadinessValue,
-  budgetDecisionValue: budgetDecision,
   hasLandGrant: hasValidLandGrant.bind(null, landGrantRuntime),
   authorizeLand: (id) => runAdvanceQuietly(() => landGrantRuntime.issue(id)),
   prepareBuild: prepareAdvanceBuild.bind(null, {
@@ -1838,7 +2240,7 @@ const { advanceValue, showAdvance } = createAdvanceRuntime({
   }),
   runProof: runAdvanceProof.bind(null, {
     measureAsync: commandPhaseRecorder.measureAsync,
-    runQuietly: runAdvanceQuietly, proofAdvance
+    runQuietly: runAdvanceQuietly, prepareExecution, proofAdvance
   }),
   recoverReviewBindings,
   runLand: (id) => runAdvanceQuietly(() => advanceLand(id)),
@@ -1860,6 +2262,29 @@ const { showFeedback } = createFeedbackRuntime({
   packetValue: packetRuntime.inspectionPacketValue,
   nextAction: (id) => advanceValue(id, { inspect: true })
 });
+// Cross-change rollups read the store directly and never write it: the
+// attempt reader below bypasses reviewHistoryState, which may migrate state.
+const reviewAttemptRecords = (id) => {
+  const dir = join(EVIDENCE_VAULT, id, "review-attempts");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((name) => name.endsWith(".json")).sort()
+    .map((name) => readJsonOrNull(join(dir, name)))
+    .filter((value) => value && typeof value === "object");
+};
+const { showOutcomes } = createOutcomesRuntime({
+  runtimeDir: RUNTIME,
+  evidenceDir: EVIDENCE_VAULT,
+  logsDir: LOGS,
+  changeWorkTypes: (id, state) => changeWorkTypes(activeChangePath(id, state)),
+  reviewAttemptRecords
+});
+const { showLessons } = createLessonsRuntime({
+  runtimeDir: RUNTIME,
+  evidenceDir: EVIDENCE_VAULT,
+  logsDir: LOGS,
+  reviewAttemptRecords,
+  fail: die
+});
 const abandonRuntime = createAbandonRuntime({
   root: ROOT,
   paths: {
@@ -1871,6 +2296,13 @@ const abandonRuntime = createAbandonRuntime({
     snapshots: SNAPSHOTS,
     plans: PLANS,
     handoffs: HANDOFFS,
+    authority: AUTHORITY,
+    reviews: REVIEWS,
+    instructionManifests: INSTRUCTION_MANIFESTS,
+    attestations: ATTESTATIONS,
+    deliveries: DELIVERIES,
+    previews: PREVIEWS,
+    packages: PACKAGES,
     logs: LOGS,
     changes: CHANGES
   },
@@ -1887,6 +2319,20 @@ const abandonRuntime = createAbandonRuntime({
   fail: die
 });
 const { abandonChange } = abandonRuntime;
+const { undoLand } = createLandUndo({
+  root: ROOT,
+  paths: {
+    recovery: RECOVERY, runtime: RUNTIME, receipts: RECEIPTS, evidenceVault: EVIDENCE_VAULT,
+    transactions: TRANSACTIONS, snapshots: SNAPSHOTS, plans: PLANS, handoffs: HANDOFFS,
+    logs: LOGS, authority: AUTHORITY, reviews: REVIEWS,
+    instructionManifests: INSTRUCTION_MANIFESTS, attestations: ATTESTATIONS,
+    deliveries: DELIVERIES, previews: PREVIEWS, packages: PACKAGES
+  },
+  loadRuntime, saveRuntime, readJson, writeJson, now, gitHead, git, gitBuffer,
+  pathIdentity, pathMode, safeRootPath, copyPath,
+  transactionRoot: applyTransactionRoot, journalPath: transactionJournalPath,
+  cleanupChangeLeases, fail: die
+});
 const [command, ...values] = process.argv.slice(2);
 // Help is answered before anything else. It must never be parsed as a change
 // id, and it must never depend on the command's arguments being valid.
@@ -1900,6 +2346,9 @@ if (values.includes("--help") || values.includes("-h")) {
   describeCommand(command, { json: values.includes("--json") });
   process.exit(0);
 }
+// An omitted `<change>` resolves to the one active change before telemetry and
+// the operation ledger read the id.
+values.splice(0, values.length, ...impliedChangeValues(command, values, activeChanges, die));
 const unattendedMentioned = command === "sandbox" &&
   ["create", "inspect"].includes(values[0]) &&
   values.slice(1).some((value) =>
@@ -1919,8 +2368,8 @@ const qualityChange = () => {
   return namedChange(index >= 0 ? values[index + 1] : process.env.FOUNDATION_CHANGE_ID);
 };
 operationChangeId = command === "sandbox" ? namedChange(values[1]) :
-  ["resolve", "validate", "audit-change", "hash", "packet", "agent-plan", "agent-dispatch", "agent-task", "agent-acquire", "agent-release", "metrics", "feedback", "advance", "budget-checkpoint", "budget-continue", "proof-plan", "proof-readiness", "proof-advance", "proof-run", "proof-collect", "proof-preflight", "proof-execute", "proof-audit", "evidence-upgrade", "evidence-verify-ci", "authority-request", "authority-dispatch", "authority-run", "authority-abort", "authority-status", "authority-record", "authority-reset-infra", "authority-reset-base-move", "receipt", "run-provider", "prove",
-    "evidence-detect", "evidence-init", "evidence-doctor", "handoff-status", "handoff-packet", "handoff-record", "land-check", "land-advance", "land-plan", "land-record", "land-pointers", "land-resume", "archive", "event", "telemetry-sync", "telemetry-import"].includes(command) ? namedChange(values[0]) :
+  ["resolve", "validate", "audit-change", "hash", "packet", "agent-plan", "agent-dispatch", "agent-task", "agent-acquire", "agent-release", "metrics", "feedback", "advance", "budget-checkpoint", "budget-continue", "proof-plan", "proof-readiness", "proof-advance", "proof-run", "proof-collect", "proof-preflight", "proof-execute", "proof-audit", "evidence-upgrade", "evidence-verify-ci", "authority-request", "authority-dispatch", "authority-run", "authority-abort", "authority-status", "authority-record", "authority-reset-infra", "authority-extend-review", "authority-reset-base-move", "receipt", "run-provider", "prove",
+    "evidence-detect", "evidence-init", "evidence-doctor", "handoff-status", "handoff-packet", "handoff-record", "land-check", "land-advance", "land-plan", "land-record", "land-pointers", "land-resume", "archive", "delivery-advance", "event", "telemetry-sync", "telemetry-import"].includes(command) ? namedChange(values[0]) :
     command?.startsWith("quality-")
       ? qualityChange()
       : null;
@@ -1972,27 +2421,50 @@ await routeRuntimeCommand(command, values, {
   parseStrictCommandFlags,
   fail: die,
   createChange,
+  inspectInvestigation,
+  investigationRecordTemplate,
   rapidStartTemplate,
+  amendmentTemplate,
+  inspectDraft,
+  inspectAmendment,
   startAtomic,
+  inspectRevision,
+  reviseChange,
   amendChange,
+  amendTaskVerify,
   resolveChange,
+  // An approval over open questions becomes the user's questions, not a refusal.
+  approvalQuestionAction: (id, through = null) => {
+    const decision = openQuestionsDecision(id);
+    return decision ? advanceFailureAction(id, decision, { stage: "build", through }) : null;
+  },
   abandonChange,
   waiveGate,
   showChanges,
+  showCurrent,
   showProviders,
   showRepositories,
   foundationPolicy,
   showAgentPlan,
   showAgentDispatch,
   showAgentTask,
-  acquireAgentLease,
+  acquireAgentLease: (id, taskId, flags) => {
+    sessionLeases.yieldTo(id);
+    return acquireAgentLease(id, taskId, flags);
+  },
   releaseAgentLease,
   prepareClaudeTelemetry,
   recordPhaseContext,
   showPacket,
   showMetrics,
   showAdvance,
+  recordTargetRestore,
+  undoLand,
   showFeedback,
+  showOutcomes,
+  showLessons,
+  showPackage: approvalPackage.showPackage,
+  showPreview: preview.showPreview,
   execObserved,
   checkpointBudget,
   continueBudget,
@@ -2019,6 +2491,7 @@ await routeRuntimeCommand(command, values, {
   runAuthorityReviewer: guardedRunAuthorityReviewer,
   abortAuthority: guardedAbortAuthority,
   resetInfrastructureAuthority: guardedResetInfrastructureAuthority,
+  extendReviewAuthority: guardedExtendReviewAuthority,
   resetBaseMoveAuthority: guardedResetBaseMoveAuthority,
   showAuthorityStatus,
   recordAuthority: guardedRecordAuthority,
@@ -2034,6 +2507,7 @@ await routeRuntimeCommand(command, values, {
   recordRepositoryLand,
   stageRootPointers,
   resumeLand,
+  showDeliveryAdvance,
   showHandoffStatus,
   showHandoffPacket,
   recordHandoff,

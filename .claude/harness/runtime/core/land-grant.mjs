@@ -7,7 +7,8 @@ function sessionId(env = process.env) {
     env.CODEX_THREAD_ID || env.CLAUDE_SESSION_ID || null;
 }
 
-export function landGrantBinding({ state, proof, repositories, stableHash }) {
+export function landGrantBinding({ state, proof = null, workspaceHash = null,
+  repositories, stableHash }) {
   const targets = repositories.filter((repository) => repository.mode === "write")
     .map((repository) => ({
       id: repository.id,
@@ -22,8 +23,9 @@ export function landGrantBinding({ state, proof, repositories, stableHash }) {
     revision: Number(state.revision || 0),
     contractRevision: Number(state.contractRevision || 0),
     executionRevision: Number(state.executionRevision || 0),
-    proofRunId: proof.proofRunId || null,
-    proofWorkspaceHash: proof.workspaceHash || null,
+    workspaceHash,
+    proofRunId: proof?.proofRunId || null,
+    proofWorkspaceHash: proof?.workspaceHash || null,
     repositoryGraph: stableHash(repositories.map((repository) => ({
       id: repository.id,
       type: repository.type || "git",
@@ -37,7 +39,8 @@ export function landGrantBinding({ state, proof, repositories, stableHash }) {
 
 export function createLandGrantRuntime({
   transactions, loadRuntime, selectedRepositories, proofPath, readJson, writeJson,
-  stableHash, now, landCheck, env = process.env
+  stableHash, now, landCheck, workspaceHash = () => null,
+  archiveRecoveryReady = null, env = process.env
 }) {
   const grantPath = (id) => join(transactions, id, "land-grant.json");
 
@@ -47,6 +50,7 @@ export function createLandGrantRuntime({
     return landGrantBinding({
       state,
       proof,
+      workspaceHash: workspaceHash(id),
       repositories: selectedRepositories(id, state),
       stableHash
     });
@@ -57,13 +61,19 @@ export function createLandGrantRuntime({
     // not mutate product files. Avoid asking landCheck to announce an archived
     // success before that recovery has rejected a corrupt spec-sync result.
     if (loadRuntime(id).status === "archived") return null;
-    landCheck(id);
+    const readiness = archiveRecoveryReady?.(id) ? null : landCheck(id);
     const binding = currentBinding(id);
+    // Protected-path edits and deletions Prove recorded travel with the grant
+    // (paths only) so the user sees exactly what the authorized Land touches.
+    const surface = readiness?.surface?.requiresPresentation ? {
+      protected: readiness.surface.protected, deleted: readiness.surface.deleted
+    } : null;
     const body = {
       version: LAND_GRANT_VERSION,
       status: "active",
       sessionId: sessionId(env),
       binding,
+      ...(surface ? { surface } : {}),
       forbidden: ["stage", "commit", "push", "publish", "deploy", "open-pr"],
       issuedAt: now()
     };

@@ -1,5 +1,16 @@
 # Pipeline & Deploy
 
+## Contents
+
+- [The 7 principles](#the-7-principles-from-skillmd)
+- [CI stage design](#ci-stage-design)
+- [Caching & parallelism recipes](#caching-parallelism-recipes)
+- [Build once, promote the artifact](#build-once-promote-the-artifact)
+- [Environment config & secrets — do / don't](#environment-config-secrets-do-dont)
+- [Deploy strategies](#deploy-strategies)
+- [Decouple deploy from release (feature flags)](#decouple-deploy-from-release-feature-flags)
+- [DORA metrics — the vital signs of delivery](#dora-metrics-the-vital-signs-of-delivery)
+
 Concrete layer under `SKILL.md`: stage design, caching and parallelism, build-once-promote, config/secret handling, deploy strategies with rollback, deploy-vs-release decoupling, and the four DORA metrics. Examples lean on GitHub Actions / Kubernetes; shapes translate to CircleCI, Buildkite, ECS, Nomad, PaaS, or serverless.
 
 ## The 7 principles (from SKILL.md)
@@ -161,7 +172,7 @@ RUN npm run build
 
 **How to apply:**
 - Gate every rollout on a real **health/readiness check** — not "the process started" but "the process serves a real request and its dependencies are reachable." A rollout that can't pass health does not receive traffic.
-- Pick a strategy by blast-radius need: **rolling** (replace instances a few at a time — simple, the default for most), **blue-green** (stand up the new version fully, switch traffic atomically, keep the old stack hot for instant rollback), **canary** (send 1–5% of traffic to the new version, watch error rate and latency, then ramp). See `references/pipeline-and-deploy.md` for when each fits.
+- Pick a strategy by blast-radius need: **rolling** (replace instances a few at a time), **blue-green** (prepare the new version fully, switch traffic, retain the old stack for rollback), or **canary** (expose a bounded fraction, observe health, then ramp). Choose thresholds from the actual deployment contract.
 - Wire **automated rollback**: define the abort condition (error rate, p99 latency, failed health checks over a window) and let the deploy system revert to the last good artifact without a human in the loop. Rollback is re-pointing at the previous digest (principle 2 makes this cheap).
 - **Decouple deploy from release** with feature flags: merge and deploy dark code continuously; turn the feature on for internal → small % → all via the flag. A bad feature is a flag flip, not a rollback. Keep flags short-lived and clean them up — a stale flag is dead config that lies.
 - Make deploys **idempotent and forward-rolling**: re-running a deploy is safe, and the fix for a bad deploy is usually rolling *forward* to a corrected artifact, the same way [[database-fundamentals]] migrations roll forward. Coordinate with the expand→contract migration sequence so the schema is always compatible with both the old and new running code.
@@ -236,7 +247,7 @@ Good (automated, small, continuous):
 **How to apply:**
 - Keep all delivery config in the repo: CI workflow files, `Dockerfile`, deploy manifests/Helm charts, infrastructure-as-code. Review changes to them in PRs ([[git-workflow]] principle 6) — a change to the deploy script is as load-bearing as a change to the app.
 - Never configure the critical path by hand in a console. If the platform forces some UI config, capture it as code (Terraform, the platform's config-as-code) so it's reviewable and reproducible.
-- Track the four DORA signals from data you already have (CI timestamps, deploy events, incident records). You don't need a fancy tool — a deploy log plus an incident log gets you all four. See `references/pipeline-and-deploy.md` for exact definitions and how to compute each.
+- Track delivery signals from actual CI timestamps, deploy events, and incident records. Record the definitions and available data; unavailable measurements remain unknown.
 - Watch change-failure rate and MTTR when you change the gate. If you speed up the pipeline and CFR climbs, the speed came from removing a real check — back it out.
 - Treat a degrading pipeline as a bug with a ticket: flaky-test rate creeping up, lead time climbing, builds slowing — these are the early warnings of a delivery system rotting toward the failure modes at the top of this skill.
 

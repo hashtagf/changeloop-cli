@@ -1,9 +1,12 @@
 ---
 name: grill-task-gu
-description: Ground an approved PRD in architecture and production code, settle every material choice in one Decision Sheet, and write a dependency-ordered backlog ready for one Foundation change per group. Use for grill-task-gu, PRD grooming, backlog creation, or /feature intake.
+description: "Ground approved PRDs in production code and architecture, settle material choices in one Decision Sheet, and produce dependency-ordered backlogs. Use for PRD grooming or feature intake. Preserve locked decisions; do not implement or infer compiled-spec approval."
 ---
 
 # Grill Task Gu
+
+Prove material consumer assumptions before treating them as settled choices;
+use `change-impact-analysis` for hidden activation risks.
 
 Produce `full discovery → one Decision Sheet → backlog + coverage → handoff`.
 Never implement or run a one-question interview.
@@ -39,7 +42,7 @@ rollback. For every operated boundary, settle correlation, structured events,
 SLI, alert, runbook, and the operator question the telemetry must answer.
 Source-proven `N/A` rows stay in the same sheet and are never asked later.
 
-## Single user gate
+## Single PRD decision gate
 
 Before asking, draft task outcomes, dependency groups, two-way requirement
 coverage, source grounding, and risk-to-evidence mappings. Present one Decision
@@ -47,14 +50,17 @@ Sheet containing every material choice, recommended defaults, alternatives,
 effects, proposed groups, risk tier, critical test cases, required mutants,
 service interactions, observability, and external blockers. When one choice
 changes another, show the prerequisite and every conditional effect in this same
-sheet; do not defer it to a later question round. Ask for approval or all
-overrides together. Record the answer; do not ask a second approval question.
+sheet; do not defer known choices to a later question round. Ask for approval or
+all overrides together. Record the answer; do not ask to approve the same PRD
+choices again. This approves intake choices, not a compiled OpenSpec packet.
+Change still requires explicit compiled-spec approval before Build.
 Flag a tradeoff for durable rationale only when it is hard to reverse,
 surprising without context, and chosen among meaningful alternatives.
 
-Later phases must reuse the locked sheet. Only evidence proving the agreement
-unsafe permits one exception: collect every newly opened decision into one
-reopen sheet, record its reference, and revise the same change atomically.
+Later phases reuse settled answers. New material gaps follow Change intake's
+dependency-ready decision rounds; never infer answers or repeat settled choices.
+If evidence proves an approved agreement unsafe, collect newly opened decisions
+into one reopen sheet, record its reference, and revise the same change atomically.
 Retirement requires separate user authority. Ordinary findings return to Build.
 Carry resolved terms and qualifying tradeoffs into the existing standard
 `design.md`; create no `CONTEXT.md`, glossary, ADR store, or parallel ledger.

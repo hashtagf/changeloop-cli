@@ -1,9 +1,30 @@
 # Phase mutation guard
 
 `phase-mutation-guard.mjs` is a `PreToolUse` policy layer for file mutations and
-obviously mutating shell commands. Its default `auto` mode blocks whenever a
-fresh Foundation phase is active and stays out of adoption-only sessions where
-no lifecycle context exists.
+obviously mutating shell commands. Its default `auto` mode never refuses: when a
+fresh Foundation phase is active it redirects, routes, or explains, and it stays
+out of adoption-only sessions where no lifecycle context exists.
+
+What the default does with a call that leaves the active phase's rules:
+
+- A product edit aimed at the main checkout while an isolated workspace exists
+  is redirected to the same path in that workspace (`updatedInput`).
+- `land advance` runs as `claude-foundation advance <change> --through
+  archived` in every session and mode, `/land` included, and `archive` or
+  `sandbox apply` outside `/land` runs the same way. That route owns the grant,
+  readiness, and recovery, and lands only proven work.
+- `deliver advance` outside `/deliver` is replaced by the question the agent
+  must ask the user, because delivery commits, pushes, and opens a pull request.
+  When the user's latest prompt directly asks to open a PR or deliver ("เปิด PR
+  ให้เลย", "open a PR"), or answers yes to that question, it runs as `/deliver`.
+- `git commit` or `git push` during Build or Prove from outside the isolated
+  workspace is replaced by the question the agent must ask, unless the user's
+  latest prompt asked for it (a push request covers its commit) or answers yes
+  to that question. `prompt-authority.mjs` holds these word rules.
+- Anything else runs, with `additionalContext` naming the rule and the route.
+
+`FOUNDATION_GUARDRAIL_MODE=block` restores the refusals described below for a
+host that wants them; `audit` records without speaking.
 
 What `.claude/settings.json` wires is `phase-mutation-guard.sh`, a prefilter that
 answers the "no phase to guard" case with shell builtins alone and `exec`s the
@@ -33,10 +54,28 @@ to enforce.
 
 The host may also supply:
 
-- `FOUNDATION_WORKSPACE_ROOT=/absolute/build/workspace` during Build
+- `FOUNDATION_WORKSPACE_ROOT=/absolute/build/workspace` during Build (the
+  recorded change's writable repository sandboxes are added from runtime state;
+  a write into the shared sandbox's copy of such a repository is redirected to,
+  or refused in favor of, that repository's sandbox)
 - `FOUNDATION_ALLOWED_PATHS_JSON='["/absolute/extra/path"]'` for explicitly
   declared Build paths
-- `FOUNDATION_GUARDRAIL_MODE=auto|audit|block|off` (`auto` is the default)
+- `FOUNDATION_GUARDRAIL_MODE=auto|audit|block|off` (`auto` is the default and
+  never refuses; `block` is the explicit strict mode)
+- `FOUNDATION_SHELL_GUARD=block` to block refused shell mutations during
+  Investigate, Change, Build, and Prove
+
+By default those shell refusals are recorded as `shell-audit` rows and the
+command runs, with a notice to the agent: shell containment is inferred from
+command text and misread sed scripts, `$(…)` captures, and scratch copies.
+Structured Write/Edit targets stay enforced, including before the Build sandbox
+exists, and Land/Deliver shell authority stays blocked. Prove readiness and
+`land check` compare the target checkout with its snapshot at isolation; target
+edits after a `shell-audit` row stop as agent-owned
+`TARGET_EDITED_OUTSIDE_SANDBOX` repair, and edits the user confirms as their own
+are recorded with `change resolve <change> --accept-target-edits --decision-ref
+<ref>`. Target bytes equal to what this change's own Land Apply journal wrote
+are Land output and never count as such edits.
 
 `FOUNDATION_LAND_TRANSACTION=1` is set by the runtime itself, for the duration
 of the Land apply transaction and its child processes. Do not set it by hand:
@@ -55,9 +94,12 @@ When no phase can be established, `audit` mode records nothing — there is no
 policy to check against, and a row per mutation is noise. `block` mode still
 refuses, so a host that asked for enforcement gets it.
 
-Audit records contain policy metadata, not command text or file paths, and are
-appended to `.foundation/logs/guardrail-audit.jsonl`. Select explicit `audit`
-only for a controlled rollout; `auto` is the normal fail-closed lifecycle mode.
+Audit records contain policy metadata and are appended to
+`.foundation/logs/guardrail-audit.jsonl`, with outcomes `guided`, `redirected`,
+`routed`, `shell-audit`, `audit-only`, or (strict mode) `blocked`. Select explicit
+`audit` only for a controlled rollout; `auto` is the normal guiding mode. The
+rest of this page describes the policy itself, which strict mode enforces and
+`auto` explains.
 
 The Bash inspection is a conservative command-word screen, not a shell sandbox.
 During Build, an obviously mutating Bash command must begin with `cd`/`pushd`
@@ -77,8 +119,9 @@ later directory changes, redirection targets, and canonical symlink targets;
 literal paths outside that workspace are blocked before execution. A copy or
 link whose source lies outside the workspace (`cp ../x .`,
 `ln -s <checkout>/node_modules node_modules`) is refused with a reason that
-names `sandbox.setupCommand` and an in-workspace install as the routes: a
-workspace never borrows the checkout's files. The
+names a manifest or lockfile edit, which the harness reinstalls before the next
+check, and an in-workspace install as the routes: a workspace never borrows the
+checkout's files. The
 `claude-foundation exec` runtime uses the same policy, derives its phase from
 change state, and starts Build children in the canonical workspace. Use
 structured Edit/Write operations where possible.
@@ -101,15 +144,3 @@ the prefix or path shape that repairs the command, so an agent can continue
 without asking the user or retrying unchanged.
 Host process isolation remains required for shell commands, network authority,
 and indirect mutations.
-
-## Bounded retry integration
-
-`../harness/runtime/reliability/bounded-retry.mjs` is intentionally standalone. Runtime
-providers may wrap only read-only/idempotent infrastructure operations and must
-pass `idempotent: true`. Its default classifier retries timeouts, transient
-network codes, HTTP 408/429, and HTTP 5xx; validation, security, test assertion,
-and business failures are not retried. Pass `onAttempt` to project attempt
-metadata into the host execution contract without recording payloads.
-
-Mutation providers and Land transactions must never use this helper unless they
-independently implement an idempotency key and recovery contract.
