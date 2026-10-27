@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "providers": {
+    "test": {
+      "capability": "test",
+      "adapter": "test-discovery",
+      "command": ["bun", "run", "script/evidence-foundation-workflow-test.ts"],
+      "report": "test-results/evidence-foundation-workflow-test.json",
+      "reportFormat": "json",
+      "minimum": 1,
+      "timeoutMs": 180000,
+      "criticalCases": ["foundation-context-source", "foundation-context-failure", "foundation-context-disabled"]
+    }
+  },
+  "services": {}
+}

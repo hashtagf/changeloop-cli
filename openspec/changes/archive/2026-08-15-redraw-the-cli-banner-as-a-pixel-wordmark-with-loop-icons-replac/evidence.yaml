@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "banner-pixel-loop",
+      "scenario": "The banner renders the 5-row pixel CHANGELOOP wordmark with a loop icon in place of both O letters, consistently across the CLI banner and TUI splash",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "repositories": [
+    {
+      "id": "root",
+      "mode": "write",
+      "dependsOn": []
+    }
+  ]
+}

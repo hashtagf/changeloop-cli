@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "providers": {
+    "test": {
+      "capability": "test",
+      "adapter": "test-discovery",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "test"],
+      "report": "test-results/evidence-foundation-bootstrap-test.json",
+      "reportFormat": "json",
+      "minimum": 1,
+      "timeoutMs": 300000,
+      "criticalCases": [
+        "additive-protocol-response-remains-compatible",
+        "canonical-context-is-injected",
+        "canonical-project-instruction-is-used",
+        "compiled-binary-works-without-path-foundation",
+        "context-endpoint-fails-closed",
+        "explicit-path-compatibility-mode",
+        "first-foundation-command-guides-one-time-bootstrap",
+        "fresh-project-is-initialized",
+        "inactive-built-ins-add-no-context",
+        "interrupted-installation-rolls-back-or-resumes-safely",
+        "loop-commands-present-by-default",
+        "opening-a-project-remains-read-only",
+        "opt-out-disables-injection",
+        "partial-foundation-installation-fails-closed",
+        "payload-drift-blocks-the-build",
+        "repeated-initialization-converges",
+        "runtime-use-performs-no-network-download",
+        "unsafe-target-is-rejected-before-mutation"
+      ]
+    },
+    "integration": {
+      "capability": "integration",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "integration"],
+      "timeoutMs": 300000
+    },
+    "compatibility": {
+      "capability": "compatibility",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "compatibility"],
+      "timeoutMs": 300000
+    },
+    "security": {
+      "capability": "security-static",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "security"],
+      "timeoutMs": 300000
+    },
+    "resilience": {
+      "capability": "resilience",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "resilience"],
+      "timeoutMs": 300000
+    },
+    "deployment": {
+      "capability": "deployment",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "deployment"],
+      "timeoutMs": 600000
+    },
+    "supply-chain": {
+      "capability": "dependency-supply-chain",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "supply-chain"],
+      "timeoutMs": 300000
+    },
+    "cross-repo-contract": {
+      "capability": "cross-repo-contract",
+      "adapter": "command",
+      "command": ["bun", "run", "script/evidence-foundation-bootstrap-test.ts", "cross-repo-contract"],
+      "timeoutMs": 300000
+    }
+  },
+  "services": {}
+}

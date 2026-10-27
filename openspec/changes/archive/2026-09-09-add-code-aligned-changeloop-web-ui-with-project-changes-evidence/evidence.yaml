@@ -1,0 +1,137 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "bundled-projection",
+      "requirementKey": "bundled-projection",
+      "scenario": "A compiled Changeloop binary reads initialized project changes without external claude-foundation on PATH.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "scoped-read-api",
+      "requirementKey": "scoped-read-api",
+      "scenario": "A Web UI client requests changes for its selected server and project/location, including invalid IDs, foreign locations and unavailable runtimes.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "bounded-change-list",
+      "requirementKey": "bounded-change-list",
+      "scenario": "A project has active and archived changes, many entries, unknown measurements or malformed snapshot entries.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "truthful-evidence",
+      "requirementKey": "truthful-evidence",
+      "scenario": "A recorded pass is stale/unverified, or an archived change no longer has a sandbox.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "existing-ui-design",
+      "requirementKey": "existing-ui-design",
+      "scenario": "The user opens Changes, Home or a session from the selected code-aligned prototype.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "refresh-and-failure-states",
+      "requirementKey": "refresh-and-failure-states",
+      "scenario": "A user changes server/project during a request, returns to the page, or loses connection while viewing changes.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "session-draft-handoff",
+      "requirementKey": "session-draft-handoff",
+      "scenario": "A user chooses New change or Open session for a listed change and then explicitly submits its command.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "changeloop-session-brand",
+      "requirementKey": "changeloop-session-brand",
+      "scenario": "The user opens a new or empty session in V2 and the still-supported legacy layout, including through Changes.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "embedded-ui-delivery",
+      "requirementKey": "embedded-ui-delivery",
+      "scenario": "The built binary serves the app through serve or web with embedded assets.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "investigation-library",
+      "requirementKey": "investigation-library",
+      "scenario": "A selected project contains saved investigation notes, including a note with an explicit Change reference and a session with no saved note.",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "safe-document-reader",
+      "requirementKey": "safe-document-reader",
+      "scenario": "An authorized client lists or opens a saved note or active/archived Change document, including missing, malformed, oversized and escaping paths.",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-task-provenance",
+      "requirementKey": "document-task-provenance",
+      "scenario": "The user inspects a Change whose projection, agreement files, task checkboxes and evidence obligations have different availability or progress.",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "investigation-draft-navigation",
+      "requirementKey": "investigation-draft-navigation",
+      "scenario": "The user browses a saved note, follows its explicit Change reference, or chooses Continue investigation, Draft change or New investigate.",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-lc",
+        "(rtk proxy bun --cwd packages/opencode test test/plugin/foundation-webui.test.ts) && (rtk proxy bun --cwd packages/opencode test test/server/foundation-webui.test.ts) && (rtk proxy bun run --cwd packages/app test:unit) && (rtk proxy bun run --cwd packages/opencode script/verify-foundation-webui.ts) && (rtk proxy bun --cwd packages/opencode test test/server/foundation-documents.test.ts) && (rtk proxy bun run --cwd packages/opencode script/verify-foundation-documents.ts)"
+      ],
+      "minimum": 6,
+      "reportFormat": "json",
+      "claims": "declared",
+      "report": ".foundation/webui-evidence/foundation-documents.json",
+      "timeoutMs": 600000
+    }
+  }
+}

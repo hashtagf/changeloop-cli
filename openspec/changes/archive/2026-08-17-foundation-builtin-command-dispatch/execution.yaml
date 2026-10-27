@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "bun",
+        "run",
+        "script/evidence-foundation-workflow-test.ts"
+      ],
+      "report": "test-results/evidence-foundation-workflow-test.json",
+      "reportFormat": "json",
+      "minimum": 8,
+      "timeoutMs": 300000,
+      "criticalCases": [
+        "CC-canonical-dispatch",
+        "CC-partial-install",
+        "CC-precedence",
+        "CC-optout",
+        "CC-version-docs"
+      ]
+    }
+  },
+  "services": {}
+}

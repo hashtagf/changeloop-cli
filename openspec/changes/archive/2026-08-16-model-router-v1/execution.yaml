@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "providers": {
+    "test": {
+      "capability": "test",
+      "adapter": "test-discovery",
+      "command": ["bun", "run", "script/evidence-router-test.ts"],
+      "report": "test-results/evidence-router-test.json",
+      "reportFormat": "json",
+      "minimum": 8,
+      "timeoutMs": 300000
+    }
+  },
+  "services": {}
+}

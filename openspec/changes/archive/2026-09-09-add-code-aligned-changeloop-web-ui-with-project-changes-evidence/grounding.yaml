@@ -1,0 +1,188 @@
+{
+  "version": 3,
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "openspec/changes/add-code-aligned-changeloop-web-ui-with-project-changes-evidence/references/prototype-selection.md",
+    "mode": "single-batch",
+    "lockedAt": "2026-09-08T17:40:55.705344+00:00",
+    "decisions": [
+      {
+        "id": "code-aligned-webui",
+        "question": "What experience should this change implement?",
+        "answer": "Selected V2 prototype with Investigations, Active/Archived, source-backed Documents/Tasks/Evidence/Usage, explicit note references and editable session drafts; preserve Changeloop branding and no direct lifecycle controls.",
+        "source": "user-batch"
+      }
+    ]
+  },
+  "risk": {
+    "tier": "medium",
+    "classes": [
+      "api",
+      "security",
+      "ui",
+      "integration"
+    ],
+    "rationale": "Authenticated project document reads add filesystem and Markdown/URL trust boundaries to the existing browser/server/runtime projection path."
+  },
+  "nfrAssessment": {
+    "performance": {
+      "status": "applicable",
+      "sourceReason": "Required by the new browser-to-Foundation read path and existing app behavior.",
+      "target": "A visible page refreshes every 10 seconds; subprocess reads terminate within 5 seconds and concurrent reads for one project coalesce.",
+      "claimIds": []
+    },
+    "capacity": {
+      "status": "applicable",
+      "sourceReason": "Required by the new browser-to-Foundation read path and existing app behavior.",
+      "target": "Indexes default50/max100; document256KiB and aggregate1MiB bounds; bounded index scan4096 candidates/5s; explicit failure rather than truncated success.",
+      "claimIds": []
+    },
+    "availability": {
+      "status": "applicable",
+      "sourceReason": "Required by the new browser-to-Foundation read path and existing app behavior.",
+      "target": "Snapshot and document reader capabilities fail independently; saved notes remain readable without runtime initialization. Missing documents do not hide available runtime status.",
+      "claimIds": []
+    },
+    "securityPrivacy": {
+      "status": "applicable",
+      "sourceReason": "Required by the new browser-to-Foundation read path and existing app behavior.",
+      "target": "Enforce existing server auth and canonical Location on every read. Resolve only contained allowlisted regular files; reject escaping symlinks/traversal and unsafe rendered URLs/HTML. No automatic remote fetch, arbitrary argv, raw packet or ownerEmail; GET never writes. Authorized project switching remains supported.",
+      "claimIds": []
+    },
+    "accessibility": {
+      "status": "applicable",
+      "sourceReason": "Required by the new browser-to-Foundation read path and existing app behavior.",
+      "target": "Keyboard and visible focus support all new controls, with non-color state labels at desktop and 390px in both themes.",
+      "claimIds": []
+    },
+    "operability": {
+      "status": "applicable",
+      "sourceReason": "Required by the new browser-to-Foundation read path and existing app behavior.",
+      "target": "Stable read failure codes and snapshot generatedAt distinguish absent initialization, unsupported runtime, timeout, malformed output and stale data without logging sensitive payloads.",
+      "claimIds": []
+    },
+    "compatibility": {
+      "status": "applicable",
+      "sourceReason": "Required by the new browser-to-Foundation read path and existing app behavior.",
+      "target": "Pinned Foundation 3.5.14/schema 3 with additive fields accepted; old servers retain session functionality; generated clients match additive API; selected runtime mode never switches implicitly.",
+      "claimIds": []
+    },
+    "recoverability": {
+      "status": "applicable",
+      "sourceReason": "Required by the new browser-to-Foundation read path and existing app behavior.",
+      "target": "Refresh can recover without page reload; late results for old projects are discarded; drafts survive recoverable submission failures; archived history needs no sandbox repair.",
+      "claimIds": []
+    }
+  },
+  "readSet": [
+    {
+      "repository": "root",
+      "path": "openspec/specs/foundation-workflow/spec.md",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "71ff45394346af56c6fc369d027c05bda40f2454b51dbe41d0fe4ea5c78bb6ff"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/specs/cli-identity/spec.md",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "e9f7f1dfba6d7f979aed0cbf06957d759ced124b63c99fc4c888362936a2d294"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/changes/add-code-aligned-changeloop-web-ui-with-project-changes-evidence/references/investigation.md",
+      "role": "architecture",
+      "mode": "full",
+      "sha256": "e3144d11276de14e3de5f94b55905a256341cf815d2b6800b9959d3f1328169e"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/changes/add-code-aligned-changeloop-web-ui-with-project-changes-evidence/references/prototype-selection.md",
+      "role": "contract",
+      "mode": "full",
+      "sha256": "b495e6ea72fa41d125c895eb09989cda826efe6a702f388808974aa8da533641"
+    },
+    {
+      "repository": "root",
+      "path": "packages/app/src/pages/home.tsx",
+      "role": "runtime-path",
+      "mode": "full",
+      "sha256": "a6729f9590b8a8340039303d7a37650b49c13b61b5d620dd980441514fe57598"
+    },
+    {
+      "repository": "root",
+      "path": "packages/app/src/pages/new-session/new-session-view.tsx",
+      "role": "runtime-path",
+      "mode": "full",
+      "sha256": "4385d7517828d52ea3ba56b4e20600289d46ff59c286fc901c15d79fd92d3f40"
+    },
+    {
+      "repository": "root",
+      "path": "packages/app/src/pages/session/new-session-layout.ts",
+      "role": "runtime-path",
+      "mode": "full",
+      "sha256": "2a58cdc20680e858b8b0acd33001cbdb05e8f807255dec78e8c2e73e6d684175"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/src/plugin/foundation-runtime.ts",
+      "role": "runtime-path",
+      "mode": "full",
+      "sha256": "526c27b24b73a056a7493d8d067d4b635d687a55dfefdc566d4be1086f523411"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/src/server/shared/ui.ts",
+      "role": "runtime-path",
+      "mode": "full",
+      "sha256": "27664aed71baa98997f9a708bf2831a6d1d038e84f83ef4d72638b236c9236d4"
+    },
+    {
+      "repository": "root",
+      "path": "packages/protocol/src/api.ts",
+      "role": "contract",
+      "mode": "full",
+      "sha256": "8cfc19f3d28da6ae6c9c23e1da6a754b08d8721b3dcb4020d150ec1ce9e28dea"
+    },
+    {
+      "repository": "root",
+      "path": "docs/FOUNDATION_UPDATE_AGENT.md",
+      "role": "runtime-path",
+      "mode": "full",
+      "sha256": "4417c0eed610a340ce6cb83f5bd47c718b1d1439ce44e4f5028c6b870714bb6f"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/changes/add-code-aligned-changeloop-web-ui-with-project-changes-evidence/references/prototype-review.md",
+      "role": "contract",
+      "mode": "full",
+      "sha256": "5babbcfdc961557877c68695e2243de51041612508ba735d64122f8ce76da6e2"
+    },
+    {
+      "repository": "root",
+      "path": ".claude/commands/investigate.md",
+      "role": "contract",
+      "mode": "full",
+      "sha256": "fbb1754d297517b5a573e7b1e4c84d4d24b7a3ac528dcf6e91db82cf882a2bc2"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/investigations/phase-1-1-model-router.md",
+      "role": "architecture",
+      "mode": "full",
+      "sha256": "51c38aafef167b3c95bbe603c25669a22c48d2d8bb22f708ab3748be94c24c04"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "code-aligned-webui",
+      "question": "What experience should this change implement?",
+      "answer": "Selected V2 prototype with Investigations, Active/Archived, source-backed Documents/Tasks/Evidence/Usage, explicit note references and editable session drafts; preserve Changeloop branding and no direct lifecycle controls.",
+      "source": "user-batch",
+      "choice": "Selected V2 prototype with Investigations, Active/Archived, source-backed Documents/Tasks/Evidence/Usage, explicit note references and editable session drafts; preserve Changeloop branding and no direct lifecycle controls.",
+      "reason": "The user requested the investigation/document prototype, reviewed its source-backed behavior, then explicitly requested updating this Change. Snapshot does not include note bodies or agreement/task documents."
+    }
+  ]
+}

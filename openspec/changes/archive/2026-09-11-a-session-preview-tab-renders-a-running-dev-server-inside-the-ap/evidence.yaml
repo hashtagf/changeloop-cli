@@ -1,0 +1,74 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "preview-tab-surface",
+      "requirementKey": "preview-tab-surface",
+      "scenario": "A user opens Preview in the session side panel at desktop and 390px widths, in light and dark themes, in the V2 and the still-supported legacy layout.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "preview-target-selection",
+      "requirementKey": "preview-target-selection",
+      "scenario": "A user types a target, picks a suggestion detected from terminal output, or supplies an unsupported or malformed target.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "preview-frame-isolation",
+      "requirementKey": "preview-frame-isolation",
+      "scenario": "The preview loads a local or third-party origin while the app runs as the embedded served web UI and as the desktop renderer.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "preview-reload-and-states",
+      "requirementKey": "preview-reload-and-states",
+      "scenario": "The user reloads the preview, returns to the app after editing files, or previews a target that is not running, refuses framing, or is plain http requested from the secure desktop renderer origin.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-lc",
+        "set -e; cd packages/app; bun typecheck 1>&2; bun run typecheck:e2e 1>&2; unit=$(bun test --conditions=solid --preload ./happydom.ts ./src 2>&1); printf '%s\\n' \"$unit\" 1>&2; browser=$(bun test --conditions=browser --preload ./happydom.ts ./test-browser 2>&1); printf '%s\\n' \"$browser\" 1>&2; cd ../opencode; server=$(bun test test/server/httpapi-ui.test.ts 2>&1); printf '%s\\n' \"$server\" 1>&2; printf '%s\\n%s\\n%s\\n' \"$unit\" \"$browser\" \"$server\" | awk '{ line=$0; gsub(/\\033\\[[0-9;]*m/, \"\", line); if (match(line, /^[ \\t]*[0-9]+ pass[ \\t]*$/)) { n=line; gsub(/[^0-9]/, \"\", n); pass+=n } else if (match(line, /^[ \\t]*[0-9]+ fail[ \\t]*$/)) { n=line; gsub(/[^0-9]/, \"\", n); fail+=n } } END { printf \"{\\\"tests\\\": %d, \\\"passed\\\": %d, \\\"failed\\\": %d}\\n\", pass+fail, pass, fail }'"
+      ],
+      "minimum": 700,
+      "reportFormat": "json",
+      "claims": "declared"
+    },
+    "security-static": {
+      "adapter": "command",
+      "command": [
+        "sh",
+        "-lc",
+        "./node_modules/.bin/oxlint packages/app/src/pages/session/preview-panel.tsx packages/app/src/pages/session/preview-target.ts packages/app/src/pages/session/session-side-panel.tsx packages/app/src/pages/session/helpers.ts packages/app/src/context/layout-tabs.ts packages/app/src/context/terminal.tsx packages/app/src/components/terminal.tsx packages/opencode/src/server/shared/ui.ts"
+      ],
+      "reportFormat": "auto",
+      "claims": "declared"
+    },
+    "accessibility": {
+      "adapter": "command",
+      "command": [
+        "sh",
+        "-lc",
+        "./node_modules/.bin/oxlint --jsx-a11y-plugin packages/app/src/pages/session/preview-panel.tsx packages/app/src/pages/session/session-side-panel.tsx"
+      ],
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}

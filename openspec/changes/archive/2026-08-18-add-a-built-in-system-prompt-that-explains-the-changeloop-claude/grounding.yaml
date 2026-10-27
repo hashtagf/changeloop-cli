@@ -1,0 +1,148 @@
+{
+  "version": 2,
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation-2026-08-18-option-2-foundation-owned-agent-contract",
+    "mode": "single-batch",
+    "lockedAt": "2026-08-18T09:20:00.000Z",
+    "decisions": [
+      {
+        "id": "foundation-context-activation",
+        "question": "When should Changeloop explain the claude-foundation harness in the model system prompt?",
+        "answer": "Only while at least one Changeloop-owned Foundation builtin command is active; resolve the exact package-owned contract through the versioned Foundation host API and never bundle a summary.",
+        "source": "user-batch"
+      },
+      {
+        "id": "foundation-context-source",
+        "question": "Which component owns the system context contract?",
+        "answer": "claude-foundation owns AGENT.md and serves it through host agent-contract protocol 1; Changeloop is a bounded caching client.",
+        "source": "user-batch"
+      }
+    ]
+  },
+  "risk": {
+    "tier": "high",
+    "classes": ["prompt-context", "public-cli-contract", "local-process-boundary"],
+    "rationale": "The change is isolated and read-only but consumes a published process/JSON contract whose output enters the privileged model system context."
+  },
+  "productionEntry": {
+    "status": "applicable",
+    "sourceReason": "The FoundationWorkflowPlugin is the production entry that injects built-in commands and can append their shared system context.",
+    "paths": [{
+      "repository": "root",
+      "path": "packages/opencode/src/plugin/foundation.ts"
+    }]
+  },
+  "realWire": {
+    "status": "applicable",
+    "sourceReason": "The plugin system-transform hook and focused plugin suite are the real process-to-system-prompt wire oracles.",
+    "contracts": [{
+      "repository": "root",
+      "path": "packages/opencode/test/plugin/foundation.test.ts"
+    }]
+  },
+  "activationSemantics": {
+    "status": "applicable",
+    "sourceReason": "Boot-time config injection establishes ownership; each assembled model system prompt then receives context only when that ownership set is non-empty.",
+    "activatedPaths": [{
+      "repository": "root",
+      "path": "packages/opencode/src/plugin/foundation.ts"
+    }],
+    "failureSemanticChanges": []
+  },
+  "serviceInteractions": {
+    "status": "not-applicable",
+    "sourceReason": "No service or process boundary changes.",
+    "rows": []
+  },
+  "observability": {
+    "status": "not-applicable",
+    "sourceReason": "Resolution failures are rendered directly into the system prompt and create no operated service telemetry boundary.",
+    "rows": []
+  },
+  "readSet": [
+    {
+      "repository": "root",
+      "path": "packages/opencode/src/plugin/foundation.ts",
+      "role": "production-path",
+      "mode": "full",
+      "sha256": "a1c783b3bee9f45d7cdd1068b859679706964435d7ac74e80b2be8e51d8d2a7b"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/test/plugin/foundation.test.ts",
+      "role": "test-topology",
+      "mode": "full",
+      "sha256": "3925aec6b5d7d0d6bfe74abe740332dc3c269dd28a4de224ee61adbaa421a5de"
+    },
+    {
+      "repository": "root",
+      "path": "script/evidence-foundation-workflow-test.ts",
+      "role": "test-topology",
+      "mode": "full",
+      "sha256": "561350547aaa3b3425c56e6fd1296b703ead161c7e183a33e9a3d169d397dd33"
+    },
+    {
+      "repository": "root",
+      "path": "docs/CONFIGURATION.md",
+      "role": "production-path",
+      "mode": "full",
+      "sha256": "7d161e15b037b7fd57717a3fb39fc0acfdfbfa3ef193a77bbff54438cbf28577"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/specs/foundation-workflow/spec.md",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "8ef02b737f60ad90b1c035bd546ad84ef1b13f1104da6a98232e8e5284f6aa5e"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/package.json",
+      "role": "dependency-source",
+      "mode": "full",
+      "sha256": "3ea75ba5e1cfe3aef762b42f92eecf03377af130bccb2a94ea752afab0b6350e"
+    }
+  ],
+  "claims": [
+    {
+      "id": "add-a-built-in-system-prompt-that-explains-the-changeloop-claude-outcome",
+      "productionPath": [{
+        "repository": "root",
+        "path": "packages/opencode/src/plugin/foundation.ts"
+      }],
+      "failurePaths": [{
+        "repository": "root",
+        "path": "packages/opencode/src/plugin/foundation.ts",
+        "failure": "agent-contract endpoint missing, timed out, oversized, malformed, or invoked while no built-in command is Changeloop-owned"
+      }],
+      "evidenceClass": ["test"],
+      "testDoubleGap": "none"
+    }
+  ],
+  "criticalCases": [
+    {
+      "id": "foundation-context-source",
+      "claimIds": ["add-a-built-in-system-prompt-that-explains-the-changeloop-claude-outcome"],
+      "oracle": "contract-oracle"
+    },
+    {
+      "id": "foundation-context-failure",
+      "claimIds": ["add-a-built-in-system-prompt-that-explains-the-changeloop-claude-outcome"],
+      "oracle": "failure-path"
+    },
+    {
+      "id": "foundation-context-disabled",
+      "claimIds": ["add-a-built-in-system-prompt-that-explains-the-changeloop-claude-outcome"],
+      "oracle": "failure-path"
+    }
+  ],
+  "mutants": [],
+  "derivedFacts": [
+    {
+      "fact": "The existing Foundation plugin already bounds process execution and tracks exactly which command templates it owns.",
+      "command": "grep -n 'injected' packages/opencode/src/plugin/foundation.ts"
+    }
+  ]
+}

@@ -1,0 +1,232 @@
+{
+  "version": 2,
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation-2026-08-19-bundle-foundation-runtime-bootstrap",
+    "mode": "single-batch",
+    "lockedAt": "2026-08-19T09:37:02Z",
+    "decisions": [
+      {
+        "id": "runtime-ownership",
+        "question": "Which Foundation runtime should Changeloop use by default?",
+        "answer": "A checksum-pinned bundled Foundation release; PATH is available only through explicit compatibility configuration.",
+        "source": "user-batch"
+      },
+      {
+        "id": "bootstrap-activation",
+        "question": "When may Changeloop install Foundation-owned files into a project?",
+        "answer": "Only after explicit `foundation init|upgrade` authority or the approval-guided first use of a Changeloop-owned Foundation command; opening a project remains read-only.",
+        "source": "recommended-default"
+      },
+      {
+        "id": "installer-ownership",
+        "question": "Which component owns managed-file, preservation, and rollback behavior?",
+        "answer": "claude-foundation owns the installer contract; Changeloop embeds and invokes the pinned release without reimplementing its copy/merge semantics.",
+        "source": "recommended-default"
+      }
+    ]
+  },
+  "risk": {
+    "tier": "high",
+    "classes": ["public-cli-contract", "local-process-boundary", "filesystem-mutation", "dependency-supply-chain", "compiled-artifact"],
+    "rationale": "The change alters runtime selection and writes a release-owned harness into arbitrary developer repositories; path confinement, rollback, protocol compatibility, and artifact provenance are release-critical."
+  },
+  "productionEntry": {
+    "status": "applicable",
+    "sourceReason": "The root CLI registers public foundation commands and the built-in plugin resolves Foundation context during real sessions.",
+    "paths": [{
+      "repository": "root",
+      "path": "packages/opencode/src/index.ts"
+    }]
+  },
+  "realWire": {
+    "status": "applicable",
+    "sourceReason": "Focused plugin and CLI process suites exercise the actual argv/process and temporary-project filesystem boundaries.",
+    "contracts": [{
+      "repository": "root",
+      "path": "packages/opencode/test/plugin/foundation.test.ts"
+    }]
+  },
+  "activationSemantics": {
+    "status": "applicable",
+    "sourceReason": "The bundled runtime becomes active at command/context resolution, while filesystem mutation requires explicit init or upgrade authority.",
+    "activatedPaths": [{
+      "repository": "root",
+      "path": "packages/opencode/src/plugin/foundation.ts"
+    }],
+    "failureSemanticChanges": ["Missing PATH Foundation no longer blocks bundled mode; invalid bundle identity, unsafe target paths, unsupported platforms, and failed installer recovery now fail closed with stable diagnostics."]
+  },
+  "serviceInteractions": {
+    "status": "applicable",
+    "sourceReason": "Changeloop synchronously invokes the bundled Foundation host and installer process because the next workflow decision depends on its result.",
+    "rows": [{
+      "id": "bundled-foundation-process",
+      "owner": "Changeloop invocation; claude-foundation payload and install semantics",
+      "producer": "Changeloop Foundation plugin and CLI",
+      "consumer": "Pinned bundled claude-foundation release",
+      "contract": "argv-only host protocol 1 and release-owned installer exit/output contract",
+      "delivery": "synchronous local subprocess",
+      "timeoutRetry": "bounded timeout; no automatic mutation retry; explicit idempotent retry after diagnosis",
+      "idempotency": "host reads are idempotent; installer reruns converge through its manifest and rollback contract",
+      "ordering": "verify payload and target before invoking; doctor follows successful install",
+      "consistency": "command and agent context use the same selected release for one plugin instance",
+      "rollout": "ship bundled default with explicit PATH escape hatch",
+      "rollback": "roll back Changeloop to PATH selection; installed compatible project harness remains intact"
+    }]
+  },
+  "observability": {
+    "status": "applicable",
+    "sourceReason": "Users need deterministic status and recovery detail at the local process boundary without leaking repository contents.",
+    "rows": [{
+      "interactionId": "bundled-foundation-process",
+      "correlation": "selected project root plus bundled Foundation version",
+      "structuredEvents": "operation, runtime source, version, stage, exit classification, and duration; never file contents or credentials",
+      "sli": "successful host resolution and atomic init/upgrade rate",
+      "alert": "not applicable to a local CLI; non-zero status is surfaced synchronously",
+      "runbook": "foundation status identifies bundled/PATH source and foundation doctor emits the next safe recovery action",
+      "operatorQuestion": "Was the pinned payload verified and did the target remain unchanged after a failed operation?"
+    }]
+  },
+  "readSet": [
+    {
+      "repository": "root",
+      "path": "packages/opencode/src/plugin/foundation.ts",
+      "role": "production-path",
+      "mode": "full",
+      "sha256": "b0ff76a8b0efebae5435c5e27031fa34e7593622b40c9c756e070293df8c5214"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/test/plugin/foundation.test.ts",
+      "role": "test-topology",
+      "mode": "full",
+      "sha256": "37899b19af264c5a55102cdc1a7847aa625de4c05528dfb47aa9432f4d0826be"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/script/build.ts",
+      "role": "production-path",
+      "mode": "full",
+      "sha256": "764ed2e68fe3a024b09590f5a81491f9a4a73e65f0816c7676459ca072b4b3e1"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/src/index.ts",
+      "role": "production-path",
+      "mode": "full",
+      "sha256": "251b4e69da27d99bd4c3986751b2c56c65d8a54a0cdd269b2a5accb733d61f53"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/src/plugin/index.ts",
+      "role": "composition-root",
+      "mode": "full",
+      "sha256": "73cdc992090d88cc14865aca70aa65fe85c2e7ff845b8a3353a55171cb34f535"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/package.json",
+      "role": "dependency-source",
+      "mode": "full",
+      "sha256": "3ea75ba5e1cfe3aef762b42f92eecf03377af130bccb2a94ea752afab0b6350e"
+    },
+    {
+      "repository": "root",
+      "path": "docs/CONFIGURATION.md",
+      "role": "runtime-path",
+      "mode": "full",
+      "sha256": "f4885ddcc69c02ad66e147a62b517a8a4fe935805ed5106ced9ff0e86bb445dc"
+    },
+    {
+      "repository": "root",
+      "path": "docs/plan/ROADMAP.md",
+      "role": "runtime-path",
+      "mode": "full",
+      "sha256": "5673b5ab29b863f1261732f3d893453b8d7ba38ba17089366c1123124f3a1390"
+    },
+    {
+      "repository": "root",
+      "path": "AGENTS.md",
+      "role": "architecture",
+      "mode": "full",
+      "sha256": "5dbd1060ae07f7532e72a55dc2a9f8e03a52946b2c3bbf48e6482a85bd4dd1c5"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/specs/foundation-workflow/spec.md",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "8cf3e4189ce31956bb492921ae35465083aa47cca4fb2a4f527efe7ee460e4d5"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/specs/cli-identity/spec.md",
+      "role": "contract",
+      "mode": "full",
+      "sha256": "e9f7f1dfba6d7f979aed0cbf06957d759ced124b63c99fc4c888362936a2d294"
+    },
+    {
+      "repository": "root",
+      "path": "script/evidence-foundation-workflow-test.ts",
+      "role": "test-topology",
+      "mode": "full",
+      "sha256": "b2f75f924a2480f170d13547741d28357a7bf0535d740278fe4ddd7e961b9cc8"
+    }
+  ],
+  "claims": [
+    {"id":"additive-protocol-response-remains-compatible","productionPath":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"valid additive response fields are rejected"}],"evidenceClass":["test"],"testDoubleGap":"none"},
+    {"id":"canonical-context-is-injected","productionPath":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"selected host contract is missing, malformed, or not cached"}],"evidenceClass":["test","integration"],"testDoubleGap":"none"},
+    {"id":"canonical-project-instruction-is-used","productionPath":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"selected host instruction is missing, malformed, or receives altered arguments"}],"evidenceClass":["test","integration"],"testDoubleGap":"none"},
+    {"id":"compiled-binary-works-without-path-foundation","productionPath":[{"repository":"root","path":"packages/opencode/script/build.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/script/build.ts","failure":"compiled payload is incomplete or runtime resolution still requires PATH Foundation"}],"evidenceClass":["test","integration","deployment"],"testDoubleGap":"none"},
+    {"id":"context-endpoint-fails-closed","productionPath":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"timeout, oversized output, or protocol failure does not stop with stable guidance"}],"evidenceClass":["test","integration"],"testDoubleGap":"none"},
+    {"id":"explicit-path-compatibility-mode","productionPath":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"explicit PATH selection is ignored or mixed with bundled resolution"}],"evidenceClass":["test"],"testDoubleGap":"none"},
+    {"id":"first-foundation-command-guides-one-time-bootstrap","productionPath":[{"repository":"root","path":"packages/opencode/src/index.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/index.ts","failure":"uninitialized project mutates without authority or cannot continue after authorized init"}],"evidenceClass":["test","integration"],"testDoubleGap":"none"},
+    {"id":"fresh-project-is-initialized","productionPath":[{"repository":"root","path":"packages/opencode/src/index.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/index.ts","failure":"verified bundled installer does not produce a doctor-valid project"}],"evidenceClass":["test","integration","security"],"testDoubleGap":"none"},
+    {"id":"inactive-built-ins-add-no-context","productionPath":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"disabled or fully user-owned commands still inject Foundation context"}],"evidenceClass":["test"],"testDoubleGap":"none"},
+    {"id":"interrupted-installation-rolls-back-or-resumes-safely","productionPath":[{"repository":"root","path":"packages/opencode/src/index.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/index.ts","failure":"partial mutation loses prior content or cannot converge on retry"}],"evidenceClass":["test","integration"],"testDoubleGap":"none"},
+    {"id":"loop-commands-present-by-default","productionPath":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"one or more built-in dispatcher commands are absent"}],"evidenceClass":["test"],"testDoubleGap":"none"},
+    {"id":"opening-a-project-remains-read-only","productionPath":[{"repository":"root","path":"packages/opencode/src/index.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/index.ts","failure":"boot alone creates or modifies project files"}],"evidenceClass":["test","security"],"testDoubleGap":"none"},
+    {"id":"opt-out-disables-injection","productionPath":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"foundation_workflow false still injects or intercepts commands"}],"evidenceClass":["test"],"testDoubleGap":"none"},
+    {"id":"partial-foundation-installation-fails-closed","productionPath":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"invalid selected runtime falls back, improvises, or continues"}],"evidenceClass":["test","integration"],"testDoubleGap":"none"},
+    {"id":"payload-drift-blocks-the-build","productionPath":[{"repository":"root","path":"packages/opencode/script/build.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/script/build.ts","failure":"source identity, checksum, manifest, or required protocol drift does not fail the build"}],"evidenceClass":["test","integration","cross-repo-contract"],"testDoubleGap":"none"},
+    {"id":"repeated-initialization-converges","productionPath":[{"repository":"root","path":"packages/opencode/src/index.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/index.ts","failure":"repeated init changes unrelated or project-owned files"}],"evidenceClass":["test","integration"],"testDoubleGap":"none"},
+    {"id":"runtime-use-performs-no-network-download","productionPath":[{"repository":"root","path":"packages/opencode/script/build.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/script/build.ts","failure":"runtime execution fetches executable or workflow content"}],"evidenceClass":["test","integration"],"testDoubleGap":"none"},
+    {"id":"unsafe-target-is-rejected-before-mutation","productionPath":[{"repository":"root","path":"packages/opencode/src/index.ts"}],"failurePaths":[{"repository":"root","path":"packages/opencode/src/index.ts","failure":"path escape, unsafe symlink, invalid checksum, or unsupported platform writes a target file"}],"evidenceClass":["test","security"],"testDoubleGap":"none"}
+  ],
+  "criticalCases": [
+    {"id":"additive-protocol-response-remains-compatible","claimIds":["additive-protocol-response-remains-compatible"],"oracle":"contract-oracle"},
+    {"id":"canonical-context-is-injected","claimIds":["canonical-context-is-injected"],"oracle":"real-wire"},
+    {"id":"canonical-project-instruction-is-used","claimIds":["canonical-project-instruction-is-used"],"oracle":"real-wire"},
+    {"id":"compiled-binary-works-without-path-foundation","claimIds":["compiled-binary-works-without-path-foundation"],"oracle":"production-entry"},
+    {"id":"context-endpoint-fails-closed","claimIds":["context-endpoint-fails-closed"],"oracle":"failure-path"},
+    {"id":"explicit-path-compatibility-mode","claimIds":["explicit-path-compatibility-mode"],"oracle":"contract-oracle"},
+    {"id":"first-foundation-command-guides-one-time-bootstrap","claimIds":["first-foundation-command-guides-one-time-bootstrap"],"oracle":"real-wire"},
+    {"id":"fresh-project-is-initialized","claimIds":["fresh-project-is-initialized"],"oracle":"real-wire"},
+    {"id":"inactive-built-ins-add-no-context","claimIds":["inactive-built-ins-add-no-context"],"oracle":"failure-path"},
+    {"id":"interrupted-installation-rolls-back-or-resumes-safely","claimIds":["interrupted-installation-rolls-back-or-resumes-safely"],"oracle":"failure-path"},
+    {"id":"loop-commands-present-by-default","claimIds":["loop-commands-present-by-default"],"oracle":"contract-oracle"},
+    {"id":"opening-a-project-remains-read-only","claimIds":["opening-a-project-remains-read-only"],"oracle":"failure-path"},
+    {"id":"opt-out-disables-injection","claimIds":["opt-out-disables-injection"],"oracle":"failure-path"},
+    {"id":"partial-foundation-installation-fails-closed","claimIds":["partial-foundation-installation-fails-closed"],"oracle":"failure-path"},
+    {"id":"payload-drift-blocks-the-build","claimIds":["payload-drift-blocks-the-build"],"oracle":"failure-path"},
+    {"id":"repeated-initialization-converges","claimIds":["repeated-initialization-converges"],"oracle":"real-wire"},
+    {"id":"runtime-use-performs-no-network-download","claimIds":["runtime-use-performs-no-network-download"],"oracle":"failure-path"},
+    {"id":"unsafe-target-is-rejected-before-mutation","claimIds":["unsafe-target-is-rejected-before-mutation"],"oracle":"failure-path"}
+  ],
+  "mutants": [],
+  "derivedFacts": [
+    {
+      "fact": "The current plugin always spawns the PATH-selected claude-foundation executable and bounds it with a timeout and output ceiling.",
+      "command": "grep -n 'input.executable.*claude-foundation' packages/opencode/src/plugin/foundation.ts"
+    },
+    {
+      "fact": "The compiled binary build already embeds generated files through Bun.build files.",
+      "command": "grep -n 'files:' packages/opencode/script/build.ts"
+    },
+    {
+      "fact": "The upstream claude-foundation source exposes host agent-contract protocol 1 at commit 3e02fa5, but a tagged release containing it is still required before pinning.",
+      "command": "git -C ../claude-foundation log -1 --oneline -- openspec/specs/host-agent-contract/spec.md"
+    }
+  ]
+}

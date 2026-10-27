@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "foundation-quality-capabilities-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "repository", "languages", "profiles", "capabilities"],
+  "properties": {
+    "protocol": { "const": "foundation-quality-capabilities-v1" },
+    "repository": { "type": "string", "minLength": 1 },
+    "root": { "type": "string", "minLength": 1 },
+    "languages": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "profiles": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "enum": ["available", "unsupported", "unavailable", "unmapped", "not-applicable", "failed"]
+          },
+          "reason": { "type": "string", "minLength": 1 },
+          "adapter": { "type": "string", "minLength": 1 },
+          "tool": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "providers": { "type": "object" },
+    "requiredControls": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "recommendedSemanticFaults": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "inventory": {
+      "type": "object",
+      "required": ["files", "truncated", "markers", "extensions"],
+      "properties": {
+        "files": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "boolean" },
+        "markers": { "type": "array", "items": { "type": "string" } },
+        "extensions": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

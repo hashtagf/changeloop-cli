@@ -1,0 +1,146 @@
+{
+  "version": 3,
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "openspec/investigations/changeloop-webui-prototype-drift.md",
+    "mode": "single-batch",
+    "lockedAt": "2026-09-09T12:00:00Z",
+    "decisions": [
+      {
+        "id": "restore-selected-prototype",
+        "question": "Which UI direction should the correction implement?",
+        "answer": "Restore the already selected revised prototype; user authorized fixes after the drift audit.",
+        "source": "user-batch"
+      }
+    ]
+  },
+  "nfrAssessment": {
+    "performance": {
+      "status": "not-applicable",
+      "sourceReason": "Existing bounded read API and runtime remain unchanged; this correction changes client presentation only.",
+      "target": "none",
+      "claimIds": []
+    },
+    "capacity": {
+      "status": "not-applicable",
+      "sourceReason": "Existing bounded read API and runtime remain unchanged; this correction changes client presentation only.",
+      "target": "none",
+      "claimIds": []
+    },
+    "availability": {
+      "status": "not-applicable",
+      "sourceReason": "Existing bounded read API and runtime remain unchanged; this correction changes client presentation only.",
+      "target": "none",
+      "claimIds": []
+    },
+    "securityPrivacy": {
+      "status": "not-applicable",
+      "sourceReason": "Existing bounded read API and runtime remain unchanged; this correction changes client presentation only.",
+      "target": "none",
+      "claimIds": []
+    },
+    "accessibility": {
+      "status": "applicable",
+      "sourceReason": "Existing foundation-webui specification and approved prototype audit.",
+      "target": "Keyboard navigation, visible focus, readable status text and no horizontal overflow at 390px in both themes.",
+      "claimIds": []
+    },
+    "operability": {
+      "status": "not-applicable",
+      "sourceReason": "Existing bounded read API and runtime remain unchanged; this correction changes client presentation only.",
+      "target": "none",
+      "claimIds": []
+    },
+    "compatibility": {
+      "status": "applicable",
+      "sourceReason": "Existing foundation-webui specification and approved prototype audit.",
+      "target": "Preserve production composer and safe document rendering; no public API changes.",
+      "claimIds": []
+    },
+    "recoverability": {
+      "status": "applicable",
+      "sourceReason": "Existing foundation-webui specification and approved prototype audit.",
+      "target": "Missing documents and failed reads remain explicit; retry and draft preservation continue to work.",
+      "claimIds": []
+    }
+  },
+  "readSet": [
+    {
+      "repository": "root",
+      "path": "openspec/specs/foundation-webui/spec.md",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "b73019853c233b3ccd79f16f8c93c23c87791ca12bc13fe44959d6bb96f2d9ed"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/changes/restore-approved-web-ui-prototype-fidelity/references/grounding/changeloop-webui-prototype-drift.md",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "b9a59fd3e8bf398cc08b603a77d2bdba4689fc5ffad7004b939da431d1cc860e"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/changes/restore-approved-web-ui-prototype-fidelity/references/grounding/selection.md",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "b495e6ea72fa41d125c895eb09989cda826efe6a702f388808974aa8da533641"
+    },
+    {
+      "repository": "root",
+      "path": "openspec/changes/restore-approved-web-ui-prototype-fidelity/references/grounding/source-baseline.md",
+      "role": "implementation",
+      "mode": "full",
+      "sha256": "e405947d27cc7b8164362f0ffbbb4b2765882de0b48a4459540258fe07a1ae4a"
+    }
+  ],
+  "risk": {
+    "tier": "medium",
+    "classes": [
+      "ui-regression"
+    ],
+    "rationale": "Existing workflow and data boundaries remain unchanged; visual fidelity and navigation require browser verification."
+  },
+  "productionEntry": {
+    "status": "applicable",
+    "sourceReason": "Existing Changes and new-session screens are corrected.",
+    "paths": [
+      {
+        "repository": "root",
+        "path": "packages/app/src/pages/changes.tsx"
+      }
+    ]
+  },
+  "realWire": {
+    "status": "not-applicable",
+    "sourceReason": "No new API, execution path or service interaction; existing client presentation is corrected."
+  },
+  "activationSemantics": {
+    "status": "not-applicable",
+    "sourceReason": "No new API, execution path or service interaction; existing client presentation is corrected."
+  },
+  "serviceInteractions": {
+    "status": "not-applicable",
+    "sourceReason": "No new API, execution path or service interaction; existing client presentation is corrected."
+  },
+  "observability": {
+    "status": "not-applicable",
+    "sourceReason": "No new API, execution path or service interaction; existing client presentation is corrected."
+  },
+  "semanticInvariants": [],
+  "claims": [],
+  "criticalCases": [],
+  "mutants": [],
+  "derivedFacts": [],
+  "decisions": [
+    {
+      "id": "restore-selected-prototype",
+      "question": "Which UI direction should the correction implement?",
+      "answer": "Restore the already selected revised prototype; user authorized fixes after the drift audit.",
+      "source": "user-batch",
+      "choice": "Restore the already selected revised prototype; user authorized fixes after the drift audit.",
+      "reason": "The approved prototype and completed drift audit settle the correction scope; user explicitly authorized implementation."
+    }
+  ]
+}

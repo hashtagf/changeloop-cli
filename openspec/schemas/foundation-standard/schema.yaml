@@ -1,0 +1,66 @@
+name: foundation-standard
+version: 1
+description: Risk-scaled brownfield change with deterministic evidence
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Intent, scope, impact, and non-goals
+    template: proposal.md
+    instruction: Explain why the change exists and what observable behavior changes.
+    requires: []
+  - id: specs
+    generates: specs/**/*.md
+    description: Delta requirements and scenarios
+    template: spec.md
+    instruction: Write ADDED, MODIFIED, or REMOVED requirements with observable scenarios.
+    requires: [proposal]
+  - id: design
+    generates: design.md
+    description: Conditional load-bearing decisions, diagrams, integrations, and rollback
+    template: design.md
+    instruction: Semantic draft v4 creates this only when durable design context exists; record no empty/default design.
+    requires: [proposal, specs]
+  - id: tasks
+    generates: tasks.md
+    description: Single implementation ledger
+    template: tasks.md
+    instruction: Create coherent, verifiable implementation work items without lifecycle phases.
+    requires: [proposal, specs]
+  - id: evidence
+    generates: evidence.yaml
+    description: Stable behavioral claims and required evidence capabilities
+    template: evidence.yaml
+    instruction: Map every observable scenario to stable claims. Discovery is implicit for test claims.
+    requires: [proposal, specs]
+  - id: grounding
+    generates: grounding.yaml
+    description: Conditional non-derived material decisions; legacy grounding remains compatible
+    template: grounding.yaml
+    instruction: Prefer Grounding v3 decisions-only and omit the file when no material decision exists.
+    requires: [proposal, specs, evidence]
+  - id: repositories
+    generates: repositories.yaml
+    description: Repositories this change may touch, and their write scope
+    template: repositories.yaml
+    instruction: Create only for explicit multi-repository scope; absence means the versioned single-root default.
+    requires: [proposal]
+  - id: execution
+    generates: execution.yaml
+    description: Executable provider, report, service, and readiness wiring
+    template: execution.yaml
+    instruction: Create only for custom project-owned adapter, report, service, timeout, or readiness wiring.
+    requires: [evidence]
+  - id: handoffs
+    generates: handoffs.yaml
+    description: Permission-bound external operations and their activation-safe delivery contract
+    template: handoffs.yaml
+    instruction: Create only when DevOps, SRE, security, or operator work exists; never materialize an empty operations placeholder.
+    requires: [proposal, tasks, evidence, grounding]
+
+apply:
+  # Runtime state applies versioned conditional-artifact requirements. Design,
+  # grounding, repositories, execution, and handoffs remain available when the
+  # semantic contract calls for them, without forcing empty placeholders.
+  requires: [specs, tasks, evidence]
+  tracks: tasks.md

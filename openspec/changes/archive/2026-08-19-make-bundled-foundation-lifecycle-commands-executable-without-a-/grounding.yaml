@@ -1,0 +1,240 @@
+{
+  "version": 2,
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation-2026-08-19-foundation-bundled-lifecycle-gap",
+    "mode": "single-batch",
+    "lockedAt": "2026-08-19T11:12:30Z",
+    "decisions": [
+      {
+        "id": "execution-source",
+        "question": "Which executable must canonical Foundation lifecycle instructions use in bundled mode?",
+        "answer": "The same checksum-pinned bundled release used for host instruction and agent contract resolution; an arbitrary PATH Foundation is never an implicit fallback.",
+        "source": "user-batch"
+      },
+      {
+        "id": "environment-boundary",
+        "question": "How should the bundled executable become discoverable to agent shells and PTYs?",
+        "answer": "Prepend a release-bound execution-shim directory through the existing Location-scoped shell.env hook only while Changeloop owns an active bundled Foundation command.",
+        "source": "recommended-default"
+      },
+      {
+        "id": "bootstrap-authority",
+        "question": "Does invoking a Foundation slash command authorize managed repository writes?",
+        "answer": "No. Opening a project and command discovery remain read-only; first initialization still requires explicit authority and this change fixes lifecycle execution after that boundary.",
+        "source": "recommended-default"
+      },
+      {
+        "id": "compatibility-mode",
+        "question": "What happens when foundation_runtime explicitly selects path mode?",
+        "answer": "Changeloop leaves PATH unchanged and uses the external executable consistently for instruction, context, and lifecycle execution.",
+        "source": "recommended-default"
+      },
+      {
+        "id": "opencode-host-integration",
+        "question": "How must bundled initialization integrate Foundation with OpenCode?",
+        "answer": "Invoke the bundled Foundation CLI with init --host opencode so Foundation owns the canonical .opencode commands, guard plugin, and adapter manifest while preserving user-owned collisions.",
+        "source": "user-batch"
+      }
+    ]
+  },
+  "risk": {
+    "tier": "high",
+    "classes": ["local-process-boundary", "executable-resolution", "dependency-supply-chain", "public-compatibility", "compiled-artifact"],
+    "rationale": "The change controls which executable agent shells and PTYs resolve for lifecycle mutations. A scope leak, tampered shim, or silent PATH fallback could execute the wrong release with developer permissions."
+  },
+  "productionEntry": {
+    "status": "applicable",
+    "sourceReason": "The internal Foundation plugin owns built-in activation and the shell.env hook consumed by real shell, background-process, and PTY paths.",
+    "paths": [
+      {"repository":"root","path":"packages/opencode/src/cli/cmd/foundation.ts"},
+      {"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"},
+      {"repository":"root","path":"packages/opencode/src/plugin/pty-environment.ts"}
+    ]
+  },
+  "realWire": {
+    "status": "applicable",
+    "sourceReason": "The existing plugin hook contract is merged into both tool-shell/background execution and server PTYs; compiled smoke must cross the generated executable boundary rather than stop at host resolution.",
+    "contracts": [
+      {"repository":"root","path":"packages/plugin/src/index.ts"},
+      {"repository":"root","path":"packages/opencode/src/tool/shell.ts"},
+      {"repository":"root","path":"packages/opencode/test/config/config.test.ts"},
+      {"repository":"root","path":"script/evidence-foundation-bootstrap-test.ts"}
+    ]
+  },
+  "activationSemantics": {
+    "status": "applicable",
+    "sourceReason": "The shim becomes active only after config establishes bundled mode and either Changeloop injected a Foundation built-in or the project has a validated Foundation-managed OpenCode adapter; project installation authority remains separate.",
+    "activatedPaths": [
+      {"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"},
+      {"repository":"root","path":"packages/opencode/src/plugin/foundation-runtime.ts"}
+    ],
+    "failureSemanticChanges": [
+      "Canonical lifecycle commands in bundled mode resolve the pinned embedded release instead of an absent or drifting PATH executable.",
+      "Foundation-managed .opencode commands retain bundled runtime activation even though normal config precedence prevents internal command reinjection.",
+      "Invalid bundle or shim materialization fails closed instead of silently reaching an external Foundation executable.",
+      "Explicit PATH mode, disabled workflow, and fully user-owned command surfaces do not receive a bundled PATH override.",
+      "Bundled init and upgrade route through Foundation init --host opencode while preserving user-owned OpenCode artifacts."
+    ]
+  },
+  "serviceInteractions": {
+    "status": "applicable",
+    "sourceReason": "Agent shell and PTY processes synchronously invoke a project-owned Foundation runtime through a release-owned CLI shim because each result controls the next workflow decision.",
+    "rows": [
+      {
+        "id": "foundation-lifecycle-execution",
+        "owner": "Changeloop owns runtime selection and shim environment; Foundation owns CLI routing and project lifecycle semantics",
+        "producer": "FoundationWorkflowPlugin shell.env hook",
+        "consumer": "tool shell, background command process, and PTY child environments",
+        "contract": "A PATH prefix containing exactly one release-bound claude-foundation shim which delegates argv to the verified bundled cli.sh",
+        "delivery": "synchronous local process",
+        "timeoutRetry": "Lifecycle command timeouts and retry policy remain owned by Foundation and the invoking tool; shim creation has no fallback or automatic mutation retry",
+        "idempotency": "The shim preserves argv and exit status; each Foundation command retains its existing idempotency classification",
+        "ordering": "Validate/materialize the bundle before publishing the shim path; merge the hook environment before spawning the child",
+        "consistency": "Instruction, agent contract, and lifecycle execution use one selected release for the plugin instance",
+        "rollout": "Enable by default in bundled mode with explicit path mode as compatibility escape hatch",
+        "rollback": "Remove shim injection; project harness and external PATH installation remain unchanged"
+      },
+      {
+        "id": "opencode-host-installation",
+        "owner": "Changeloop owns invocation of the selected bundled release; Foundation owns host-adapter installation and collision policy",
+        "producer": "changeloop foundation init and upgrade",
+        "consumer": "bundled Foundation cli.sh init --host opencode",
+        "contract": "Install canonical commands under .opencode/commands, the Foundation guard at .opencode/plugins/foundation.js, and .foundation/adapter-manifests/opencode.txt without overwriting user-owned collisions",
+        "delivery": "synchronous local process",
+        "timeoutRetry": "The caller surfaces the non-zero Foundation result; repeated installation relies on Foundation adapter ownership and idempotency",
+        "idempotency": "Foundation-managed adapter files may be refreshed, while unowned collisions remain untouched and are reported",
+        "ordering": "Validate bundled payload, run shared harness installation, then install OpenCode adapter surfaces and write the ownership manifest",
+        "consistency": "The adapter files and manifest identify one selected bundled release and are validated before enabling its execution environment",
+        "rollout": "Use the OpenCode host route for bundled init and upgrade; retain explicit path mode for externally managed Foundation",
+        "rollback": "Stop invoking the host route; Foundation ownership metadata allows managed adapter cleanup without claiming user files"
+      }
+    ]
+  },
+  "observability": {
+    "status": "applicable",
+    "sourceReason": "A local executable-resolution failure must identify the selected source and recovery without leaking the full environment or repository content.",
+    "rows": [
+      {
+        "interactionId": "foundation-lifecycle-execution",
+        "correlation": "project Location plus bundled release identity",
+        "structuredEvents": "runtime mode, release identity, materialization classification, and stable failure code; never PATH contents, credentials, or file bodies",
+        "sli": "rate of canonical lifecycle commands resolving the selected Foundation release",
+        "alert": "not applicable to local CLI; non-zero lifecycle/materialization result is surfaced synchronously",
+        "runbook": "changeloop foundation status identifies bundle/project identity; reinstall Changeloop for bundle corruption or explicitly select path mode for a managed external CLI",
+        "operatorQuestion": "Did the child resolve the declared bundled release without using an incoming PATH Foundation?"
+      },
+      {
+        "interactionId": "opencode-host-installation",
+        "correlation": "project Location plus bundled release and adapter identity",
+        "structuredEvents": "runtime mode, host name, adapter installation outcome, collision classification, and stable failure code; never file bodies or environment contents",
+        "sli": "rate of bundled init and upgrade completing the OpenCode adapter contract without altering user-owned collisions",
+        "alert": "not applicable to local CLI; non-zero installation results and preserved collisions are surfaced synchronously",
+        "runbook": "changeloop foundation status and doctor identify the selected bundle and adapter state; repair only Foundation-managed files or explicitly select path mode",
+        "operatorQuestion": "Were all Foundation-owned OpenCode surfaces installed from the selected bundle while user-owned collisions remained unchanged?"
+      }
+    ]
+  },
+  "readSet": [
+    {"repository":"root","path":"openspec/specs/foundation-workflow/spec.md","role":"requirement","mode":"full","sha256":"23469360cb4c70efc4e3556229804a776faf2329e1fa3e8f173850dd61d216af"},
+    {"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","role":"production-path","mode":"full","sha256":"b0ff76a8b0efebae5435c5e27031fa34e7593622b40c9c756e070293df8c5214"},
+    {"repository":"root","path":"packages/opencode/src/plugin/foundation-runtime.ts","role":"production-path","mode":"full","sha256":"6dbe061e6c1d4988778684c8de7ebb4779fba6148ef4453e90bdaf5842810d57"},
+    {"repository":"root","path":"packages/opencode/src/cli/cmd/foundation.ts","role":"production-path","mode":"full","sha256":"48384f494660aa3887a1f0e5f2d6fc82385b976660f709c06e19c69368246f7b"},
+    {"repository":"root","path":"packages/opencode/script/sync-foundation.ts","role":"production-path","mode":"full","sha256":"2ac48047fa5b17f4d59a1f557ff458924b13377b6b036dacb232d0246e31b018"},
+    {"repository":"root","path":"packages/opencode/src/tool/shell.ts","role":"contract","mode":"full","sha256":"342d742ae324782d222465c202dcdfcb7cc35a4cecf04e87f9881f1794d921ac"},
+    {"repository":"root","path":"packages/opencode/src/plugin/pty-environment.ts","role":"runtime-path","mode":"full","sha256":"183b5a5363f4fa54cc2792a073abef8ca33096e5263ebf5a0d8c860129bbcea9"},
+    {"repository":"root","path":"packages/opencode/src/plugin/index.ts","role":"composition-root","mode":"full","sha256":"73cdc992090d88cc14865aca70aa65fe85c2e7ff845b8a3353a55171cb34f535"},
+    {"repository":"root","path":"packages/opencode/package.json","role":"dependency-source","mode":"full","sha256":"3ea75ba5e1cfe3aef762b42f92eecf03377af130bccb2a94ea752afab0b6350e"},
+    {"repository":"root","path":"packages/plugin/src/index.ts","role":"contract","mode":"full","sha256":"7ce98ddab759903e6618b40a1c8beb1b621f0691f8f508ad2c07dba2041744e1"},
+    {"repository":"root","path":"packages/opencode/test/plugin/foundation.test.ts","role":"test-topology","mode":"full","sha256":"37899b19af264c5a55102cdc1a7847aa625de4c05528dfb47aa9432f4d0826be"},
+    {"repository":"root","path":"packages/opencode/test/plugin/foundation-runtime.test.ts","role":"test-topology","mode":"full","sha256":"e8363d77864547b291a2056994713c04ef0f41969704250bedaab2aef113e143"},
+    {"repository":"root","path":"packages/opencode/test/config/config.test.ts","role":"test-topology","mode":"full","sha256":"5f1b9b0768b3365cf5e8c2b82a8b20e964e8ef0f5ce59a90c650c20bbc12b843"},
+    {"repository":"root","path":"script/evidence-foundation-bootstrap-test.ts","role":"test-topology","mode":"full","sha256":"60065e00a8d3793a87c8ef6421c1e1aa9167df764816f8c0b22accdb5ad2690a"},
+    {"repository":"root","path":"docs/CONFIGURATION.md","role":"runtime-path","mode":"full","sha256":"f4885ddcc69c02ad66e147a62b517a8a4fe935805ed5106ced9ff0e86bb445dc"},
+    {"repository":"root","path":"docs/plan/ROADMAP.md","role":"architecture","mode":"full","sha256":"5673b5ab29b863f1261732f3d893453b8d7ba38ba17089366c1123124f3a1390"},
+    {"repository":"root","path":"packages/opencode/vendor/claude-foundation/payload/.claude/commands/changes.md","role":"requirement","mode":"full","sha256":"9ef6bfbae1b4acf6bb64552d1cfe07d742369f80b158ddfaf7f733f77411db7a"},
+    {"repository":"root","path":"packages/opencode/vendor/claude-foundation/payload/cli.sh","role":"runtime-path","mode":"full","sha256":"508ae8e07502a4a938ef7111975f3e2fc7f9f7c6da49dcc4585a1b95a25243de"},
+    {"repository":"root","path":"packages/opencode/vendor/claude-foundation/manifest.json","role":"runtime-path","mode":"full","sha256":"b5ccbe26b53d787e8e43d437275085c5bf0c1b5de7426aa413348384e6ff7c11"},
+    {"repository":"root","path":"packages/opencode/vendor/claude-foundation/payload/.claude/harness/adapters/opencode-plugin.js","role":"runtime-path","mode":"full","sha256":"c0e65636822e7b67cdcc26329e5d18d4a8d03f865f1b4e6a20b20e600bb4b40f"},
+    {"repository":"root","path":"packages/opencode/vendor/claude-foundation/payload/.claude/harness/adapters/install-support.sh","role":"runtime-path","mode":"full","sha256":"a9c0b37b0198ede1fc13b1b562ed7705f8af96d210e959cc9be0fdee842716a2"}
+  ],
+  "claims": [
+    {
+      "id": "bundled-lifecycle-uses-selected-runtime",
+      "productionPath": [{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"},{"repository":"root","path":"packages/opencode/src/plugin/foundation-runtime.ts"}],
+      "failurePaths": [{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"bundled shell or PTY resolves an absent or unrelated PATH Foundation instead of the selected release"}],
+      "evidenceClass": ["test","integration","security"],
+      "testDoubleGap": "none; integration spawns the real materialized shim against a temporary installed harness"
+    },
+    {
+      "id": "path-and-inactive-modes-preserve-environment",
+      "productionPath": [{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"}],
+      "failurePaths": [{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts","failure":"PATH mode, opt-out, or fully user-owned commands receive a bundled PATH override"}],
+      "evidenceClass": ["test","security"],
+      "testDoubleGap": "none"
+    },
+    {
+      "id": "invalid-bundled-shim-fails-closed",
+      "productionPath": [{"repository":"root","path":"packages/opencode/src/plugin/foundation-runtime.ts"}],
+      "failurePaths": [{"repository":"root","path":"packages/opencode/src/plugin/foundation-runtime.ts","failure":"missing, altered, unsafe, or concurrently corrupted shim is accepted or falls back to PATH"}],
+      "evidenceClass": ["test","integration","security"],
+      "testDoubleGap": "none; tests alter a temporary cache and observe rejection before child execution"
+    },
+    {
+      "id": "compiled-binary-executes-lifecycle-without-path-foundation",
+      "productionPath": [{"repository":"root","path":"packages/opencode/src/plugin/foundation-runtime.ts"}],
+      "failurePaths": [{"repository":"root","path":"script/evidence-foundation-bootstrap-test.ts","failure":"compiled smoke proves only status/init/doctor or inherits an external Foundation executable"}],
+      "evidenceClass": ["test","integration","deployment"],
+      "testDoubleGap": "none; deployment evidence strips external Foundation and observes a real lifecycle result"
+    },
+    {
+      "id": "opencode-host-integration-is-installed",
+      "productionPath": [{"repository":"root","path":"packages/opencode/src/cli/cmd/foundation.ts"},{"repository":"root","path":"packages/opencode/src/plugin/foundation-runtime.ts"}],
+      "failurePaths": [{"repository":"root","path":"packages/opencode/test/config/config.test.ts","failure":"bundled init or upgrade omits canonical OpenCode commands, the guard plugin, or adapter ownership manifest"}],
+      "evidenceClass": ["test","integration","security","deployment"],
+      "testDoubleGap": "none; integration installs into a temporary repository and loads the resulting OpenCode configuration"
+    },
+    {
+      "id": "foundation-managed-opencode-commands-use-bundled-runtime",
+      "productionPath": [{"repository":"root","path":"packages/opencode/src/plugin/foundation.ts"},{"repository":"root","path":"packages/opencode/src/plugin/foundation-runtime.ts"}],
+      "failurePaths": [{"repository":"root","path":"packages/opencode/test/plugin/foundation.test.ts","failure":"native Foundation commands win config precedence but leave the bundled lifecycle executable unavailable"}],
+      "evidenceClass": ["test","integration","security"],
+      "testDoubleGap": "none; test loads a Foundation-managed adapter and executes through the real materialized shim"
+    },
+    {
+      "id": "user-owned-opencode-artifacts-are-preserved",
+      "productionPath": [{"repository":"root","path":"packages/opencode/src/plugin/foundation-runtime.ts"}],
+      "failurePaths": [{"repository":"root","path":"packages/opencode/test/config/config.test.ts","failure":"init or upgrade overwrites an unowned command or plugin collision, or falsely treats it as Foundation-managed"}],
+      "evidenceClass": ["test","integration","security"],
+      "testDoubleGap": "none; integration seeds user-owned collisions and verifies byte-for-byte preservation"
+    },
+    {
+      "id": "bundled-payload-includes-opencode-installer",
+      "productionPath": [{"repository":"root","path":"packages/opencode/script/sync-foundation.ts"}],
+      "failurePaths": [{"repository":"root","path":"script/evidence-foundation-bootstrap-test.ts","failure":"cli.sh accepts --host opencode but the compiled payload omits install-opencode.sh"}],
+      "evidenceClass": ["test","integration","deployment"],
+      "testDoubleGap": "none; sync and compiled-artifact evidence verify the installer is checksum-pinned and executable"
+    }
+  ],
+  "criticalCases": [
+    {"id":"bundled-lifecycle-uses-selected-runtime","claimIds":["bundled-lifecycle-uses-selected-runtime"],"oracle":"real-wire"},
+    {"id":"path-and-inactive-modes-preserve-environment","claimIds":["path-and-inactive-modes-preserve-environment"],"oracle":"contract-oracle"},
+    {"id":"invalid-bundled-shim-fails-closed","claimIds":["invalid-bundled-shim-fails-closed"],"oracle":"failure-path"},
+    {"id":"compiled-binary-executes-lifecycle-without-path-foundation","claimIds":["compiled-binary-executes-lifecycle-without-path-foundation"],"oracle":"production-entry"},
+    {"id":"opencode-host-integration-is-installed","claimIds":["opencode-host-integration-is-installed"],"oracle":"real-wire"},
+    {"id":"foundation-managed-opencode-commands-use-bundled-runtime","claimIds":["foundation-managed-opencode-commands-use-bundled-runtime"],"oracle":"production-entry"},
+    {"id":"user-owned-opencode-artifacts-are-preserved","claimIds":["user-owned-opencode-artifacts-are-preserved"],"oracle":"failure-path"},
+    {"id":"bundled-payload-includes-opencode-installer","claimIds":["bundled-payload-includes-opencode-installer"],"oracle":"production-entry"}
+  ],
+  "mutants": [],
+  "derivedFacts": [
+    {"fact":"The Foundation plugin resolves instruction/context from FoundationRuntime.command but declares no shell.env hook.","command":"rg -n 'FoundationRuntime.command|shell.env' packages/opencode/src/plugin/foundation.ts"},
+    {"fact":"Tool shell, background command execution, and PTY composition consume the Location-scoped shell.env hook.","command":"rg -n 'shell.env' packages/opencode/src/tool/shell.ts packages/opencode/src/session/prompt.ts packages/opencode/src/plugin/pty-environment.ts"},
+    {"fact":"The bundled canonical changes instruction invokes the public claude-foundation executable.","command":"rg -n 'claude-foundation changes' packages/opencode/vendor/claude-foundation/payload/.claude/commands/changes.md"},
+    {"fact":"The compiled deployment smoke currently removes PATH Foundation but stops after status, init, and doctor.","command":"rg -n 'execute' script/evidence-foundation-bootstrap-test.ts"},
+    {"fact":"Bundled cli.sh routes init --host opencode to install-opencode.sh, but the current sync roots and manifest omit that installer.","command":"rg -n 'install-opencode|roots|install.sh' packages/opencode/vendor/claude-foundation/payload/cli.sh packages/opencode/script/sync-foundation.ts packages/opencode/vendor/claude-foundation/manifest.json"},
+    {"fact":"OpenCode loads .opencode/commands before internal plugins inject built-ins, so managed native commands require ownership-aware bundled-runtime activation.","command":"rg -n 'opencode/commands|applyFoundationCommands|injected' packages/opencode/test/config/config.test.ts packages/opencode/src/plugin/foundation.ts"},
+    {"fact":"The OpenCode adapter support layer records managed files in .foundation/adapter-manifests/opencode.txt and preserves unowned collisions.","command":"rg -n 'adapter-manifests|collision|managed' packages/opencode/vendor/claude-foundation/payload/.claude/harness/adapters/install-support.sh"}
+  ]
+}

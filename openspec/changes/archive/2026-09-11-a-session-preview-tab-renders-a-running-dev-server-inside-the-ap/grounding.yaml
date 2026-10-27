@@ -1,0 +1,210 @@
+{
+  "version": 3,
+  "decisionBatch": {
+    "status": "locked",
+    "source": "mixed",
+    "mode": "single-batch",
+    "lockedAt": "2026-09-09T11:49:34Z",
+    "decisions": [
+      {
+        "id": "side-panel-tab-placement",
+        "question": "Where should the preview pane live in the app?",
+        "answer": "A reserved Preview tab in the session side panel beside Files Changed, not a bottom panel or a new top-level tab.",
+        "source": "user-batch"
+      },
+      {
+        "id": "explicit-target-with-advisory-detection",
+        "question": "How does the preview learn the dev server URL?",
+        "answer": "The user enters and the app remembers the target; URLs seen in terminal output are advisory suggestions only.",
+        "source": "user-batch"
+      },
+      {
+        "id": "preview-url-scope",
+        "question": "Which URLs may the preview open?",
+        "answer": "Any http or https host, not only loopback; every other scheme is rejected.",
+        "source": "user-batch"
+      },
+      {
+        "id": "preview-refresh",
+        "question": "How does the preview refresh?",
+        "answer": "An explicit reload control plus reload when the app or the tab regains focus, with no hidden polling.",
+        "source": "user-batch"
+      },
+      {
+        "id": "frame-src-allowance-only",
+        "question": "How is framing permitted where the binary serves the UI under default-src self?",
+        "answer": "Add a frame-src allowance for http and https only, leaving every other directive unchanged.",
+        "source": "recommended-default"
+      },
+      {
+        "id": "insecure-content-is-a-stated-state",
+        "question": "What happens to plain http non-loopback targets in the secure desktop renderer origin?",
+        "answer": "They stay in scope and surface an explicit blocked-insecure-content state with a browser fallback instead of a blank frame.",
+        "source": "recommended-default"
+      }
+    ],
+    "reference": "openspec/specs/foundation-webui/spec.md"
+  },
+  "nfrAssessment": {
+    "performance": {
+      "status": "applicable",
+      "sourceReason": "A framed third-party document renders inside the session panel next to the chat timeline and terminal.",
+      "target": "No reload or polling while the Preview tab is hidden or unmounted; existing session, review and terminal rendering stay unchanged.",
+      "claimIds": [
+        "preview-reload-and-states"
+      ]
+    },
+    "capacity": {
+      "status": "not-applicable",
+      "sourceReason": "No new server API, storage or subprocess is introduced; the preview reuses the existing renderer and one persisted target string per project.",
+      "target": "none",
+      "claimIds": []
+    },
+    "availability": {
+      "status": "not-applicable",
+      "sourceReason": "The preview reads no Foundation runtime or server resource; an unavailable target only affects the Preview tab.",
+      "target": "none",
+      "claimIds": []
+    },
+    "securityPrivacy": {
+      "status": "applicable",
+      "sourceReason": "packages/opencode/src/server/shared/ui.ts sets default-src self with no frame-src, and the preview may load untrusted origins inside the app window.",
+      "target": "Cross-origin frame with no same-origin access, no top-frame navigation and no app credentials or auth token forwarded; frame-src allowance limited to http and https with all other directives unchanged.",
+      "claimIds": [
+        "preview-frame-isolation",
+        "preview-target-selection"
+      ]
+    },
+    "accessibility": {
+      "status": "applicable",
+      "sourceReason": "Existing foundation-webui specification requires keyboard navigation, visible focus and non-color state text at desktop and 390px in both themes.",
+      "target": "Preview tab, target field, reload and browser fallback are keyboard operable with visible focus and text-labelled states at desktop and 390px in light and dark.",
+      "claimIds": [
+        "preview-tab-surface",
+        "preview-reload-and-states"
+      ]
+    },
+    "operability": {
+      "status": "applicable",
+      "sourceReason": "A blocked or refused frame is indistinguishable from a blank pane without an explicit state.",
+      "target": "No-target, invalid-target, unreachable-target, framing-refused and blocked-insecure-content are distinguishable in text with a browser fallback.",
+      "claimIds": [
+        "preview-reload-and-states"
+      ]
+    },
+    "compatibility": {
+      "status": "applicable",
+      "sourceReason": "The app ships as the embedded served web UI and as the desktop renderer with different framing constraints.",
+      "target": "Preview works in serve/web and desktop hosts; existing side-panel tabs, top-level tabs, terminal and desktop navigation policy remain unchanged, and older servers keep serving ordinary sessions.",
+      "claimIds": [
+        "preview-frame-isolation",
+        "preview-tab-surface"
+      ]
+    },
+    "recoverability": {
+      "status": "applicable",
+      "sourceReason": "Dev servers restart and ports change while a session runs.",
+      "target": "A failed or blocked preview preserves the target for retry, never blanks the panel and never breaks the session.",
+      "claimIds": [
+        "preview-reload-and-states"
+      ]
+    }
+  },
+  "readSet": [
+    {
+      "repository": "root",
+      "path": "openspec/specs/foundation-webui/spec.md",
+      "role": "requirement",
+      "mode": "full",
+      "sha256": "249bb7a95ae54e13678eb1617a26a10960fda3d1c5744ad68e7ecfc13c628cfe"
+    },
+    {
+      "repository": "root",
+      "path": "packages/app/src/pages/session/helpers.ts",
+      "role": "implementation",
+      "mode": "full",
+      "sha256": "fa60dcafbfffc1563388cbf7b92e6653c6a74b58e59d020f3a191d5d2b4f3529"
+    },
+    {
+      "repository": "root",
+      "path": "packages/app/src/pages/session/session-side-panel.tsx",
+      "role": "production-path",
+      "mode": "full",
+      "sha256": "0035d5f9b1ec0e8d746d7f1e564ac8a82fffc3d2a7b3f9fb9492f3985c138f05"
+    },
+    {
+      "repository": "root",
+      "path": "packages/app/src/context/layout-tabs.ts",
+      "role": "implementation",
+      "mode": "full",
+      "sha256": "9e6a956ffb737665e1f789bb37a3894779c2d09324fd5610df81c7b032d80ce9"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/src/server/shared/ui.ts",
+      "role": "contract",
+      "mode": "full",
+      "sha256": "27664aed71baa98997f9a708bf2831a6d1d038e84f83ef4d72638b236c9236d4"
+    },
+    {
+      "repository": "root",
+      "path": "packages/desktop/src/main/windows.ts",
+      "role": "runtime-path",
+      "mode": "full",
+      "sha256": "ac96a4971c79ff2873263289696bad7b38e30280bba958b0cba7bf171282857c"
+    },
+    {
+      "repository": "root",
+      "path": "packages/app/src/context/terminal.tsx",
+      "role": "dependency-source",
+      "mode": "full",
+      "sha256": "094b7757101ebcb69c26a95f9da01ba3ee5cf39be9e4805c50b9dbe8e1ebdfcd"
+    },
+    {
+      "repository": "root",
+      "path": "packages/app/src/components/terminal.tsx",
+      "role": "dependency-source",
+      "mode": "full",
+      "sha256": "325f06497f2fd1a9e6f71c5e4907cf5f485ba0605d1b0b2f2114155693f1696b"
+    },
+    {
+      "repository": "root",
+      "path": "packages/opencode/test/server/httpapi-ui.test.ts",
+      "role": "test-topology",
+      "mode": "full",
+      "sha256": "04b5f5e63017ce03b1131bb4271b950c8e197afd68e71aaf7cde64abf9b31eed"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "side-panel-tab-placement",
+      "choice": "Preview lives as a reserved session side-panel tab beside Files Changed rather than a bottom panel next to the terminal or a new top-level tab type.",
+      "reason": "The side-panel tab model in packages/app/src/pages/session/helpers.ts and session-side-panel.tsx already provides reserved tab ids, per-session state, split sizing and keyboard behavior, so the preview inherits them without new tab persistence or migration."
+    },
+    {
+      "id": "explicit-target-with-advisory-detection",
+      "choice": "The target is user-entered and remembered per project; targets seen in terminal output are only suggestions and never navigate on their own.",
+      "reason": "Terminal output is the only live source the app already receives; the persisted terminal buffer in packages/app/src/context/terminal.tsx is written on cleanup, so detection cannot be treated as authoritative or complete."
+    },
+    {
+      "id": "frame-src-allowance-only",
+      "choice": "Extend the served UI policy with a frame-src allowance for http and https targets instead of relaxing default-src or dropping the policy.",
+      "reason": "packages/opencode/src/server/shared/ui.ts sets default-src 'self' with no frame-src or child-src, so framing a dev server is blocked in serve and web mode while the desktop renderer, which injects no policy, would work; a scheme-bounded frame-src is the smallest change that makes both hosts behave the same."
+    },
+    {
+      "id": "insecure-content-is-a-stated-state",
+      "choice": "Plain http targets on non-loopback hosts stay in scope but surface an explicit blocked-insecure-content state with a browser fallback on the desktop renderer.",
+      "reason": "The desktop renderer loads from the oc:// scheme registered secure:true in packages/desktop/src/main/windows.ts, so Chromium blocks non-loopback http frames as mixed content; the limit cannot be removed from the app and must be visible instead of a blank pane."
+    },
+    {
+      "id": "preview-url-scope",
+      "choice": "The preview accepts any http or https host, not only loopback, and rejects all other schemes.",
+      "reason": "The user asked for staging and remote targets as well as local dev servers; scheme rejection keeps file, data and javascript targets out of the frame."
+    },
+    {
+      "id": "preview-refresh",
+      "choice": "Reload happens on an explicit control and when the app or Preview tab regains focus, never on a hidden timer or project file watcher.",
+      "reason": "Dev servers with HMR already refresh themselves; focus reload covers the restart case without competing with HMR or spending resources while hidden."
+    }
+  ]
+}

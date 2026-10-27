@@ -1,0 +1,368 @@
+{
+  "version": 1,
+  "kind": "proposed-behavioral-cases",
+  "sourceRevision": "pstack:5062f28",
+  "execution": "not-run",
+  "cases": [
+    {
+      "id": "api-design-fundamentals",
+      "positive": "Define versioned errors and pagination for our public API.",
+      "negative": "Rename a private helper without changing behavior.",
+      "expectedSkill": "api-design-fundamentals",
+      "expectedNegativeSkill": "refactoring-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "architecture-fundamentals",
+      "positive": "Choose the ownership and failure contract between two services.",
+      "negative": "Choose a map instead of a list inside one function.",
+      "expectedSkill": "architecture-fundamentals",
+      "expectedNegativeSkill": "programming-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "brainstorming",
+      "positive": "ยังไม่แน่ใจว่าควรให้ลูกค้าลบข้อมูลหรือ archive ช่วยเทียบผลกระทบ",
+      "negative": "อธิบายเหตุผลของ decision ที่ทีมบันทึกไว้แล้ว ยังไม่ต้องเลือกใหม่",
+      "expectedSkill": "brainstorming",
+      "expectedNegativeSkill": "investigate",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "build",
+      "positive": "Continue the approved change's returned EDIT tasks in its sandbox.",
+      "negative": "Show why the existing evidence is stale without editing.",
+      "expectedSkill": "build",
+      "expectedNegativeSkill": "changes",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "change",
+      "positive": "Create an OpenSpec agreement for the settled behavior and scenarios.",
+      "negative": "Execute the already approved sandbox implementation task.",
+      "expectedSkill": "change",
+      "expectedNegativeSkill": "build",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "changes",
+      "positive": "ตอนนี้ change ไหนติดอยู่ และต้องทำอะไรต่อ โดยยังไม่แก้",
+      "negative": "ทำ task ที่ harness ส่งมาใน sandbox ให้เสร็จ",
+      "expectedSkill": "changes",
+      "expectedNegativeSkill": "build",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "claude-md",
+      "positive": "Update the concise CLAUDE.md guide and preserve our house rules.",
+      "negative": "Generate the full onboarding docs and HTML viewer.",
+      "expectedSkill": "claude-md",
+      "expectedNegativeSkill": "init-project-docs",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "coding-discipline",
+      "positive": "This proposed fix adds unrelated cleanup; resolve its scope before coding.",
+      "negative": "Implement the clearly scoped algorithm using the approved data shape.",
+      "expectedSkill": "coding-discipline",
+      "expectedNegativeSkill": "programming-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "concurrency-fundamentals",
+      "positive": "Prove cancellation and atomic ownership across overlapping in-process tasks.",
+      "negative": "Design durable job acknowledgements across service processes.",
+      "expectedSkill": "concurrency-fundamentals",
+      "expectedNegativeSkill": "queue-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "database-fundamentals",
+      "positive": "Choose the migration, constraints, and index for concurrent persistent writes.",
+      "negative": "Measure whether a query optimization improves end-to-end latency.",
+      "expectedSkill": "database-fundamentals",
+      "expectedNegativeSkill": "performance-investigation",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "ddd-strategic",
+      "positive": "Decide what customer means in billing versus account management.",
+      "negative": "Design retry and failure isolation between already settled services.",
+      "expectedSkill": "ddd-strategic",
+      "expectedNegativeSkill": "architecture-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "debug-fundamentals",
+      "positive": "หาสาเหตุที่ request ถูกต้องกลับ crash และพิสูจน์ก่อนแก้",
+      "negative": "วัดว่า implementation A กับ B แบบไหนเร็วกว่าโดยใช้ workload เดียวกัน",
+      "expectedSkill": "debug-fundamentals",
+      "expectedNegativeSkill": "performance-investigation",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "delivery-engineering",
+      "positive": "Repair failing CI and define reproducible artifact promotion.",
+      "negative": "Explain the current CI status without pushing or changing anything.",
+      "expectedSkill": "delivery-engineering",
+      "expectedNegativeSkill": "changes",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "dev",
+      "positive": "Use dev to take this settled intent through the compatibility workflow.",
+      "negative": "Only inspect current changes and blockers.",
+      "expectedSkill": "dev",
+      "expectedNegativeSkill": "changes",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "feature",
+      "positive": "Deliver this selected PRD group through the feature intake workflow.",
+      "negative": "Update one existing OpenSpec agreement without PRD intake.",
+      "expectedSkill": "feature",
+      "expectedNegativeSkill": "change",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "frontend-design",
+      "positive": "Implement the approved responsive visual direction with keyboard states.",
+      "negative": "Decide the information hierarchy and interaction model before implementation.",
+      "expectedSkill": "frontend-design",
+      "expectedNegativeSkill": "ux-ui-principles",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "git-workflow",
+      "positive": "Prepare the explicitly authorized commit with only the scoped diff.",
+      "negative": "Land the proven change uncommitted and archive it.",
+      "expectedSkill": "git-workflow",
+      "expectedNegativeSkill": "land",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "ux-ui-principles",
+      "positive": "ตรวจ UX flow นี้ด้วยหลักการที่เกี่ยวข้อง ระบุ failure/recovery, hierarchy และวิธีตรวจ โดยยังไม่ทำ frontend",
+      "negative": "Implement the already approved typography and spacing using existing components.",
+      "expectedSkill": "ux-ui-principles",
+      "expectedNegativeSkill": "frontend-design",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "grill-task-gu",
+      "positive": "Ground this approved PRD and produce one Decision Sheet and backlog.",
+      "negative": "Implement the harness-returned approved task.",
+      "expectedSkill": "grill-task-gu",
+      "expectedNegativeSkill": "build",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "grill-task-gu-please",
+      "positive": "Use grill-task-gu-please for the legacy PRD intake request.",
+      "negative": "Start a fresh PRD intake without using the compatibility name.",
+      "expectedSkill": "grill-task-gu-please",
+      "expectedNegativeSkill": "grill-task-gu",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "harness-html-report",
+      "positive": "แสดงรายงาน HTML ของ gates และ evidence ปัจจุบัน แบบอ่านอย่างเดียว",
+      "negative": "พิสูจน์ change ใหม่ด้วย project providers",
+      "expectedSkill": "harness-html-report",
+      "expectedNegativeSkill": "prove",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "hexagonal-backend",
+      "positive": "Keep this backend use case independent of its ORM with a consumer-owned port.",
+      "negative": "Decide whether two bounded contexts should deploy as separate services.",
+      "expectedSkill": "hexagonal-backend",
+      "expectedNegativeSkill": "architecture-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "init-project-docs",
+      "positive": "Generate grounded onboarding architecture docs and an HTML viewer.",
+      "negative": "Only tighten the root CLAUDE.md instructions index.",
+      "expectedSkill": "init-project-docs",
+      "expectedNegativeSkill": "claude-md",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "investigate",
+      "positive": "อธิบายว่าเส้นทางนี้ทำงานอย่างไรและทำไมเลือกแบบนี้ ยังไม่ต้องแก้",
+      "negative": "สร้าง agreement จาก intent ที่ตัดสินใจครบแล้ว",
+      "expectedSkill": "investigate",
+      "expectedNegativeSkill": "change",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "land",
+      "positive": "Land the proven change and archive it; leave the result uncommitted.",
+      "negative": "Only commit and open a PR under the separate authorization.",
+      "expectedSkill": "land",
+      "expectedNegativeSkill": "git-workflow",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "observability-fundamentals",
+      "positive": "Design correlation, RED metrics, and actionable alerts for this runtime boundary.",
+      "negative": "Run a controlled before/after latency comparison and explain the limiter.",
+      "expectedSkill": "observability-fundamentals",
+      "expectedNegativeSkill": "performance-investigation",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "plan-writing",
+      "positive": "Sequence migration dependencies and rollback in the active OpenSpec design/tasks.",
+      "negative": "Find unverified external consumers before deciding the migration.",
+      "expectedSkill": "plan-writing",
+      "expectedNegativeSkill": "change-impact-analysis",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "programming-fundamentals",
+      "positive": "Model local state so invalid combinations cannot be constructed.",
+      "negative": "Choose consistency and communication between independently deployed services.",
+      "expectedSkill": "programming-fundamentals",
+      "expectedNegativeSkill": "architecture-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "prove",
+      "positive": "Refresh stale evidence for the existing change without applying it.",
+      "negative": "Apply and archive the proven change with explicit Land authority.",
+      "expectedSkill": "prove",
+      "expectedNegativeSkill": "land",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "queue-fundamentals",
+      "positive": "Design outbox, acknowledgements, duplicate delivery, and poison-message replay.",
+      "negative": "Prevent an event-loop shared-state race inside one process.",
+      "expectedSkill": "queue-fundamentals",
+      "expectedNegativeSkill": "concurrency-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "refactoring-fundamentals",
+      "positive": "Extract duplicated logic while keeping public behavior unchanged.",
+      "negative": "Fix a reproduced wrong result that must change behavior.",
+      "expectedSkill": "refactoring-fundamentals",
+      "expectedNegativeSkill": "debug-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "security-fundamentals",
+      "positive": "Review cross-user authorization and untrusted file-path rejection.",
+      "negative": "Change purely visual spacing with no trust boundary.",
+      "expectedSkill": "security-fundamentals",
+      "expectedNegativeSkill": "frontend-design",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "skill-creator",
+      "positive": "Author the approved new workflow skill with scoped instructions.",
+      "negative": "Audit existing skills without editing them.",
+      "expectedSkill": "skill-creator",
+      "expectedNegativeSkill": "skill-suite-auditor",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "tailwind-design-system",
+      "positive": "Migrate shared Tailwind v3 tokens and variants to the installed v4 setup.",
+      "negative": "Style one page with existing shared tokens and components.",
+      "expectedSkill": "tailwind-design-system",
+      "expectedNegativeSkill": "frontend-design",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "testing-fundamentals",
+      "positive": "Design a regression that fails for the bug rather than broken setup.",
+      "negative": "Execute the already configured evidence providers and freshness checks.",
+      "expectedSkill": "testing-fundamentals",
+      "expectedNegativeSkill": "prove",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "ui-ux-pro-max",
+      "positive": "Search the bundled product, style, palette and typography catalog to compare dashboard design directions.",
+      "negative": "Review the user's checkout decisions and error recovery without searching for a visual style.",
+      "expectedSkill": "ui-ux-pro-max",
+      "expectedNegativeSkill": "ux-ui-principles",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "change-impact-analysis",
+      "positive": "ทำ endpoint นี้เป็น public แล้วจะกระทบ consumers และข้อมูลเดิมอะไรบ้าง",
+      "negative": "จัดลำดับ implementation ที่รู้ consumers และ compatibility ครบแล้ว",
+      "expectedSkill": "change-impact-analysis",
+      "expectedNegativeSkill": "plan-writing",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "performance-investigation",
+      "positive": "API ช้าลง 30% ช่วยวัด baseline และหาคอขวด",
+      "negative": "ออกแบบ alert และ trace correlation ของ service",
+      "expectedSkill": "performance-investigation",
+      "expectedNegativeSkill": "observability-fundamentals",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "skill-evaluation",
+      "positive": "เปรียบเทียบ description เดิมกับใหม่ ด้วย prompts ที่ควรและไม่ควรเรียก",
+      "negative": "ตรวจชื่อ skill กับ local references โดยไม่เรียกโมเดล",
+      "expectedSkill": "skill-evaluation",
+      "expectedNegativeSkill": "skill-suite-auditor",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    },
+    {
+      "id": "skill-suite-auditor",
+      "positive": "ตรวจ skills ทั้งชุดว่าซ้ำหรือขัดกับ harness ตรงไหน โดยยังไม่แก้",
+      "negative": "ทดสอบพฤติกรรม skill เวอร์ชันใหม่กับ baseline จริง",
+      "expectedSkill": "skill-suite-auditor",
+      "expectedNegativeSkill": "skill-evaluation",
+      "expectedBehavior": "Follow the selected skill's scope, actual tool capabilities, and canonical harness ownership. Do not infer additional authority.",
+      "status": "not-run"
+    }
+  ]
+}

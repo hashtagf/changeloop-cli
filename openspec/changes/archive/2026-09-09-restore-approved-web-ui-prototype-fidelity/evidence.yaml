@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "prototype-page-composition",
+      "requirementKey": "prototype-page-composition",
+      "scenario": "The user browses Investigations, a saved note, or active/archived Change details at desktop and 390px widths in either theme.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "prototype-overview-reader",
+      "requirementKey": "prototype-overview-reader",
+      "scenario": "A Change has available, missing or failed proposal/documents, or a note contains multiple sections and duplicate headings.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "prototype-session-geometry",
+      "requirementKey": "prototype-session-geometry",
+      "scenario": "A user opens a new session or draft through Changes at 1440x1000 and 390x844.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "prototype-visual-regression",
+      "requirementKey": "prototype-visual-regression",
+      "scenario": "The corrected UI is checked before delivery through an embedded local changeloop serve build.",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-lc",
+        "rtk proxy bun run --cwd packages/app test:unit && rtk proxy bun run --cwd packages/opencode script/verify-foundation-webui.ts && rtk proxy bun run --cwd packages/opencode script/verify-foundation-documents.ts"
+      ],
+      "minimum": 8,
+      "reportFormat": "json",
+      "claims": "declared",
+      "report": ".foundation/webui-evidence/foundation-documents.json",
+      "timeoutMs": 600000
+    }
+  }
+}

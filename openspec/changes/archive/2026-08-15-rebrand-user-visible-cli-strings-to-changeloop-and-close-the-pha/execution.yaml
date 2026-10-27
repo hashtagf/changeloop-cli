@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "providers": {
+    "test": {
+      "capability": "test",
+      "adapter": "test-discovery",
+      "command": [
+        "bun",
+        "run",
+        "script/evidence-rebrand-test.ts"
+      ],
+      "report": "test-results/evidence-rebrand-test.json",
+      "reportFormat": "json",
+      "minimum": 10,
+      "timeoutMs": 300000
+    }
+  },
+  "services": {}
+}

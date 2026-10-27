@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "fnd-commands-injected",
+      "scenario": "boot ด้วย config default แล้ว command ทั้ง 8 ของ foundation loop (investigate change build prove land changes feature dev) ปรากฏใน command list พร้อม template ที่มี harness-missing guard และ source ระบุ Foundation 3.2.27",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "fnd-user-precedence",
+      "scenario": "config.command ที่ผู้ใช้ define ชื่อชนกับ foundation loop รอดจากการฉีดโดย template ของผู้ใช้ไม่ถูกแก้",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "fnd-optout",
+      "scenario": "foundation_workflow: false ตัดการฉีดทั้ง 8 command โดย builtin เดิม (init/review) และ command อื่นของผู้ใช้ไม่ถูกกระทบ",
+      "impact": "medium",
+      "capabilities": ["test"]
+    },
+    {
+      "id": "fnd-config-compat",
+      "scenario": "เอกสาร config ที่มี field foundation_workflow ผ่าน v1 decode โดย field คงอยู่ และผ่านเส้นทาง migrate v1→v2 โดยไม่มี error",
+      "impact": "medium",
+      "capabilities": ["test"]
+    }
+  ]
+}
