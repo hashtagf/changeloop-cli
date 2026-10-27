@@ -1,0 +1,189 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "workflow-commands-plugin-workflow",
+      "requirementKey": "workflow-commands",
+      "scenario": "ลงทะเบียนครบ 8 คำสั่ง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "workflow-commands-options-workflow-false",
+      "requirementKey": "workflow-commands",
+      "scenario": "ปิด workflow",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "workflow-commands-builtin-plugin",
+      "requirementKey": "workflow-commands",
+      "scenario": "ไม่ทับคำสั่งผู้ใช้",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "instruction-resolution-executable-response-build-arguments",
+      "requirementKey": "instruction-resolution",
+      "scenario": "resolve สำเร็จ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "instruction-resolution-changes",
+      "requirementKey": "instruction-resolution",
+      "scenario": "argumentMode ของ changes",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "instruction-resolution-build-response-argumentmode-none",
+      "requirementKey": "instruction-resolution",
+      "scenario": "argumentMode ของคำสั่งอื่น",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "instruction-resolution-response-protocol-command-description-ins",
+      "requirementKey": "instruction-resolution",
+      "scenario": "response ไม่ครบ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "failure-instructions-path-claude-foundation-path-executable",
+      "requirementKey": "failure-instructions",
+      "scenario": "ไม่พบ executable",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "failure-instructions-executable-timeoutms",
+      "requirementKey": "failure-instructions",
+      "scenario": "timeout",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "failure-instructions-executable-exit-code-0",
+      "requirementKey": "failure-instructions",
+      "scenario": "host api ไม่รองรับ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "failure-instructions-bundled-foundationruntime-command-bundled-f",
+      "requirementKey": "failure-instructions",
+      "scenario": "bundle เสียหาย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "bootstrap-guard-bundled-status-installed",
+      "requirementKey": "bootstrap-guard",
+      "scenario": "ยังไม่ init",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "bootstrap-guard-bundled-status-installed-2",
+      "requirementKey": "bootstrap-guard",
+      "scenario": "init แล้ว",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "bootstrap-guard-options-runtime-path",
+      "requirementKey": "bootstrap-guard",
+      "scenario": "โหมด path",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "shell-environment-bundled-hook-shell-create-before",
+      "requirementKey": "shell-environment",
+      "scenario": "ต่อ PATH",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "shell-environment-options-runtime-path",
+      "requirementKey": "shell-environment",
+      "scenario": "โหมด path",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "shell-environment-foundationruntime-environment",
+      "requirementKey": "shell-environment",
+      "scenario": "materialize ล้มเหลว",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "agent-contract-system-hook-session-context-executable-contract",
+      "requirementKey": "agent-contract-system",
+      "scenario": "เติม contract",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "agent-contract-system-executable-response",
+      "requirementKey": "agent-contract-system",
+      "scenario": "contract ล้มเหลว",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "o=$(bun test --cwd packages/foundation test/plugin.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}

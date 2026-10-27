@@ -18,6 +18,7 @@
     "foundation:verify": "bun run script/verify-foundation.ts"
   },
   "dependencies": {
+    "@opencode/plugin": "workspace:*",
     "@opencode/util": "workspace:*",
     "effect": "catalog:"
   },
