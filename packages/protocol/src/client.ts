@@ -66,6 +66,7 @@ export const groupNames = {
   "server.worktree": "worktree",
   "server.vcs": "vcs",
   "server.config": "config",
+  "server.foundation": "foundation",
 } as const
 
 export const promiseOmitEndpoints = new Set([

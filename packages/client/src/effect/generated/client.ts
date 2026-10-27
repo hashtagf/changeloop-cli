@@ -292,6 +292,20 @@ import type {
   ConfigShellsOutput,
   ConfigUpdateInput,
   ConfigUpdateOutput,
+  FoundationInvestigationsInput,
+  FoundationInvestigationsOutput,
+  FoundationInvestigationInput,
+  FoundationInvestigationOutput,
+  FoundationDocumentsInput,
+  FoundationDocumentsOutput,
+  FoundationDocumentInput,
+  FoundationDocumentOutput,
+  FoundationCapabilityInput,
+  FoundationCapabilityOutput,
+  FoundationListInput,
+  FoundationListOutput,
+  FoundationGetInput,
+  FoundationGetOutput,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -1761,6 +1775,79 @@ const adaptGroupConfig = (raw: RawClient["server.config"]) => ({
   update: EndpointConfigUpdate(raw),
 })
 
+const EndpointFoundationInvestigations =
+  (raw: RawClient["server.foundation"]) => (input?: FoundationInvestigationsInput) =>
+    preserveEffect<FoundationInvestigationsOutput>()(
+      raw["foundation.investigations"]({
+        query: {
+          location: input?.["location"],
+          search: input?.["search"],
+          offset: input?.["offset"],
+          limit: input?.["limit"],
+        },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointFoundationInvestigation =
+  (raw: RawClient["server.foundation"]) => (input: FoundationInvestigationInput) =>
+    preserveEffect<FoundationInvestigationOutput>()(
+      raw["foundation.investigation"]({
+        params: { investigationID: input["investigationID"] },
+        query: { location: input["location"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointFoundationDocuments = (raw: RawClient["server.foundation"]) => (input: FoundationDocumentsInput) =>
+  preserveEffect<FoundationDocumentsOutput>()(
+    raw["foundation.documents"]({
+      params: { changeID: input["changeID"] },
+      query: { location: input["location"], search: input["search"], offset: input["offset"], limit: input["limit"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointFoundationDocument = (raw: RawClient["server.foundation"]) => (input: FoundationDocumentInput) =>
+  preserveEffect<FoundationDocumentOutput>()(
+    raw["foundation.document"]({
+      params: { changeID: input["changeID"], documentID: input["documentID"] },
+      query: { location: input["location"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointFoundationCapability = (raw: RawClient["server.foundation"]) => (input?: FoundationCapabilityInput) =>
+  preserveEffect<FoundationCapabilityOutput>()(
+    raw["foundation.capability"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointFoundationList = (raw: RawClient["server.foundation"]) => (input?: FoundationListInput) =>
+  preserveEffect<FoundationListOutput>()(
+    raw["foundation.list"]({
+      query: {
+        location: input?.["location"],
+        scope: input?.["scope"],
+        search: input?.["search"],
+        offset: input?.["offset"],
+        limit: input?.["limit"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointFoundationGet = (raw: RawClient["server.foundation"]) => (input: FoundationGetInput) =>
+  preserveEffect<FoundationGetOutput>()(
+    raw["foundation.get"]({ params: { changeID: input["changeID"] }, query: { location: input["location"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const adaptGroupFoundation = (raw: RawClient["server.foundation"]) => ({
+  investigations: EndpointFoundationInvestigations(raw),
+  investigation: EndpointFoundationInvestigation(raw),
+  documents: EndpointFoundationDocuments(raw),
+  document: EndpointFoundationDocument(raw),
+  capability: EndpointFoundationCapability(raw),
+  list: EndpointFoundationList(raw),
+  get: EndpointFoundationGet(raw),
+})
+
 const adaptClient = (raw: RawClient) => ({
   server: adaptGroupServer(raw["server.server"]),
   location: adaptGroupLocation(raw["server.location"]),
@@ -1794,6 +1881,7 @@ const adaptClient = (raw: RawClient) => ({
   websearch: adaptGroupWebsearch(raw["server.websearch"]),
   usage: adaptGroupUsage(raw["server.usage"]),
   config: adaptGroupConfig(raw["server.config"]),
+  foundation: adaptGroupFoundation(raw["server.foundation"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

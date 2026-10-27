@@ -8,7 +8,10 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
 import { EventLogger } from "@opencode/core/event-logger"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
+import { CommandPreparation } from "@opencode/core/command-preparation"
 import { Credential } from "@opencode/core/credential"
+import { Foundation } from "@opencode/core/foundation"
+import { FoundationDocuments } from "@opencode/core/foundation-documents"
 import { Config } from "@opencode/core/config"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PtyTicket } from "@opencode/core/pty/ticket"
@@ -109,6 +112,30 @@ export function createEmbeddedRoutes(
   return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, instances)
 }
 
+// Standalone servers have no workflow commands to inject; pass discovered commands through unchanged.
+export const commandPreparationLayer = Layer.succeed(
+  CommandPreparation.Service,
+  CommandPreparation.Service.of({
+    list: (_directory, commands) => Effect.succeed(commands),
+    prepare: (input) =>
+      input.command
+        ? Effect.succeed(input.command)
+        : Effect.fail(new CommandPreparation.Error("command_not_found", "Command is not available")),
+  }),
+)
+
+const foundationUnsupported = Effect.fail(
+  new Foundation.ReadError("unsupported", "Foundation is not available on this server"),
+)
+
+const foundationLayer = Layer.mergeAll(
+  Layer.succeed(Foundation.Service, Foundation.Service.of({ read: () => foundationUnsupported })),
+  Layer.succeed(
+    FoundationDocuments.Service,
+    FoundationDocuments.Service.of({ index: () => foundationUnsupported, read: () => foundationUnsupported }),
+  ),
+)
+
 function makeRoutes<AuthError, AuthServices>(
   auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
   options: ServerOptions,
@@ -179,7 +206,7 @@ function makeRoutes<AuthError, AuthServices>(
           )(context),
         ),
         ServerInfo.layer(serviceURLs, Context.get(context, Global.Service).tmp, options.app),
-      )
+      ).pipe(Layer.merge(commandPreparationLayer), Layer.merge(foundationLayer))
       const api = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
         Layer.provide(handlers.pipe(Layer.provide(services), Layer.provide(Layer.succeed(CorsConfig, options)))),
         Layer.provide(formLocationLayer),

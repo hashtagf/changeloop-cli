@@ -292,6 +292,20 @@ import type {
   ConfigShellsOutput,
   ConfigUpdateInput,
   ConfigUpdateOutput,
+  FoundationInvestigationsInput,
+  FoundationInvestigationsOutput,
+  FoundationInvestigationInput,
+  FoundationInvestigationOutput,
+  FoundationDocumentsInput,
+  FoundationDocumentsOutput,
+  FoundationDocumentInput,
+  FoundationDocumentOutput,
+  FoundationCapabilityInput,
+  FoundationCapabilityOutput,
+  FoundationListInput,
+  FoundationListOutput,
+  FoundationGetInput,
+  FoundationGetOutput,
 } from "./types.js"
 import { ClientError } from "./client-error.js"
 
@@ -2446,6 +2460,108 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    foundation: {
+      investigations: (input?: FoundationInvestigationsInput, requestOptions?: RequestOptions) =>
+        request<FoundationInvestigationsOutput>(
+          {
+            method: "GET",
+            path: `/experimental/foundation/investigations`,
+            query: {
+              location: input?.["location"],
+              search: input?.["search"],
+              offset: input?.["offset"],
+              limit: input?.["limit"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 403, 404, 409, 413, 422, 502, 503, 504],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      investigation: (input: FoundationInvestigationInput, requestOptions?: RequestOptions) =>
+        request<FoundationInvestigationOutput>(
+          {
+            method: "GET",
+            path: `/experimental/foundation/investigations/${encodeURIComponent(input.investigationID)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 403, 404, 409, 413, 422, 502, 503, 504],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      documents: (input: FoundationDocumentsInput, requestOptions?: RequestOptions) =>
+        request<FoundationDocumentsOutput>(
+          {
+            method: "GET",
+            path: `/experimental/foundation/changes/${encodeURIComponent(input.changeID)}/documents`,
+            query: {
+              location: input["location"],
+              search: input["search"],
+              offset: input["offset"],
+              limit: input["limit"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 403, 404, 409, 413, 422, 502, 503, 504],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      document: (input: FoundationDocumentInput, requestOptions?: RequestOptions) =>
+        request<FoundationDocumentOutput>(
+          {
+            method: "GET",
+            path: `/experimental/foundation/changes/${encodeURIComponent(input.changeID)}/documents/${encodeURIComponent(input.documentID)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 403, 404, 409, 413, 422, 502, 503, 504],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      capability: (input?: FoundationCapabilityInput, requestOptions?: RequestOptions) =>
+        request<FoundationCapabilityOutput>(
+          {
+            method: "GET",
+            path: `/experimental/foundation/capability`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 403, 404, 409, 413, 422, 502, 503, 504],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      list: (input?: FoundationListInput, requestOptions?: RequestOptions) =>
+        request<FoundationListOutput>(
+          {
+            method: "GET",
+            path: `/experimental/foundation/changes`,
+            query: {
+              location: input?.["location"],
+              scope: input?.["scope"],
+              search: input?.["search"],
+              offset: input?.["offset"],
+              limit: input?.["limit"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 403, 404, 409, 413, 422, 502, 503, 504],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      get: (input: FoundationGetInput, requestOptions?: RequestOptions) =>
+        request<FoundationGetOutput>(
+          {
+            method: "GET",
+            path: `/experimental/foundation/changes/${encodeURIComponent(input.changeID)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 403, 404, 409, 413, 422, 502, 503, 504],
+            empty: false,
           },
           requestOptions,
         ),

@@ -2510,6 +2510,247 @@ export interface ConfigApi<E = never> {
   readonly update: ConfigUpdateOperation<E>
 }
 
+export type FoundationInvestigationsInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly search?: string | undefined
+  readonly offset?: string | undefined
+  readonly limit?: string | undefined
+}
+export type FoundationInvestigationsOutput = {
+  readonly location: Location.PublicRef
+  readonly data: {
+    readonly items: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly sourcePath: string
+      readonly modifiedAt: string
+      readonly readAt: string
+      readonly size: number
+    }>
+    readonly total: number
+    readonly nextOffset: number | null
+    readonly readAt: string
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+export type FoundationInvestigationsOperation<E = never> = (
+  input?: FoundationInvestigationsInput,
+) => Effect.Effect<FoundationInvestigationsOutput, E>
+
+export type FoundationInvestigationInput = {
+  readonly investigationID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+export type FoundationInvestigationOutput = {
+  readonly location: Location.PublicRef
+  readonly data: {
+    readonly id: string
+    readonly title: string
+    readonly sourcePath: string
+    readonly modifiedAt: string
+    readonly readAt: string
+    readonly size: number
+    readonly sha256: string
+    readonly text: string
+    readonly sections: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly line: number
+      readonly level: number
+    }>
+    readonly references: ReadonlyArray<{ readonly changeID: string; readonly sourcePath: string }>
+    readonly tasks: ReadonlyArray<{ readonly text: string; readonly checked: boolean; readonly line: number }>
+    readonly claims: ReadonlyArray<{ readonly id: string; readonly text: string }>
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+export type FoundationInvestigationOperation<E = never> = (
+  input: FoundationInvestigationInput,
+) => Effect.Effect<FoundationInvestigationOutput, E>
+
+export type FoundationDocumentsInput = {
+  readonly changeID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly search?: string | undefined
+  readonly offset?: string | undefined
+  readonly limit?: string | undefined
+}
+export type FoundationDocumentsOutput = {
+  readonly location: Location.PublicRef
+  readonly data: {
+    readonly items: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly sourcePath: string
+      readonly modifiedAt: string
+      readonly readAt: string
+      readonly size: number
+    }>
+    readonly total: number
+    readonly nextOffset: number | null
+    readonly readAt: string
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+export type FoundationDocumentsOperation<E = never> = (
+  input: FoundationDocumentsInput,
+) => Effect.Effect<FoundationDocumentsOutput, E>
+
+export type FoundationDocumentInput = {
+  readonly changeID: string
+  readonly documentID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+export type FoundationDocumentOutput = {
+  readonly location: Location.PublicRef
+  readonly data: {
+    readonly id: string
+    readonly title: string
+    readonly sourcePath: string
+    readonly modifiedAt: string
+    readonly readAt: string
+    readonly size: number
+    readonly sha256: string
+    readonly text: string
+    readonly sections: ReadonlyArray<{
+      readonly id: string
+      readonly title: string
+      readonly line: number
+      readonly level: number
+    }>
+    readonly references: ReadonlyArray<{ readonly changeID: string; readonly sourcePath: string }>
+    readonly tasks: ReadonlyArray<{ readonly text: string; readonly checked: boolean; readonly line: number }>
+    readonly claims: ReadonlyArray<{ readonly id: string; readonly text: string }>
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+export type FoundationDocumentOperation<E = never> = (
+  input: FoundationDocumentInput,
+) => Effect.Effect<FoundationDocumentOutput, E>
+
+export type FoundationCapabilityInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type FoundationCapabilityOutput = {
+  readonly location: Location.PublicRef
+  readonly data: {
+    readonly available: boolean
+    readonly code: string | null
+    readonly runtime: { readonly mode: "bundled" | "path"; readonly version: string } | null
+    readonly snapshot?: boolean | undefined
+    readonly investigations?: boolean | undefined
+    readonly documents?: boolean | undefined
+  }
+}
+export type FoundationCapabilityOperation<E = never> = (
+  input?: FoundationCapabilityInput,
+) => Effect.Effect<FoundationCapabilityOutput, E>
+
+export type FoundationListInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly scope?: string | undefined
+  readonly search?: string | undefined
+  readonly offset?: string | undefined
+  readonly limit?: string | undefined
+}
+export type FoundationListOutput = {
+  readonly location: Location.PublicRef
+  readonly data: {
+    readonly generatedAt: string
+    readonly items: ReadonlyArray<{
+      readonly id: string
+      readonly title?: string | undefined
+      readonly status: string
+      readonly phase: string
+      readonly updatedAt: string | null
+      readonly evidenceStatus?: string | undefined
+      readonly evidence: {
+        readonly status: string
+        readonly recordedStatus: string | null
+        readonly freshness: string
+        readonly providers: ReadonlyArray<{ readonly provider: string; readonly status: string }>
+      } | null
+      readonly budget: {
+        readonly lifetime: { readonly usedRequests: number | null; readonly usedTokens: number | null }
+        readonly window: {
+          readonly id: string | null
+          readonly usedRequests: number | null
+          readonly usedTokens: number | null
+          readonly targetRequests: number | null
+          readonly targetTokens: number | null
+        }
+      } | null
+      readonly run: {
+        readonly branch?: string | null | undefined
+        readonly operationMs?:
+          | {
+              readonly change?: number | undefined
+              readonly build?: number | undefined
+              readonly prove?: number | undefined
+              readonly land?: number | undefined
+            }
+          | undefined
+      } | null
+    }>
+    readonly total: number
+    readonly nextOffset: number | null
+    readonly diagnostics: ReadonlyArray<string>
+  }
+}
+export type FoundationListOperation<E = never> = (input?: FoundationListInput) => Effect.Effect<FoundationListOutput, E>
+
+export type FoundationGetInput = {
+  readonly changeID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+export type FoundationGetOutput = {
+  readonly location: Location.PublicRef
+  readonly data: {
+    readonly id: string
+    readonly title?: string | undefined
+    readonly status: string
+    readonly phase: string
+    readonly updatedAt: string | null
+    readonly evidenceStatus?: string | undefined
+    readonly evidence: {
+      readonly status: string
+      readonly recordedStatus: string | null
+      readonly freshness: string
+      readonly providers: ReadonlyArray<{ readonly provider: string; readonly status: string }>
+    } | null
+    readonly budget: {
+      readonly lifetime: { readonly usedRequests: number | null; readonly usedTokens: number | null }
+      readonly window: {
+        readonly id: string | null
+        readonly usedRequests: number | null
+        readonly usedTokens: number | null
+        readonly targetRequests: number | null
+        readonly targetTokens: number | null
+      }
+    } | null
+    readonly run: {
+      readonly branch?: string | null | undefined
+      readonly operationMs?:
+        | {
+            readonly change?: number | undefined
+            readonly build?: number | undefined
+            readonly prove?: number | undefined
+            readonly land?: number | undefined
+          }
+        | undefined
+    } | null
+  }
+}
+export type FoundationGetOperation<E = never> = (input: FoundationGetInput) => Effect.Effect<FoundationGetOutput, E>
+
+export interface FoundationApi<E = never> {
+  readonly investigations: FoundationInvestigationsOperation<E>
+  readonly investigation: FoundationInvestigationOperation<E>
+  readonly documents: FoundationDocumentsOperation<E>
+  readonly document: FoundationDocumentOperation<E>
+  readonly capability: FoundationCapabilityOperation<E>
+  readonly list: FoundationListOperation<E>
+  readonly get: FoundationGetOperation<E>
+}
+
 export interface AppApi<E = never> {
   readonly server: ServerApi<E>
   readonly location: LocationApi<E>
@@ -2543,4 +2784,5 @@ export interface AppApi<E = never> {
   readonly websearch: WebsearchApi<E>
   readonly usage: UsageApi<E>
   readonly config: ConfigApi<E>
+  readonly foundation: FoundationApi<E>
 }

@@ -3069,6 +3069,222 @@ export type VcsInitNotSupportedError = {
 export const isVcsInitNotSupportedError = (value: unknown): value is VcsInitNotSupportedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "VcsInitNotSupportedError"
 
+export type FoundationInputError = {
+  readonly _tag: "FoundationInputError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationInputError = (value: unknown): value is FoundationInputError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FoundationInputError"
+
+export type FoundationDeniedError = {
+  readonly _tag: "FoundationDeniedError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationDeniedError = (value: unknown): value is FoundationDeniedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FoundationDeniedError"
+
+export type FoundationMissingError = {
+  readonly _tag: "FoundationMissingError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationMissingError = (value: unknown): value is FoundationMissingError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FoundationMissingError"
+
+export type FoundationUninitializedError = {
+  readonly _tag: "FoundationUninitializedError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationUninitializedError = (value: unknown): value is FoundationUninitializedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FoundationUninitializedError"
+
+export type FoundationDocumentSizeError = {
+  readonly _tag: "FoundationDocumentSizeError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationDocumentSizeError = (value: unknown): value is FoundationDocumentSizeError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FoundationDocumentSizeError"
+
+export type FoundationDocumentInvalidError = {
+  readonly _tag: "FoundationDocumentInvalidError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationDocumentInvalidError = (value: unknown): value is FoundationDocumentInvalidError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FoundationDocumentInvalidError"
+
+export type FoundationResponseError = {
+  readonly _tag: "FoundationResponseError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationResponseError = (value: unknown): value is FoundationResponseError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FoundationResponseError"
+
+export type FoundationUnavailableError = {
+  readonly _tag: "FoundationUnavailableError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationUnavailableError = (value: unknown): value is FoundationUnavailableError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FoundationUnavailableError"
+
+export type FoundationTimeoutError = {
+  readonly _tag: "FoundationTimeoutError"
+  readonly data: {
+    readonly code:
+      | "invalid_input"
+      | "not_found"
+      | "not_initialized"
+      | "unsupported"
+      | "timeout"
+      | "output_too_large"
+      | "invalid_response"
+      | "runtime_unavailable"
+      | "denied"
+      | "index_limit_exceeded"
+      | "document_too_large"
+      | "invalid_document"
+      | "document_changed"
+      | "ambiguous_archive"
+    readonly message: string
+  }
+}
+export const isFoundationTimeoutError = (value: unknown): value is FoundationTimeoutError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FoundationTimeoutError"
+
 export type ServerInfoOutput = ServerInfo
 
 export type ServerPairOutput = PairingCode
@@ -4491,3 +4707,200 @@ export type ConfigShellsOutput = Array<ConfigShellOption>
 export type ConfigUpdateInput = { readonly shell: string | null }
 
 export type ConfigUpdateOutput = void
+
+export type FoundationInvestigationsInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly search?: string | undefined
+  readonly offset?: string | undefined
+  readonly limit?: string | undefined
+}
+
+export type FoundationInvestigationsOutput = {
+  location: LocationPublicRef
+  data: {
+    items: Array<{ id: string; title: string; sourcePath: string; modifiedAt: string; readAt: string; size: number }>
+    total: number
+    nextOffset: number | null
+    readAt: string
+    diagnostics: Array<string>
+  }
+}
+
+export type FoundationInvestigationInput = {
+  readonly investigationID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type FoundationInvestigationOutput = {
+  location: LocationPublicRef
+  data: {
+    id: string
+    title: string
+    sourcePath: string
+    modifiedAt: string
+    readAt: string
+    size: number
+    sha256: string
+    text: string
+    sections: Array<{ id: string; title: string; line: number; level: number }>
+    references: Array<{ changeID: string; sourcePath: string }>
+    tasks: Array<{ text: string; checked: boolean; line: number }>
+    claims: Array<{ id: string; text: string }>
+    diagnostics: Array<string>
+  }
+}
+
+export type FoundationDocumentsInput = {
+  readonly changeID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly search?: string | undefined
+  readonly offset?: string | undefined
+  readonly limit?: string | undefined
+}
+
+export type FoundationDocumentsOutput = {
+  location: LocationPublicRef
+  data: {
+    items: Array<{ id: string; title: string; sourcePath: string; modifiedAt: string; readAt: string; size: number }>
+    total: number
+    nextOffset: number | null
+    readAt: string
+    diagnostics: Array<string>
+  }
+}
+
+export type FoundationDocumentInput = {
+  readonly changeID: string
+  readonly documentID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type FoundationDocumentOutput = {
+  location: LocationPublicRef
+  data: {
+    id: string
+    title: string
+    sourcePath: string
+    modifiedAt: string
+    readAt: string
+    size: number
+    sha256: string
+    text: string
+    sections: Array<{ id: string; title: string; line: number; level: number }>
+    references: Array<{ changeID: string; sourcePath: string }>
+    tasks: Array<{ text: string; checked: boolean; line: number }>
+    claims: Array<{ id: string; text: string }>
+    diagnostics: Array<string>
+  }
+}
+
+export type FoundationCapabilityInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+
+export type FoundationCapabilityOutput = {
+  location: LocationPublicRef
+  data: {
+    available: boolean
+    code: string | null
+    runtime: { mode: "bundled" | "path"; version: string } | null
+    snapshot?: boolean | undefined
+    investigations?: boolean | undefined
+    documents?: boolean | undefined
+  }
+}
+
+export type FoundationListInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly scope?: string | undefined
+  readonly search?: string | undefined
+  readonly offset?: string | undefined
+  readonly limit?: string | undefined
+}
+
+export type FoundationListOutput = {
+  location: LocationPublicRef
+  data: {
+    generatedAt: string
+    items: Array<{
+      id: string
+      title?: string | undefined
+      status: string
+      phase: string
+      updatedAt: string | null
+      evidenceStatus?: string | undefined
+      evidence: {
+        status: string
+        recordedStatus: string | null
+        freshness: string
+        providers: Array<{ provider: string; status: string }>
+      } | null
+      budget: {
+        lifetime: { usedRequests: number | null; usedTokens: number | null }
+        window: {
+          id: string | null
+          usedRequests: number | null
+          usedTokens: number | null
+          targetRequests: number | null
+          targetTokens: number | null
+        }
+      } | null
+      run: {
+        branch?: string | null | undefined
+        operationMs?:
+          | {
+              change?: number | undefined
+              build?: number | undefined
+              prove?: number | undefined
+              land?: number | undefined
+            }
+          | undefined
+      } | null
+    }>
+    total: number
+    nextOffset: number | null
+    diagnostics: Array<string>
+  }
+}
+
+export type FoundationGetInput = {
+  readonly changeID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type FoundationGetOutput = {
+  location: LocationPublicRef
+  data: {
+    id: string
+    title?: string | undefined
+    status: string
+    phase: string
+    updatedAt: string | null
+    evidenceStatus?: string | undefined
+    evidence: {
+      status: string
+      recordedStatus: string | null
+      freshness: string
+      providers: Array<{ provider: string; status: string }>
+    } | null
+    budget: {
+      lifetime: { usedRequests: number | null; usedTokens: number | null }
+      window: {
+        id: string | null
+        usedRequests: number | null
+        usedTokens: number | null
+        targetRequests: number | null
+        targetTokens: number | null
+      }
+    } | null
+    run: {
+      branch?: string | null | undefined
+      operationMs?:
+        | {
+            change?: number | undefined
+            build?: number | undefined
+            prove?: number | undefined
+            land?: number | undefined
+          }
+        | undefined
+    } | null
+  }
+}
