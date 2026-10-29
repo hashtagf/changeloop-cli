@@ -54,8 +54,8 @@ describe("help prose", () => {
     ["auth"],
     ["models"],
     ["session"],
-  ])("%s help has no OpenCode prose", async (...command) => {
-    const result = await help(command)
+  ])("%s help has no OpenCode prose", async (command) => {
+    const result = await help([command])
 
     expect(result.exitCode).toBe(0)
     expect(withoutUsage(result.stdout)).not.toMatch(/opencode/i)
