@@ -17,6 +17,8 @@ const loadSessionRoute = () => Promise.all([import("@/session/route"), File.prel
 
 const DraftRoute = lazy(() => import("@/new-session/route").then((module) => ({ default: module.DraftRoute })))
 
+const ChangesRoute = lazy(() => import("@/changes/route").then((module) => ({ default: module.Changes })))
+
 const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
 
 const ConnectServerScreen = lazy(() =>
@@ -41,6 +43,8 @@ export function preloadRoute(url: string) {
 
   if (pathname === "/settings") return SettingsScreen.preload().then(() => undefined)
 
+  if (pathname === "/changes") return ChangesRoute.preload().then(() => undefined)
+
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
     return TargetSessionRouteContent.preload().then(() => undefined)
 
@@ -52,6 +56,7 @@ export function AppRoutes() {
     <Route component={AppLayout}>
       <Route path="/" component={Home} />
       <Route path="/settings" component={SettingsScreen} />
+      <Route path="/changes" component={ChangesRoute} />
       <Route
         path="/server/:serverKey/session/:id"
         component={() => (

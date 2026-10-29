@@ -11,6 +11,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createResource } from "solid-js"
+import { useNavigate } from "@solidjs/router"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
@@ -31,6 +32,7 @@ export function createHomeProjectsController(home: HomeController) {
   const serverManagement = useServerActionsController()
   const global = useGlobal()
   const revealProject = useRevealProject()
+  const navigate = useNavigate()
   const [_state, setState, _, ready] = persisted(Persist.global("home.servers"), HomeServersSchema, { collapsed: {} })
 
   const [state] = createResource(
@@ -167,6 +169,7 @@ export function createHomeProjectsController(home: HomeController) {
       reveal: revealProject.reveal,
     },
     utility: {
+      changes: () => navigate("/changes"),
       settings: openSettings,
       help: () => platform.openExternal("https://opencode.ai/desktop-feedback"),
     },

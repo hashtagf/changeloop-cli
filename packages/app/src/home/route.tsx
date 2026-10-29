@@ -53,6 +53,7 @@ export function Home() {
       <div class="hidden shrink-0 px-3 py-2 md:block lg:hidden">
         <HomeUtilityNav
           class="flex"
+          onOpenChanges={projects.utility.changes}
           onOpenSettings={projects.utility.settings}
           onOpenHelp={projects.utility.help}
           language={projects.copy.language}

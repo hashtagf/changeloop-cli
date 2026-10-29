@@ -6,8 +6,14 @@ import { currentRoute, initialLayout, layoutPersistence, layoutSchema } from "./
 import { createSignal } from "solid-js"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 
-test.each(["settings", "connect"] as const)("%s has its own layout route", (type) => {
+test.each(["settings", "connect", "changes"] as const)("%s has its own layout route", (type) => {
   expect(currentRoute(`/${type}`, "")).toEqual({ type })
+})
+
+test("the changes route keeps its query out of the route and leaves the other routes alone", () => {
+  expect(currentRoute("/changes", "?scope=archive&change=alpha")).toEqual({ type: "changes" })
+  expect(currentRoute("/", "")).toEqual({ type: "home" })
+  expect(currentRoute("/new-session", "?draftId=d1")).toEqual({ type: "draft", draftID: "d1" })
 })
 
 describe("layout persistence", () => {

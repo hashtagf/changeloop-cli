@@ -67,6 +67,7 @@ export type HomeProjectsViewProps = {
   onRevealProject: (server: ServerConnection.Any, project: LocalProject) => void
   onClearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   onHideProject: (server: ServerConnection.Any, project: LocalProject) => void
+  onOpenChanges?: () => void
   onOpenSettings: () => void
   onOpenHelp: () => void
 }
@@ -296,6 +297,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
       </div>
       <HomeUtilityNav
         class="mb-8 mt-4 hidden shrink-0 lg:flex"
+        onOpenChanges={props.onOpenChanges}
         onOpenSettings={props.onOpenSettings}
         onOpenHelp={props.onOpenHelp}
         language={props.language}
@@ -306,6 +308,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
 
 export function HomeUtilityNav(props: {
   class?: string
+  onOpenChanges?: () => void
   onOpenSettings: () => void
   onOpenHelp: () => void
   language: ReturnType<typeof useLanguage>
@@ -314,6 +317,18 @@ export function HomeUtilityNav(props: {
     <div
       class={`${props.class ?? ""} min-w-0 flex-row justify-between gap-1 lg:flex-col lg:justify-start lg:pr-3 [&>button]:w-auto lg:[&>button]:w-full`}
     >
+      <Show when={props.onOpenChanges}>
+        {(open) => (
+          <HomeProjectNavButton
+            type="button"
+            class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+            onClick={open()}
+          >
+            <Icon name="review" size="small" />
+            <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("changes.title")}</span>
+          </HomeProjectNavButton>
+        )}
+      </Show>
       <HomeProjectNavButton
         type="button"
         class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
