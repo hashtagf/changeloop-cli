@@ -3,7 +3,11 @@ import { For, type JSX } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTheme } from "../context/theme"
 import { tint } from "../theme/color"
-import { go, logo } from "../logo"
+import { logo } from "../logo"
+
+// The wordmark's halves are stacked until the terminal fits both side by side (plus a one-column gap).
+const WORDMARK_WIDTH = Math.max(...logo.left.map((line) => line.length))
+const SPLIT_WIDTH = WORDMARK_WIDTH + 1 + Math.max(...logo.right.map((line) => line.length))
 
 export function Logo() {
   const theme = useTheme()
@@ -51,13 +55,9 @@ export function Logo() {
 
   return (
     <box>
-      {dimensions().height < 12 ? null : dimensions().width < 22 ? (
-        <For each={go.right.slice(1)}>
-          {(line) => <box flexDirection="row">{renderLine(line, theme.text.base, true)}</box>}
-        </For>
-      ) : dimensions().width < 44 ? (
+      {dimensions().height < 12 || dimensions().width < WORDMARK_WIDTH ? null : dimensions().width < SPLIT_WIDTH ? (
         <>
-          <For each={logo.left.slice(1)}>
+          <For each={logo.left}>
             {(line) => <box flexDirection="row">{renderLine(line, theme.text.muted, false)}</box>}
           </For>
           <For each={logo.right}>

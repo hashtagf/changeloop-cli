@@ -1,0 +1,122 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "help-no-opencode-prose-help-root",
+      "requirementKey": "help-no-opencode-prose",
+      "scenario": "root help",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "help-no-opencode-prose-help-upgrade-uninstall-run-acp-mcp-plugin",
+      "requirementKey": "help-no-opencode-prose",
+      "scenario": "subcommand help",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "runtime-messages-rebranded-conflict-port-pair-retry-upgrade-usag",
+      "requirementKey": "runtime-messages-rebranded",
+      "scenario": "คำสั่งแนะนำ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "runtime-messages-rebranded-auth-method-agentinfo-acp",
+      "requirementKey": "runtime-messages-rebranded",
+      "scenario": "acp",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "runtime-messages-rebranded-opencode-console-opencode-go",
+      "requirementKey": "runtime-messages-rebranded",
+      "scenario": "ชื่อบริการคงเดิม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "tui-prose-rebranded-tui-dialog",
+      "requirementKey": "tui-prose-rebranded",
+      "scenario": "ชื่อหน้าต่างและ dialog",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "tui-prose-rebranded-tui-session",
+      "requirementKey": "tui-prose-rebranded",
+      "scenario": "epilogue",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "wordmark-changeloop-logo",
+      "requirementKey": "wordmark-changeloop",
+      "scenario": "ตารางแถว",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "wordmark-changeloop-epilogue",
+      "requirementKey": "wordmark-changeloop",
+      "scenario": "epilogue",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "contract-identifiers-unchanged-string-literal-packages-cli-src-p",
+      "requirementKey": "contract-identifiers-unchanged",
+      "scenario": "guard ไม่พบ prose",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "contract-identifiers-unchanged-id-plugin-command-env-opencode-co",
+      "requirementKey": "contract-identifiers-unchanged",
+      "scenario": "identifier คงเดิม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/tui test/util/presentation.test.ts test/util/logo.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli --timeout 60000 test/rebrand-help.test.ts test/acp/error.test.ts test/acp/session.test.ts test/acp/lifecycle.subprocess.test.ts test/pair-remote-consent.test.ts test/stats.test.ts test/mini.test.ts test/service-lifecycle.test.ts test/upgrade.test.ts test/updater-install.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/tui --timeout 60000 test/app-lifecycle.test.tsx test/mini/splash.test.ts test/component/dialog-update.test.tsx test/cli/tui/dialog-mcp.test.tsx test/mini/blocker.responsive.test.tsx test/feature-plugins/sidebar-footer.test.tsx test/brand-prose.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "segments": [
+        "o=$(bun test --cwd packages/tui test/util/presentation.test.ts test/util/logo.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/cli --timeout 60000 test/rebrand-help.test.ts test/acp/error.test.ts test/acp/session.test.ts test/acp/lifecycle.subprocess.test.ts test/pair-remote-consent.test.ts test/stats.test.ts test/mini.test.ts test/service-lifecycle.test.ts test/upgrade.test.ts test/updater-install.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/tui --timeout 60000 test/app-lifecycle.test.tsx test/mini/splash.test.ts test/component/dialog-update.test.tsx test/cli/tui/dialog-mcp.test.tsx test/mini/blocker.responsive.test.tsx test/feature-plugins/sidebar-footer.test.tsx test/brand-prose.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}
