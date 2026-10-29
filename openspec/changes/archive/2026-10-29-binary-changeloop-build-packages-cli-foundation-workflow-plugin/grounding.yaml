@@ -1,0 +1,47 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "dependency-direction",
+      "choice": "core พึ่ง @opencode/foundation (workspace) และลงทะเบียน FoundationPlugin ใน PluginInternal ส่วน post ก่อน ConfigCommandPlugin",
+      "reason": "@opencode/foundation พึ่งเฉพาะ @opencode/plugin และ @opencode/util ไม่พึ่ง core จึงไม่เกิด cycle และ core เป็นที่เดียวที่ลงทะเบียน builtin (BrowserPlugin ถูก import ตรงใน internal.ts แบบเดียวกัน) ทุก host ที่ใช้ core จึงได้ workflow เหมือนกัน ถ้าให้ cli ผูกเองต้องเพิ่มช่องฉีด plugin ที่ v2 ยังไม่มี"
+    },
+    {
+      "id": "embed-via-virtual-module",
+      "choice": "plugin โหลดไฟล์ runtime ที่ฝังผ่าน dynamic import ของ virtual:opencode-foundation-files แล้วส่งเป็น runtimeOptions.files ถ้า import ไม่ได้ให้ใช้ vendor บนดิสก์ตามเดิม ส่วน build ของ cli สร้างโมดูลนี้จาก createEmbeddedFoundationBundle (import แบบ type: file) ด้วย Bun plugin",
+      "reason": "ใช้รูปแบบเดียวกับ virtual:opencode-app-assets ที่ build ฝัง web UI อยู่แล้ว ทำให้ test และ dev ที่ไม่ผ่าน build ไม่พัง และ binary ไม่ต้องอ่าน vendor จากดิสก์"
+    },
+    {
+      "id": "disable-mechanism",
+      "choice": "ผู้ใช้ปิด builtin ด้วยการลบ plugin id opencode.foundation ผ่าน config plugin remove เดิมของ supervisor ส่วน option workflow:false ใช้เมื่อโหลด plugin เป็น entry ภายนอก",
+      "reason": "builtin ไม่รับ options (host ส่ง {}) และ supervisor มีกลไก remove ตาม id อยู่แล้ว จึงไม่แก้ schema หรือ supervisor"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase3-wiring-d",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-27T16:00:00.000Z",
+    "decisions": [
+      {
+        "id": "dependency-direction",
+        "question": "ทิศ dependency ระหว่าง core กับ foundation และจุดลงทะเบียน builtin",
+        "answer": "core พึ่ง foundation และลงทะเบียนใน PluginInternal post ก่อน ConfigCommandPlugin",
+        "source": "recommended-default"
+      },
+      {
+        "id": "embed-via-virtual-module",
+        "question": "binary ได้ไฟล์ runtime ของ Foundation มาอย่างไรโดยไม่อ่าน vendor บนดิสก์",
+        "answer": "virtual module ที่ build สร้างจาก bundle ที่ตรวจแล้ว โหลดด้วย dynamic import พร้อม fallback ไป vendor",
+        "source": "recommended-default"
+      },
+      {
+        "id": "disable-mechanism",
+        "question": "ผู้ใช้ปิด workflow builtin ได้อย่างไร",
+        "answer": "ลบ plugin id opencode.foundation ผ่านกลไก remove เดิม; workflow:false สำหรับ entry ภายนอก",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}

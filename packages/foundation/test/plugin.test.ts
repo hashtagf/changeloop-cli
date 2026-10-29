@@ -1,7 +1,7 @@
 import path from "path"
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "fs/promises"
 import { tmpdir } from "os"
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, mock, test } from "bun:test"
 import { Effect } from "effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { FoundationRuntime } from "../src/foundation-runtime.js"
@@ -381,4 +381,82 @@ describe("agent contract", () => {
     expect(event.system[0].text).toContain("Foundation agent contract unavailable")
     expect(event.system[0].text).toContain(code)
   })
+})
+
+// mock.module registers the build-time virtual module for the rest of the file, so every test that needs
+// a specific module state installs its own mock instead of relying on an earlier test.
+const embeddedModule = "virtual:opencode-foundation-files"
+
+describe("embedded runtime files", () => {
+  const shellEnv = async (dir: string, options: Options) => {
+    const plugin = await start(dir, { runtime: "bundled", ...options })
+    return ((await plugin.trigger(plugin.shell, { env: { PATH: "/usr/bin" } })) as { env: Record<string, string> }).env
+  }
+
+  test("without the embedded module the vendored bundle on disk is used", async () => {
+    const dir = await temporary("foundation-plugin-vendor-")
+    const env = await shellEnv(dir, { runtimeOptions: { allowUntagged: true, cache: path.join(dir, "cache") } })
+
+    expect(env.PATH.endsWith(`${path.delimiter}/usr/bin`)).toBe(true)
+    expect(env.PATH).not.toBe("/usr/bin")
+  }, 30_000)
+
+  test("the embedded module's file map feeds the runtime", async () => {
+    const dir = await temporary("foundation-plugin-embedded-")
+    const manifest = path.join(dir, "manifest.json")
+    await writeFile(manifest, "{}")
+    mock.module(embeddedModule, () => ({ default: { "manifest.json": manifest } }))
+    const plugin = await start(dir, {
+      runtime: "bundled",
+      runtimeOptions: { allowUntagged: true, cache: path.join(dir, "cache") },
+    })
+
+    await plugin.run("build", "x")
+
+    expect(plugin.prompts[0].text).toContain("foundation_bundle_invalid")
+    expect((await shellEnv(dir, { runtimeOptions: { allowUntagged: true, cache: path.join(dir, "cache") } })).PATH).toBe(
+      "/usr/bin",
+    )
+  })
+
+  test("a module that is reported missing falls back to the vendored bundle", async () => {
+    const dir = await temporary("foundation-plugin-missing-")
+    const loadEmbedded = () =>
+      Promise.reject(Object.assign(new Error(`Cannot find module '${embeddedModule}'`), { code: "ERR_MODULE_NOT_FOUND" }))
+
+    const env = await shellEnv(dir, {
+      loadEmbedded,
+      runtimeOptions: { allowUntagged: true, cache: path.join(dir, "cache") },
+    })
+
+    expect(env.PATH.endsWith(`${path.delimiter}/usr/bin`)).toBe(true)
+    expect(env.PATH).not.toBe("/usr/bin")
+  }, 30_000)
+
+  test("a module that exists but fails to load is a visible bundle error, not a silent fallback", async () => {
+    const dir = await temporary("foundation-plugin-broken-")
+    const plugin = await start(dir, {
+      loadEmbedded: () => Promise.reject(new Error("embedded files are corrupt")),
+      runtime: "bundled",
+      runtimeOptions: { allowUntagged: true, cache: path.join(dir, "cache") },
+    })
+
+    await plugin.run("build", "x")
+    const event = (await plugin.trigger(plugin.session, { system: [] })) as { system: Array<{ text: string }> }
+
+    expect(plugin.prompts[0].text).toContain("foundation_bundle_invalid")
+    expect(plugin.prompts[0].text).toContain("Reinstall this Changeloop release")
+    expect(event.system[0].text).toContain("foundation_bundle_invalid")
+  })
+
+  test("a file map supplied by the caller wins over the embedded one", async () => {
+    const dir = await temporary("foundation-plugin-caller-")
+    const manifest = path.join(dir, "manifest.json")
+    await writeFile(manifest, "{}")
+    mock.module(embeddedModule, () => ({ default: { "manifest.json": manifest } }))
+    const env = await shellEnv(dir, { runtimeOptions: { allowUntagged: true, cache: path.join(dir, "cache"), files: {} } })
+
+    expect(env.PATH.endsWith(`${path.delimiter}/usr/bin`)).toBe(true)
+    expect(env.PATH).not.toBe("/usr/bin")
+  }, 30_000)
 })

@@ -33,6 +33,7 @@
     "@effect/platform-node": "catalog:",
     "@opencode-ai/pty": "0.3.1",
     "@opencode/client": "workspace:*",
+    "@opencode/foundation": "workspace:*",
     "@opencode/plugin": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/server": "workspace:*",

@@ -11,6 +11,7 @@ import type { BunPlugin } from "bun"
 import pkg from "../package.json"
 import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
 import { buildAppArchive } from "./app-assets"
+import { foundationFilesPlugin } from "./foundation-files"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
 import { NativeArch } from "../../../script/native-arch"
@@ -90,6 +91,7 @@ export default () => readFileSync(archive)`,
     }))
   },
 }
+const foundationPlugin = await foundationFilesPlugin(path.resolve(dir, "../foundation/vendor/claude-foundation"))
 const pluginRuntimeEntries = discoverPluginRuntimeSpecifiers()
 const pluginRuntimeModulesSource = [
   "export const resolveHostPackageRoots = () => []",
@@ -162,6 +164,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
     tsconfig: "./tsconfig.json",
     plugins: [
       appAssetsPlugin,
+      foundationPlugin,
       solidPlugin,
       parcelWatcherPlugin,
       opencodePtyPlugin,

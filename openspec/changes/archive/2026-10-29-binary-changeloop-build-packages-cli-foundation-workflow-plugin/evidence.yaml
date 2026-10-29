@@ -1,0 +1,104 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "embedded-files-source-embedded-resolve-map",
+      "requirementKey": "embedded-files-source",
+      "scenario": "มีไฟล์ฝัง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "embedded-files-source-import-embedded",
+      "requirementKey": "embedded-files-source",
+      "scenario": "ไม่มีโมดูล",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "embedded-files-source-make-runtimeoptions-files",
+      "requirementKey": "embedded-files-source",
+      "scenario": "ผู้เรียกกำหนด files เอง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "builtin-registration-instance",
+      "requirementKey": "builtin-registration",
+      "scenario": "ลงทะเบียน builtin",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "builtin-registration-activation-inventory",
+      "requirementKey": "builtin-registration",
+      "scenario": "ลำดับก่อน config command",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "builtin-registration-config-plugin-operation-remove-opencode-fou",
+      "requirementKey": "builtin-registration",
+      "scenario": "ผู้ใช้ปิด",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "build-embeds-runtime-bundle-embedded-bun-plugin-build",
+      "requirementKey": "build-embeds-runtime",
+      "scenario": "โมดูลที่สร้างอ่านได้",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "build-embeds-runtime-payload-manifest",
+      "requirementKey": "build-embeds-runtime",
+      "scenario": "vendor เสีย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "build-embeds-runtime-build-single-skip-web-ui-binary",
+      "requirementKey": "build-embeds-runtime",
+      "scenario": "binary จริง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/foundation test/plugin.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/core test/plugin/foundation-builtin.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli script/foundation-files.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "segments": [
+        "o=$(bun test --cwd packages/foundation test/plugin.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/core test/plugin/foundation-builtin.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/cli script/foundation-files.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}

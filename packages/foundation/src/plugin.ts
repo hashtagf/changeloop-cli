@@ -1,3 +1,4 @@
+/// <reference path="./virtual.d.ts" />
 import { define, type Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Option, Schema } from "effect"
 import { FoundationRuntime } from "./foundation-runtime.js"
@@ -37,9 +38,11 @@ export type Options = {
   runtimeOptions?: FoundationRuntime.MaterializeOptions
   maxOutputBytes?: number
   timeoutMs?: number
+  /** Replaces the dynamic import of the build-time embedded file map; exists for tests. */
+  loadEmbedded?: () => Promise<Record<string, string>>
 }
 
-type Host = { directory: string } & Required<Pick<Options, "runtime">> &
+type Host = { directory: string; bundleBroken?: true } & Required<Pick<Options, "runtime">> &
   Pick<Options, "executable" | "runtimeOptions" | "maxOutputBytes" | "timeoutMs">
 type Result<T> = ({ ok: true } & T) | { ok: false; code: FailureCode }
 type HostResult = Result<{ stdout: string }>
@@ -62,11 +65,16 @@ export function make(base: Options = {}) {
     effect: Effect.fn("FoundationPlugin")(function* (ctx: Context) {
       const options = { ...base, ...parseOptions(ctx.options) }
       if (options.workflow === false) return
+      const runtime = options.runtime ?? "bundled"
+      // A compiled build embeds the runtime files; without them the vendored bundle on disk is used.
+      const embedded: Embedded =
+        runtime === "bundled" && !options.runtimeOptions?.files ? yield* Effect.promise(() => embeddedFiles(options.loadEmbedded)) : {}
       const host: Host = {
         directory: ctx.location.directory,
-        runtime: options.runtime ?? "bundled",
+        runtime,
+        ...(embedded.broken ? { bundleBroken: true as const } : {}),
         executable: options.executable,
-        runtimeOptions: options.runtimeOptions,
+        runtimeOptions: embedded.files ? { ...options.runtimeOptions, files: embedded.files } : options.runtimeOptions,
         maxOutputBytes: options.maxOutputBytes,
         timeoutMs: options.timeoutMs,
       }
@@ -114,6 +122,27 @@ export function make(base: Options = {}) {
       )
     }),
   })
+}
+
+type Embedded = { files?: Record<string, string>; broken?: true }
+
+// A build without the module (source run, tests) uses the vendored bundle; a module that exists but fails to load
+// is a broken release and must surface as foundation_bundle_invalid instead of silently falling back.
+function embeddedFiles(load?: Options["loadEmbedded"]): Promise<Embedded> {
+  return Promise.resolve()
+    .then(load ?? (() => import("virtual:opencode-foundation-files").then((module) => module.default)))
+    .then(
+      (files): Embedded => ({ files }),
+      (error): Embedded => (isModuleNotFound(error) ? {} : { broken: true }),
+    )
+}
+
+function isModuleNotFound(error: unknown) {
+  if (typeof error !== "object" || error === null) return false
+  return (
+    (error as { code?: unknown }).code === "ERR_MODULE_NOT_FOUND" ||
+    /Cannot find (module|package)/i.test(String((error as { message?: unknown }).message))
+  )
 }
 
 async function prompt(host: Host, command: CommandName, args: string) {
@@ -169,6 +198,7 @@ async function attempt<T extends { ok: boolean }>(run: () => Promise<T>): Promis
 }
 
 async function runHost(host: Host, argv: string[]): Promise<HostResult> {
+  if (host.bundleBroken) return { ok: false, code: "foundation_bundle_invalid" }
   const command = host.executable ?? (await FoundationRuntime.command(host.runtime, host.runtimeOptions))
   const executable =
     host.runtime === "path" && !host.executable ? Bun.which(command[0], { PATH: process.env.PATH ?? "" }) : command[0]
