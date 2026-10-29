@@ -68,6 +68,8 @@ export function serverOptions(options: Options): ServerOptions {
     // cannot opt out of it, so this is not exposed as an option.
     events: { persist: true },
     config: { content: options.config?.content },
+    // The runtime is a child process; workerd cannot spawn one.
+    foundation: { enabled: false },
     models: options.models,
   }
 }

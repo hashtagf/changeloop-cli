@@ -90,6 +90,43 @@ describe("web UI", () => {
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   )
 
+  it.live("routes the experimental Foundation endpoints to the API instead of the web shell", () =>
+    Effect.gen(function* () {
+      const transform = yield* WebUi.handler({ assets: { "index.html": "<html><body>connect</body></html>" } })
+      const server = yield* ServerProcess.start<never, never>(
+        {
+          hostname: "127.0.0.1",
+          port: 0,
+          password: "secret",
+          database: { path: ":memory:" },
+          models: { fetch: false },
+          fs: { filewatcher: false },
+        },
+        undefined,
+        transform,
+      )
+      const origin = HttpServer.formatAddress(server.address)
+      const anonymous = yield* Effect.promise(() => fetch(new URL("/experimental/foundation/capability", origin)))
+      expect(anonymous.status).toBe(401)
+      expect(anonymous.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
+      yield* Effect.promise(() => anonymous.arrayBuffer())
+
+      const authorized = yield* Effect.promise(() =>
+        fetch(new URL("/experimental/foundation/capability", origin), {
+          headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+        }),
+      )
+      expect(authorized.status).toBe(200)
+      expect(authorized.headers.get("content-type")).toContain("application/json")
+      const body = (yield* Effect.promise(() => authorized.json())) as { data: { available: boolean } }
+      expect(typeof body.data.available).toBe("boolean")
+
+      const shell = yield* Effect.promise(() => fetch(new URL("/settings", origin)))
+      expect(shell.status).toBe(200)
+      expect(yield* Effect.promise(() => shell.text())).toContain("connect")
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+  )
+
   test("sends embedded brotli bytes as they are to browsers that accept them", async () => {
     const script = "console.log('compressed')".repeat(50)
     const html = "<html><body>compressed</body></html>"

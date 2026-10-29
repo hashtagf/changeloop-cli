@@ -33,6 +33,13 @@ export const ServerOptions = Schema.Struct({
       content: Schema.optional(Schema.String),
     }),
   ),
+  foundation: Schema.optional(
+    Schema.Struct({
+      // False answers every Foundation request as unsupported, for hosts that cannot spawn the runtime.
+      enabled: Schema.optional(Schema.Boolean),
+      runtime: Schema.optional(Schema.Literals(["bundled", "path"])),
+    }),
+  ),
   windows: Schema.optional(
     Schema.Struct({
       gitbash: Schema.optional(Schema.String),

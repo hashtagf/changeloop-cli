@@ -21,6 +21,8 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: {
         url.pathname === "/api" ||
         url.pathname.startsWith("/api/") ||
         url.pathname.startsWith("/auth/") ||
+        // The Foundation endpoints are published outside /api; the web shell must not answer for them.
+        url.pathname.startsWith("/experimental/") ||
         url.pathname === "/openapi.json"
       )
         return yield* api.pipe(

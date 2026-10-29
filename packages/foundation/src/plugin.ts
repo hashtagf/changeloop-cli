@@ -1,6 +1,6 @@
-/// <reference path="./virtual.d.ts" />
 import { define, type Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Option, Schema } from "effect"
+import { embeddedFiles, type Embedded, type Loader } from "./embedded-files.js"
 import { FoundationRuntime } from "./foundation-runtime.js"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
@@ -39,7 +39,7 @@ export type Options = {
   maxOutputBytes?: number
   timeoutMs?: number
   /** Replaces the dynamic import of the build-time embedded file map; exists for tests. */
-  loadEmbedded?: () => Promise<Record<string, string>>
+  loadEmbedded?: Loader
 }
 
 type Host = { directory: string; bundleBroken?: true } & Required<Pick<Options, "runtime">> &
@@ -122,27 +122,6 @@ export function make(base: Options = {}) {
       )
     }),
   })
-}
-
-type Embedded = { files?: Record<string, string>; broken?: true }
-
-// A build without the module (source run, tests) uses the vendored bundle; a module that exists but fails to load
-// is a broken release and must surface as foundation_bundle_invalid instead of silently falling back.
-function embeddedFiles(load?: Options["loadEmbedded"]): Promise<Embedded> {
-  return Promise.resolve()
-    .then(load ?? (() => import("virtual:opencode-foundation-files").then((module) => module.default)))
-    .then(
-      (files): Embedded => ({ files }),
-      (error): Embedded => (isModuleNotFound(error) ? {} : { broken: true }),
-    )
-}
-
-function isModuleNotFound(error: unknown) {
-  if (typeof error !== "object" || error === null) return false
-  return (
-    (error as { code?: unknown }).code === "ERR_MODULE_NOT_FOUND" ||
-    /Cannot find (module|package)/i.test(String((error as { message?: unknown }).message))
-  )
 }
 
 async function prompt(host: Host, command: CommandName, args: string) {

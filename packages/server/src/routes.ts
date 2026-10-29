@@ -10,8 +10,7 @@ import { EventLogger } from "@opencode/core/event-logger"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { CommandPreparation } from "@opencode/core/command-preparation"
 import { Credential } from "@opencode/core/credential"
-import { Foundation } from "@opencode/core/foundation"
-import { FoundationDocuments } from "@opencode/core/foundation-documents"
+import { FoundationLive } from "@opencode/core/foundation-live"
 import { Config } from "@opencode/core/config"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PtyTicket } from "@opencode/core/pty/ticket"
@@ -124,17 +123,11 @@ export const commandPreparationLayer = Layer.succeed(
   }),
 )
 
-const foundationUnsupported = Effect.fail(
-  new Foundation.ReadError("unsupported", "Foundation is not available on this server"),
-)
-
-const foundationLayer = Layer.mergeAll(
-  Layer.succeed(Foundation.Service, Foundation.Service.of({ read: () => foundationUnsupported })),
-  Layer.succeed(
-    FoundationDocuments.Service,
-    FoundationDocuments.Service.of({ index: () => foundationUnsupported, read: () => foundationUnsupported }),
-  ),
-)
+// Reads real project state through the embedded runtime; hosts that cannot spawn it opt out and answer unsupported.
+export const foundationLayer = (options: ServerOptions) =>
+  options.foundation?.enabled === false
+    ? FoundationLive.unsupported
+    : FoundationLive.layer({ runtime: options.foundation?.runtime })
 
 function makeRoutes<AuthError, AuthServices>(
   auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
@@ -206,7 +199,7 @@ function makeRoutes<AuthError, AuthServices>(
           )(context),
         ),
         ServerInfo.layer(serviceURLs, Context.get(context, Global.Service).tmp, options.app),
-      ).pipe(Layer.merge(commandPreparationLayer), Layer.merge(foundationLayer))
+      ).pipe(Layer.merge(commandPreparationLayer), Layer.merge(foundationLayer(options)))
       const api = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
         Layer.provide(handlers.pipe(Layer.provide(services), Layer.provide(Layer.succeed(CorsConfig, options)))),
         Layer.provide(formLocationLayer),

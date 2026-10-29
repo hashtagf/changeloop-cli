@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "layer-placement",
+      "choice": "ตัวอ่าน snapshot (spawn claude-foundation dashboard snapshot) อยู่ใน packages/foundation/src/foundation-webui.ts ส่วนตัวอ่านเอกสารและ layer ตัวจริงของทั้งสอง service อยู่ใน packages/core/src (foundation-document-reader.ts, foundation-live.ts)",
+      "reason": "Foundation.Service, FoundationDocuments.Service, ReadError, selection และ identifier นิยามใน core ซึ่งพึ่ง @opencode/foundation อยู่แล้ว (เฟส 3) ถ้าวาง layer ใน packages/foundation จะต้องพึ่ง core กลับและเกิด cycle ตัวอ่าน snapshot ผูกกับ FoundationRuntime ที่อยู่ใน foundation จึงอยู่ที่นั่นโดยมี error type ของตัวเอง ส่วนตัวอ่านเอกสารเป็นงานอ่านไฟล์ล้วน ผูกกับ schema และ ReadError ของ core จึงอยู่ใน core"
+    },
+    {
+      "id": "server-dependency-direction",
+      "choice": "server เลือก layer ตัวจริงจาก @opencode/core/foundation-live เท่านั้น ไม่เพิ่ม dependency ของ server ต่อ @opencode/foundation และเพิ่ม option foundation.enabled (ค่าเริ่มต้น true) ให้ server ที่ปิดได้ใช้ fallback unsupported เดิม; workerd ตั้ง enabled=false",
+      "reason": "server พึ่ง core อยู่แล้ว ผู้ผูกจึงอยู่ที่ core ตามที่ plugin builtin ทำ และไม่ต้องแก้ package.json/bun.lock workerd ไม่มี Bun.spawn ใช้ส่วนนี้ไม่ได้ จึงต้องคง fallback"
+    },
+    {
+      "id": "command-preparation",
+      "choice": "ไม่เพิ่ม CommandPreparation.Service ตัวจริง คง passthrough เดิมของ server",
+      "reason": "FoundationPlugin ลงทะเบียน 8 คำสั่งผ่าน command.transform และ ConfigCommandPlugin รวมคำสั่งจาก config เข้า Command.Service อยู่แล้ว ดังนั้น command.list ซึ่งส่งผ่าน CommandPreparation.list ได้คำสั่งครบแล้ว ส่วนตรรกะ list/prepare ของ v1 (รวม config กับ builtin และขยาย template) ซ้ำซ้อนกับ Command.Service ของ v2 และไม่มีผู้เรียก prepare ใน v2 จนกว่า session.command จะถูก port ซึ่งเป็นงานแยก"
+    },
+    {
+      "id": "runtime-selection",
+      "choice": "layer ตัวจริงใช้ runtime แบบ bundled เป็นค่าเริ่มต้น รับ option foundation.runtime (bundled|path) และอ่านไฟล์ฝังจาก virtual:opencode-foundation-files ผ่าน module ที่แยกจาก plugin",
+      "reason": "v1 อ่านค่า foundation_runtime จาก config แต่ v2 ย้ายค่านี้เป็น option ของ plugin ซึ่ง request-scoped service เข้าไม่ถึง จึงใช้ option ของ server เพื่อให้ test ชี้ไป executable จำลองได้ และ binary ใช้ bundle ที่ฝังตามเดิม"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase4-services-f",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-29T09:00:00.000Z",
+    "decisions": [
+      {
+        "id": "layer-placement",
+        "question": "layer ตัวจริงของ Foundation service วางที่ package ใด",
+        "answer": "snapshot reader ใน foundation, document reader และ layer ใน core เพื่อหลีกเลี่ยง cycle",
+        "source": "recommended-default"
+      },
+      {
+        "id": "server-dependency-direction",
+        "question": "server ผูก layer ตัวจริงอย่างไรโดยไม่เกิด cycle และยังมี fallback",
+        "answer": "server ใช้ layer จาก core ตามค่าเริ่มต้น ปิดได้ด้วย option foundation.enabled=false",
+        "source": "recommended-default"
+      },
+      {
+        "id": "command-preparation",
+        "question": "ยังจำเป็นต้องมี CommandPreparation ตัวจริงหรือไม่",
+        "answer": "ไม่จำเป็น คง passthrough เพราะ plugin ลงทะเบียนคำสั่งผ่าน command.transform",
+        "source": "recommended-default"
+      },
+      {
+        "id": "runtime-selection",
+        "question": "เลือก runtime ของ Foundation อย่างไรบน v2",
+        "answer": "bundled เป็นค่าเริ่มต้น เลือก path ได้ด้วย option ของ server",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}
