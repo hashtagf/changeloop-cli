@@ -7,6 +7,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { documentFailureKey, type DocumentReader } from "./document-reader"
 import { documentExcerpt } from "./document-excerpt"
 import { createDocumentRefresh, type DocumentState } from "./document-refresh"
+import { sectionForSlug } from "./markdown"
 import { DocumentMarkdown } from "./markdown-view"
 import type { ChangeItem } from "./reader"
 import { PAGE_SIZE } from "./reader"
@@ -100,6 +101,23 @@ export function DocumentWorkspace(props: {
 
     if (!body() || !anchor) return
     queueMicrotask(() => document.getElementById(anchor)?.scrollIntoView({ block: "start" }))
+  })
+
+  // A link to `other.md#heading` opens the document first and the heading once the document has loaded.
+  let pending: { id: string; slug: string } | undefined
+  const navigate = (id: string, fragment?: string) => {
+    pending = fragment ? { id, slug: fragment } : undefined
+    props.onSelect(id)
+  }
+
+  createEffect(() => {
+    const opened = body()
+
+    if (!pending || opened?.id !== pending.id) return
+    const section = sectionForSlug(opened.sections, pending.slug)
+    pending = undefined
+
+    if (section) props.onAnchor(section.id)
   })
 
   const excerpt = () => documentExcerpt(body(), props.anchor)
@@ -281,8 +299,10 @@ export function DocumentWorkspace(props: {
                           text={props.changeID ? value().text : excerpt().text}
                           sourcePath={value().sourcePath}
                           sections={props.changeID ? value().sections : excerpt().sections}
+                          targets={value().sections}
                           documents={state().page?.items ?? []}
-                          onNavigate={props.onSelect}
+                          onNavigate={navigate}
+                          onAnchor={props.onAnchor}
                         />
                       }
                     >
@@ -483,9 +503,12 @@ function NoteHeader(props: {
       <Show
         when={props.value.references.length}
         fallback={
-          <p class="my-5 rounded-md bg-v2-background-bg-layer-01 p-3 text-[12px] leading-5 text-v2-text-text-muted">
-            {language.t("changes.docs.refs.none")}
-          </p>
+          // A scan the server did not finish says so in the diagnostics, and "none found" would then be untrue.
+          <Show when={!props.value.diagnostics.length}>
+            <p class="my-5 rounded-md bg-v2-background-bg-layer-01 p-3 text-[12px] leading-5 text-v2-text-text-muted">
+              {language.t("changes.docs.refs.none")}
+            </p>
+          </Show>
         }
       >
         <nav

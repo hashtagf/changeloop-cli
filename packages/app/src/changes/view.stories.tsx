@@ -98,6 +98,7 @@ function Harness(props: {
         onSection={setSection}
         onPage={setPaged}
         onRefresh={() => {}}
+        onInvestigations={() => {}}
         onContinue={(item) => setDraft(`/${item.phase} ${item.id}`)}
       />
       <span data-slot="story-draft">{draft()}</span>

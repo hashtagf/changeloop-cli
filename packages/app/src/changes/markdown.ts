@@ -9,6 +9,28 @@ export type MarkdownInput = {
   documents: readonly { id: string; sourcePath: string }[]
   /** The server's sections of the text, which give the top-level headings their ids. */
   sections: readonly { id: string; title: string; line: number; level: number }[]
+  /**
+   * The sections a `#slug` link may point at. They default to `sections`; a focused excerpt of a longer note passes
+   * the whole note's sections so a link to a part outside the excerpt still resolves.
+   */
+  targets?: readonly { id: string; title: string; line: number; level: number }[]
+}
+
+type Section = NonNullable<MarkdownInput["targets"]>[number]
+
+/** The GitHub-style anchor of a heading: lower case, punctuation dropped, spaces as hyphens. */
+export function slugOf(title: string) {
+  return encodeURI(
+    title
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s-]/gu, "")
+      .replace(/\s+/g, "-"),
+  )
+}
+
+/** The section a `#slug` link points at: by its id, or by the slug of its title. */
+export function sectionForSlug<T extends Section>(sections: readonly T[], slug: string) {
+  return sections.find((item) => item.id === slug || slugOf(item.title) === slug)
 }
 
 const TAGS = [
@@ -40,7 +62,7 @@ const TAGS = [
   "span",
 ]
 
-const ATTRIBUTES = ["href", "id", "target", "rel", "data-document-id"]
+const ATTRIBUTES = ["href", "id", "target", "rel", "data-document-id", "data-fragment"]
 
 /**
  * Markdown as sanitized HTML. Raw HTML is shown as text, images are dropped, and a link survives only as an https link
@@ -75,21 +97,15 @@ export function renderMarkdown(input: MarkdownInput) {
               ? input.documents.find((item) => encodeURI(`/${item.sourcePath}`) === url.pathname)
               : undefined
 
-          if (item && !token.href.startsWith("#"))
-            return `<a href="#" data-document-id="${escape(item.id)}">${label}</a>`
+          if (item && !token.href.startsWith("#")) {
+            // The fragment travels with the link so the target document opens at that heading.
+            const fragment = url?.hash.slice(1)
+
+            return `<a href="#" data-document-id="${escape(item.id)}"${fragment ? ` data-fragment="${escape(fragment)}"` : ""}>${label}</a>`
+          }
 
           if (token.href.startsWith("#")) {
-            const slug = token.href.slice(1)
-            const section = input.sections.find(
-              (item) =>
-                item.id === slug ||
-                encodeURI(
-                  item.title
-                    .toLowerCase()
-                    .replace(/[^\p{L}\p{N}\s-]/gu, "")
-                    .replace(/\s+/g, "-"),
-                ) === slug,
-            )
+            const section = sectionForSlug(input.targets ?? input.sections, token.href.slice(1))
 
             if (section) return `<a href="#${escape(section.id)}">${label}</a>`
           }

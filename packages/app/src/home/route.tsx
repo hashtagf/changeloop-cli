@@ -29,6 +29,14 @@ export function Home() {
       <Show when={mobile()}>
         <div class="relative z-40 -mb-3 shrink-0 px-3 pt-3">
           <HomeProjects projects={projects} scroll={scroll} dropdown />
+          <HomeUtilityNav
+            class="mt-1 flex"
+            changesOnly
+            onOpenChanges={projects.utility.changes}
+            onOpenSettings={projects.utility.settings}
+            onOpenHelp={projects.utility.help}
+            language={projects.copy.language}
+          />
         </div>
       </Show>
       <ScrollView

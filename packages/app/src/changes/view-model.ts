@@ -56,6 +56,21 @@ export type ChangeSection = (typeof CHANGE_SECTIONS)[number]
 
 export const WORKFLOW = ["investigate", "change", "build", "prove", "land"] as const
 
+export type ChangeCategory = "investigations" | "active" | "archive"
+
+/**
+ * The category of the Changes screen. An explicit scope wins. Without one, a change in the address is read in the
+ * category it belongs to (archive once it is archived, else active; active until its status is known), and with no
+ * change the saved investigations are shown.
+ */
+export function categoryOf(input: { scope?: unknown; change?: string; status?: string }): ChangeCategory {
+  if (input.scope === "active" || input.scope === "archive") return input.scope
+
+  if (!input.change) return "investigations"
+
+  return input.status === "archived" ? "archive" : "active"
+}
+
 export function changeSection(value: unknown): ChangeSection {
   return CHANGE_SECTIONS.find((section) => section === value) ?? "overview"
 }

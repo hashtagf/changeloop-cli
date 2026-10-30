@@ -308,6 +308,8 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
 
 export function HomeUtilityNav(props: {
   class?: string
+  /** Shows only the Changes entry, for the narrow layout that has no room for the rest. */
+  changesOnly?: boolean
   onOpenChanges?: () => void
   onOpenSettings: () => void
   onOpenHelp: () => void
@@ -329,22 +331,24 @@ export function HomeUtilityNav(props: {
           </HomeProjectNavButton>
         )}
       </Show>
-      <HomeProjectNavButton
-        type="button"
-        class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
-        onClick={props.onOpenSettings}
-      >
-        <Icon name="settings-gear" size="small" />
-        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
-      </HomeProjectNavButton>
-      <HomeProjectNavButton
-        type="button"
-        class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
-        onClick={props.onOpenHelp}
-      >
-        <Icon name="help" size="small" />
-        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
-      </HomeProjectNavButton>
+      <Show when={!props.changesOnly}>
+        <HomeProjectNavButton
+          type="button"
+          class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+          onClick={props.onOpenSettings}
+        >
+          <Icon name="settings-gear" size="small" />
+          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
+        </HomeProjectNavButton>
+        <HomeProjectNavButton
+          type="button"
+          class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+          onClick={props.onOpenHelp}
+        >
+          <Icon name="help" size="small" />
+          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
+        </HomeProjectNavButton>
+      </Show>
     </div>
   )
 }

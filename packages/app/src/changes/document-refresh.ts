@@ -68,11 +68,35 @@ export function createDocumentRefresh(
           const selected = choose(current, result.data.items)
           setState((value) => ({ ...value, page: result.data, error: undefined, bodyError: undefined, stale: false }))
 
+          if (!selected && current.id) {
+            // The id may belong to another page of the index, so ask for it directly. Only a refusal means it is
+            // not there.
+            await reader
+              .read({ ...current, ...(current.changeID ? { documentID: current.id } : { investigationID: current.id }) }, abort.signal)
+              .then(
+                (body) => {
+                  if (token !== generation || disposed) return
+                  setState((value) => ({ ...value, document: body.data }))
+                },
+                (error: unknown) => {
+                  if (token !== generation || disposed) return
+                  const code = changesFailure(error)
+                  setState((value) => ({
+                    ...value,
+                    document: undefined,
+                    bodyError: code === "invalid_input" || code === "not_found" ? "document_not_found" : code,
+                  }))
+                },
+              )
+
+            return
+          }
+
           if (!selected) {
             setState((value) => ({
               ...value,
               document: undefined,
-              bodyError: current.id || current.changeID ? "document_not_found" : undefined,
+              bodyError: current.changeID ? "document_not_found" : undefined,
             }))
 
             return

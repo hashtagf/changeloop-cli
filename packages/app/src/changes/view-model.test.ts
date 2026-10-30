@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  categoryOf,
   changeSection,
   checklistCounts,
   currentStep,
@@ -59,6 +60,16 @@ describe("Changes view model", () => {
     expect(changeSection("tasks")).toBe("tasks")
     expect(changeSection("agreement")).toBe("overview")
     expect(changeSection(undefined)).toBe("overview")
+  })
+
+  test("the category follows an explicit scope, else the status of the change in the address, else the notes", () => {
+    expect(categoryOf({ change: "a", status: "archived" })).toBe("archive")
+    expect(categoryOf({ change: "a", status: "building" })).toBe("active")
+    expect(categoryOf({ change: "a" })).toBe("active")
+    expect(categoryOf({})).toBe("investigations")
+    expect(categoryOf({ scope: "bogus" })).toBe("investigations")
+    expect(categoryOf({ scope: "active", change: "a", status: "archived" })).toBe("active")
+    expect(categoryOf({ scope: "archive" })).toBe("archive")
   })
 
   test("each section opens its own file first", () => {

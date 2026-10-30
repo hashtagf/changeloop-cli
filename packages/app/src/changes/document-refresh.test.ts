@@ -32,6 +32,9 @@ const body = (metadata: Foundation.DocumentMetadata): Foundation.Document => ({
 
 const target: DocumentTarget = { server: "one", directory: "/one", changeID: "alpha", preferred: "proposal.md" }
 
+/** Documents the server has that are not on the page the index returned. */
+const elsewhere = [item("far", "far.md")]
+
 function harness(items = [item("p", "proposal.md"), item("d", "design.md")]) {
   const reads: DocumentTarget[] = []
   const indexes: { target: DocumentTarget; signal: AbortSignal; resolve: (value: Foundation.DocumentPage) => void }[] =
@@ -52,7 +55,12 @@ function harness(items = [item("p", "proposal.md"), item("d", "design.md")]) {
         reads.push(selection as DocumentTarget)
 
         if (readFailure) throw readFailure
-        const found = items.find((entry) => entry.id === (selection.documentID ?? selection.investigationID))!
+        const found =
+          items.find((entry) => entry.id === (selection.documentID ?? selection.investigationID)) ??
+          elsewhere.find((entry) => entry.id === (selection.documentID ?? selection.investigationID))
+
+        // A server refuses an id it does not know.
+        if (!found) throw { code: "invalid_input" }
 
         return { location: { directory: selection.directory } as never, data: body(found) }
       },
@@ -121,6 +129,32 @@ describe("Document refresh", () => {
     expect(h.refresh.state().bodyError).toBe("document_not_found")
     expect(h.refresh.state().document).toBeUndefined()
     expect(h.refresh.state().page?.items).toHaveLength(2)
+  })
+
+  test("an id that is not on the index page is read directly instead of reported missing", async () => {
+    const h = harness()
+    h.refresh.select({ ...target, id: "far" })
+    h.refresh.visibility(true)
+    await h.answer()
+
+    expect(h.refresh.state().document?.id).toBe("far")
+    expect(h.refresh.state().bodyError).toBeUndefined()
+    expect(h.refresh.state().page?.items).toHaveLength(2)
+  })
+
+  test("an id the server refuses is document_not_found and any other failure keeps its own code", async () => {
+    const refused = harness()
+    refused.refresh.select({ ...target, id: "nowhere" })
+    refused.refresh.visibility(true)
+    await refused.answer()
+    expect(refused.refresh.state().bodyError).toBe("document_not_found")
+
+    const failing = harness()
+    failing.failRead({ code: "timeout" })
+    failing.refresh.select({ ...target, id: "far" })
+    failing.refresh.visibility(true)
+    await failing.answer()
+    expect(failing.refresh.state().bodyError).toBe("timeout")
   })
 
   test("a body that cannot be read keeps the index and reports only the body failure", async () => {

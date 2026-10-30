@@ -42,7 +42,7 @@ const noteTwo = metadata("note-2", "openspec/investigations/auth.md", "Investiga
 const notes: Record<string, Foundation.Document> = {
   "note-1": body(
     noteOne,
-    "# Search options\n\n## Findings\nIndex on write. See [auth](auth.md).\n\n## Options\nScan on read.\n",
+    "# Search options\n\n## Findings\nIndex on write. See [auth](auth.md) and [options](#options).\n\n## Options\nScan on read.\n",
     {
       sections: [
         { id: "line-1", title: "Search options", line: 1, level: 1 },
@@ -70,7 +70,7 @@ const changeDocuments: Record<string, Foundation.Document> = {
       { id: "line-6", title: "Scope", line: 6, level: 2 },
     ],
   }),
-  d: body(design, "# Design\n\nSee the [tasks](tasks.md) and [outside](../../../etc/passwd).\n\n## Test plan\nCover search.\n", {
+  d: body(design, "# Design\n\nSee the [tasks](tasks.md), the [reason](proposal.md#why) and [outside](../../../etc/passwd).\n\n## Test plan\nCover search.\n", {
     sections: [
       { id: "line-1", title: "Design", line: 1, level: 1 },
       { id: "line-5", title: "Test plan", line: 5, level: 2 },

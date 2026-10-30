@@ -16,7 +16,7 @@ import { createDocumentReader } from "./document-reader"
 import { createChangesReader, type ChangeItem, type ChangeSelection } from "./reader"
 import { createChangesRefresh, type ChangesState } from "./refresh"
 import { ChangesHeading, ChangesView, type ChangeCategory } from "./view"
-import { changeSection, proposalTitle, type ChangeSection } from "./view-model"
+import { categoryOf, changeSection, proposalTitle, type ChangeSection } from "./view-model"
 import { DataSourcesButton, DocumentWorkspace } from "./workspace"
 
 const number = (value: unknown) => (typeof value === "string" && /^\d+$/.test(value) ? Number(value) : 0)
@@ -42,11 +42,18 @@ export function Changes() {
   const [draftError, setDraftError] = createSignal<string>()
   const [counts, setCounts] = createSignal<{ key: string; values: Counts }>()
   const [title, setTitle] = createSignal<{ key: string; value?: string }>()
+  // The lifecycle status of the selected change as last read, which places a link that names no scope.
+  const [status, setStatus] = createSignal<{ id: string; value: string }>()
 
   const connection = () => home.server.focused()
   const directory = () => home.selection.value().directory
+  // A link to a change without a scope opens it in the category it belongs to, once the read says which.
   const category = (): ChangeCategory =>
-    query.scope === "active" || query.scope === "archive" ? query.scope : "investigations"
+    categoryOf({
+      scope: query.scope,
+      change: text(query.change),
+      status: status()?.id === text(query.change) ? status()?.value : undefined,
+    })
   const section = (): ChangeSection => changeSection(query.section)
   const selection = createMemo<ChangeSelection | undefined>(() => {
     const conn = connection()
@@ -96,6 +103,17 @@ export function Changes() {
     },
     () => setQuery({ offset: undefined }, { replace: true }),
   )
+
+  createEffect(() => {
+    const detail = refresh.state().data?.detail
+
+    if (!detail || detail.id !== text(untrack(() => query.change))) return
+    setStatus({ id: detail.id, value: detail.status })
+
+    // Write the category the link did not name into the address, so back and forward keep it.
+    if (!untrack(() => query.scope))
+      setQuery({ scope: detail.status === "archived" ? "archive" : "active" }, { replace: true })
+  })
 
   const visible = () => document.visibilityState !== "hidden"
   const active = () => !!selection() && category() !== "investigations" && visible()

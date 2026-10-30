@@ -62,7 +62,7 @@ export function WorkflowTrack(props: { phase?: string; onInvestigations?: () => 
             >
               <button
                 type="button"
-                class="flex-1 px-1.5 py-3 text-left hover:text-v2-text-text-base focus-visible:outline-2"
+                class="flex-1 whitespace-nowrap px-1.5 py-3 text-left hover:text-v2-text-text-base focus-visible:outline-2"
                 onClick={props.onInvestigations}
               >
                 {language.t("changes.workflow.investigate.open")}
@@ -109,7 +109,7 @@ export function ChangesHeading(props: {
           {language.t("changes.new")}
         </Button>
       </div>
-      <WorkflowTrack />
+      <WorkflowTrack phase={props.scope === "investigations" ? "investigate" : undefined} />
       <input
         type="search"
         aria-label={searchLabel()}
@@ -126,7 +126,7 @@ export function ChangesHeading(props: {
                 type="button"
                 aria-pressed={scope === props.scope}
                 onClick={() => props.onScope(scope)}
-                class="border-b-2 border-transparent py-2 text-[12px] leading-[18px] text-v2-text-text-muted focus-visible:outline-2"
+                class="border-b-2 border-transparent py-2 text-[13px] leading-[18px] text-v2-text-text-muted focus-visible:outline-2"
                 classList={{ "!border-v2-text-text-base !text-v2-text-text-base": scope === props.scope }}
               >
                 {props.counts[scope] === undefined
@@ -327,7 +327,7 @@ function ChangeDetails(props: {
         {(props.title || props.item.title || props.item.id).replace(/^Change:\s*/i, "")}
       </h1>
       <div class="mb-5 flex flex-wrap items-center gap-3 text-[12px] leading-[16px] text-v2-text-text-muted">
-        <span>{props.item.status}</span>
+        <span class="rounded bg-v2-background-bg-layer-02 px-1.5 py-0.5">{props.item.status}</span>
         <span>{language.t("changes.detail.updated", { time: sourceTime(props.item.updatedAt) ?? unavailable() })}</span>
         <span class="ml-auto">{props.tools}</span>
       </div>

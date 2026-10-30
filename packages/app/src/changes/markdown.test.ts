@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { renderMarkdown } from "./markdown"
+import { renderMarkdown, sectionForSlug, slugOf } from "./markdown"
 
 const documents = [
   { id: "design", sourcePath: "openspec/changes/alpha/design.md" },
@@ -79,6 +79,39 @@ describe("safe Markdown", () => {
     expect(root.querySelector("a")?.getAttribute("href")).toBe("#line-5")
     expect(root.textContent).toContain("none")
     expect(root.querySelectorAll("a")).toHaveLength(1)
+  })
+
+  test("a #slug link to a part of the note outside the focused excerpt resolves through the whole note", () => {
+    const excerpt = [{ id: "line-3", title: "Findings", line: 3, level: 2 }]
+    const whole = [...excerpt, { id: "line-9", title: "Options", line: 9, level: 2 }]
+    const root = document.createElement("div")
+    root.innerHTML = renderMarkdown({
+      text: LEAD + "## Findings\n\nSee [options](#options) and [none](#missing).",
+      sourcePath: "openspec/investigations/note.md",
+      documents,
+      sections: excerpt,
+      targets: whole,
+    })
+
+    expect(root.querySelector("a")?.getAttribute("href")).toBe("#line-9")
+    expect(root.querySelectorAll("a")).toHaveLength(1)
+    expect(root.textContent).toContain("link unavailable")
+  })
+
+  test("a link to another document keeps its fragment and the slug names the section", () => {
+    const link = render("[why](design.md#why-now)").querySelector("a")
+    expect(link?.getAttribute("data-document-id")).toBe("design")
+    expect(link?.getAttribute("data-fragment")).toBe("why-now")
+    expect(render("[plain](design.md)").querySelector("a")?.hasAttribute("data-fragment")).toBe(false)
+
+    const sections = [
+      { id: "line-1", title: "Design", line: 1, level: 1 },
+      { id: "line-3", title: "Why now", line: 3, level: 2 },
+    ]
+    expect(sectionForSlug(sections, "why-now")?.id).toBe("line-3")
+    expect(sectionForSlug(sections, "line-1")?.title).toBe("Design")
+    expect(sectionForSlug(sections, "missing")).toBeUndefined()
+    expect(slugOf("Why, now?")).toBe("why-now")
   })
 
   test("attributes outside the allowlist never reach the output", () => {

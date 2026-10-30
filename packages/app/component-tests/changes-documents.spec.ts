@@ -44,6 +44,30 @@ story("opens a note in its own reader with section navigation and a focused exce
   await expect(view.locator("pre")).toContainText("# Search options")
 })
 
+story("follows a link to another part of the note by switching the excerpt", async ({ mount }) => {
+  const view = await mount("app-changes-workspace--note-reader")
+  const markdown = view.locator('[data-component="document-markdown"]')
+
+  await expect(markdown).not.toContainText("Scan on read")
+  await markdown.getByRole("link", { name: "options" }).click()
+  await expect(markdown).toContainText("Scan on read")
+  await expect(view.getByRole("navigation", { name: "Document sections" }).getByRole("button", { name: "Options" })).toHaveAttribute(
+    "aria-current",
+    "location",
+  )
+})
+
+story("opens another document at the heading a link names", async ({ mount }) => {
+  const view = await mount("app-changes-workspace--documents")
+
+  await view.getByRole("navigation", { name: "Source documents" }).getByRole("button", { name: "design.md" }).click()
+  await view.locator('[data-component="document-markdown"]').getByRole("link", { name: "reason" }).click()
+  await expect(view.getByText("Source: openspec/changes/alpha/proposal.md")).toBeVisible()
+  // The heading the fragment names is the one scrolled to; its id is the server's section id.
+  await expect(view.locator('[data-component="document-markdown"] h2#line-3')).toHaveText("Why")
+  await expect(view.locator('[data-component="document-markdown"] h2#line-3')).toBeInViewport()
+})
+
 story("follows an exact change reference and says when a note has none", async ({ mount }) => {
   const view = await mount("app-changes-workspace--note-reader")
 

@@ -558,6 +558,7 @@ export const dict = {
   "session.tabs.closed.search": "Search recently closed",
   "session.tabs.closed.empty": "No recently closed sessions",
   "home.server.collapse": "Collapse server projects",
+  "brand.name": "Changeloop",
   "changes.title": "Changes",
   "changes.noProject": "Choose a project from Home to view its changes.",
   "changes.list.label": "Project changes",
