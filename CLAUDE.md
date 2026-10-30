@@ -30,10 +30,26 @@ compatibility composition that stops after proof.
 3. Verify จาก PATH จริง: `changeloop --version` ต้องเป็น build ใหม่,
    `changeloop --help` ต้องไม่มีคำว่า OpenCode, และ smoke ด้วย `changeloop
    serve` (ใช้ HOME/XDG ชั่วคราว): `/` ตอบหน้าเว็บ, `/experimental/foundation/capability`
-   ตอบ `available:true`, `/api/command` มีคำสั่ง Foundation ครบ 8 ตัว
-   (หลัง server เริ่ม plugin ใช้เวลา activate ราว 5-10 วินาที ครั้งแรกอาจ
-   ว่าง) ปิด server ที่เปิดเองหลังทดสอบ
+   ตอบ `available:true`, `/api/command` มีคำสั่ง Foundation ครบ 8 ตัวใน
+   การเรียกครั้งแรก (endpoint รอ plugin activate แล้ว ถ้าเกิน 5 วินาทีตอบ 503)
+   ปิด server ที่เปิดเองหลังทดสอบ
 4. รายงานผู้ใช้: เวอร์ชัน, สิ่งที่เปลี่ยน, สถานะ git (push ต้องขออนุญาตแยก)
+
+## การรัน test
+
+อย่ารัน `bun test` เปล่าๆ ใน package ที่มี UI ใช้สคริปต์ของ package นั้น:
+
+- `bun run --cwd packages/app test:unit` และ `test:browser` (สคริปต์ใส่
+  `--preload ../ui/test/solid-jsx.ts` และ `--conditions=solid`/`browser`
+  ที่จำเป็นต่อการ render JSX; ถ้าไม่มีจะล้มด้วย `jsxDEV not found`)
+- `bun run --cwd packages/ui test`
+- package อื่น: `bun test --cwd packages/<pkg>` (bunfig ราก ห้ามรัน test จากราก)
+- `bun --cwd X run Y` ไม่รันสคริปต์ มันแค่แสดงรายการสคริปต์แล้ว exit 0 ใช้
+  `bun run --cwd X Y` เสมอ โดยเฉพาะใน verify ของ task
+
+ที่ล้มอยู่แล้วบน upstream v2.2.0 ในเครื่องนี้ (ไม่ใช่ของ fork): cli
+`acp additional directories subprocess` และ `acp prompt content subprocess`,
+tui `go-upsell-art` "the art stops every frame"
 
 ข้อควรระวังจาก sandbox ของ harness: `bun install` ใน sandbox จะแก้
 `bun.lock` แล้วทำให้ land ติด conflict/stale-proof — ก่อน prove รอบสุดท้าย
