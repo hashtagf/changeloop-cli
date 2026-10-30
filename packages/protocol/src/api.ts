@@ -202,7 +202,7 @@ const makeApiFromGroup = <
     .add(FoundationGroup.middleware(locationMiddleware))
     .annotateMerge(
       OpenApi.annotations({
-        title: "opencode HttpApi",
+        title: "Changeloop HttpApi",
         version: "0.0.1",
         description: "Experimental HttpApi surface for selected instance routes.",
       }),

@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Deferred, Effect } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
@@ -209,7 +209,7 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
 
     const reused = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
     expect(reused.status).toBe(401)
-    expect(yield* Effect.promise(() => reused.text())).toContain("opencode pair")
+    expect(yield* Effect.promise(() => reused.text())).toContain("`changeloop pair`")
 
     expect((yield* request("/api/info", { headers: { cookie } })).status).toBe(200)
     expect((yield* request("/api/info", { headers: { cookie, origin: base } })).status).toBe(200)
@@ -226,6 +226,39 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     ).toBe(200)
     expect((yield* request(`/auth/connect/${client.code}`)).status).toBe(401)
     expect((yield* request("/auth/connect/unknown")).status).toBe(401)
+  }),
+)
+
+it.live("a background service that failed to boot tells the user to run `changeloop service restart`", () =>
+  Effect.gen(function* () {
+    const listening = yield* Deferred.make<string>()
+    yield* ServerProcess.start<never, never>(
+      // The database cannot be opened, so boot fails and the service reports it instead of exiting.
+      { hostname: "127.0.0.1", port: 0, password: "secret", database: { path: "/dev/null/changeloop.db" } },
+      {
+        onListen: (address) =>
+          Deferred.succeed(listening, HttpServer.formatAddress(address)).pipe(Effect.as(Effect.void)),
+      },
+    ).pipe(Effect.forkScoped)
+    const base = yield* Deferred.await(listening)
+    const ask = () =>
+      Effect.promise(() =>
+        fetch(new URL("/api/session", base), { headers: { authorization: `Basic ${btoa("opencode:secret")}` } }).then(
+          async (response) => ({ status: response.status, body: await response.text() }),
+        ),
+      )
+
+    let result = yield* ask()
+    for (let attempt = 0; attempt < 50 && !result.body.includes("service_failed"); attempt++) {
+      yield* Effect.sleep("100 millis")
+      result = yield* ask()
+    }
+
+    expect(result.status).toBe(503)
+    const body = JSON.parse(result.body) as { code: string; action: string }
+    expect(body.code).toBe("service_failed")
+    expect(body.action).toContain("`changeloop service restart`")
+    expect(body.action).not.toContain("opencode")
   }),
 )
 
