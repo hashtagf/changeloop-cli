@@ -23,27 +23,51 @@ export function sourceTime(value?: string | null) {
     : date.toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
 }
 
-export function WorkflowTrack(props: { phase?: string }) {
+/**
+ * The Foundation workflow strip. On a change (`onInvestigations` given) it is the underlined tab-style strip whose
+ * first step returns to the saved investigations; on the list it is the plain arrow strip.
+ */
+export function WorkflowTrack(props: { phase?: string; onInvestigations?: () => void }) {
   const language = useLanguage()
 
   return (
     <nav
       aria-label={language.t("changes.workflow.label")}
       class="mb-5 flex flex-wrap items-center gap-2 text-[12px] leading-[18px] text-v2-text-text-muted"
+      classList={{ "!mb-6 !gap-0 border-b border-v2-border-border-base": !!props.onInvestigations }}
     >
       <For each={WORKFLOW}>
         {(phase, index) => (
           <>
-            <Show when={index() > 0}>
+            <Show when={index() > 0 && !props.onInvestigations}>
               <span aria-hidden="true">→</span>
             </Show>
-            <span
-              class="px-1 py-1"
-              classList={{ "text-v2-text-text-base [font-weight:530]": currentStep(props.phase, phase) }}
-              aria-current={currentStep(props.phase, phase) ? "step" : undefined}
+            <Show
+              when={phase === "investigate" && props.onInvestigations}
+              fallback={
+                <span
+                  class="px-1 py-1"
+                  classList={{
+                    "flex-1 border-b-2 border-transparent px-1.5 !py-3": !!props.onInvestigations,
+                    "!border-v2-text-text-base text-v2-text-text-base [font-weight:530]": currentStep(
+                      props.phase,
+                      phase,
+                    ),
+                  }}
+                  aria-current={currentStep(props.phase, phase) ? "step" : undefined}
+                >
+                  {language.t(`changes.workflow.${phase}`)}
+                </span>
+              }
             >
-              {language.t(`changes.workflow.${phase}`)}
-            </span>
+              <button
+                type="button"
+                class="flex-1 px-1.5 py-3 text-left hover:text-v2-text-text-base focus-visible:outline-2"
+                onClick={props.onInvestigations}
+              >
+                {language.t("changes.workflow.investigate.open")}
+              </button>
+            </Show>
           </>
         )}
       </For>
@@ -51,16 +75,23 @@ export function WorkflowTrack(props: { phase?: string }) {
   )
 }
 
+export type ChangeCategory = "investigations" | ChangeSelection["scope"]
+
 export function ChangesHeading(props: {
   project: string
-  scope: ChangeSelection["scope"]
+  scope: ChangeCategory
   search: string
-  onScope: (scope: ChangeSelection["scope"]) => void
+  /** The number of entries of each category, or undefined while unknown. */
+  counts: Partial<Record<ChangeCategory, number>>
+  onScope: (scope: ChangeCategory) => void
   onSearch: (search: string) => void
   onNew: () => void
   pending?: boolean
+  tools?: JSX.Element
 }) {
   const language = useLanguage()
+  const searchLabel = () =>
+    language.t(props.scope === "investigations" ? "changes.search.investigations" : "changes.search")
 
   return (
     <header data-component="changes-heading">
@@ -81,27 +112,35 @@ export function ChangesHeading(props: {
       <WorkflowTrack />
       <input
         type="search"
-        aria-label={language.t("changes.search")}
-        placeholder={language.t("changes.search")}
+        aria-label={searchLabel()}
+        placeholder={searchLabel()}
         value={props.search}
         onInput={(event) => props.onSearch(event.currentTarget.value)}
         class="mb-4 h-9 w-full min-w-0 rounded-[6px] bg-v2-background-bg-layer-01 px-3 text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
       />
-      <nav aria-label={language.t("changes.scope.label")} class="mb-1.5 flex gap-4">
-        <For each={["active", "archive"] as const}>
-          {(scope) => (
-            <button
-              type="button"
-              aria-pressed={scope === props.scope}
-              onClick={() => props.onScope(scope)}
-              class="border-b-2 border-transparent py-2 text-[12px] leading-[18px] text-v2-text-text-muted focus-visible:outline-2"
-              classList={{ "!border-v2-text-text-base !text-v2-text-text-base": scope === props.scope }}
-            >
-              {language.t(`changes.scope.${scope}`)}
-            </button>
-          )}
-        </For>
-      </nav>
+      <div class="mb-1.5 flex flex-wrap items-center justify-between gap-x-3">
+        <nav aria-label={language.t("changes.scope.label")} class="flex gap-4">
+          <For each={["investigations", "active", "archive"] as const}>
+            {(scope) => (
+              <button
+                type="button"
+                aria-pressed={scope === props.scope}
+                onClick={() => props.onScope(scope)}
+                class="border-b-2 border-transparent py-2 text-[12px] leading-[18px] text-v2-text-text-muted focus-visible:outline-2"
+                classList={{ "!border-v2-text-text-base !text-v2-text-text-base": scope === props.scope }}
+              >
+                {props.counts[scope] === undefined
+                  ? language.t("changes.scope.countUnavailable", { label: language.t(`changes.scope.${scope}`) })
+                  : language.t("changes.scope.count", {
+                      label: language.t(`changes.scope.${scope}`),
+                      count: props.counts[scope],
+                    })}
+              </button>
+            )}
+          </For>
+        </nav>
+        {props.tools}
+      </div>
     </header>
   )
 }
@@ -116,8 +155,15 @@ export function ChangesView(props: {
   onPage: (offset: number) => void
   onRefresh: () => void
   onContinue: (item: ChangeItem) => void
+  onInvestigations?: () => void
   draftPending?: boolean
   draftError?: string
+  /** The readable title from the proposal, when it could be read. */
+  title?: string
+  /** The change's document workspace, shown inside the detail and alone when the snapshot has no such change. */
+  documents?: JSX.Element
+  /** Page-level tools, such as the data sources dialog, shown beside the change status. */
+  tools?: JSX.Element
 }) {
   const language = useLanguage()
   const page = () => props.state.data?.data
@@ -164,12 +210,16 @@ export function ChangesView(props: {
                   {(item) => (
                     <ChangeDetails
                       item={item()}
+                      title={props.title}
                       section={props.section}
                       onSection={props.onSection}
+                      onInvestigations={props.onInvestigations}
                       onBack={() => props.onSelect()}
                       onContinue={() => props.onContinue(item())}
                       draftPending={props.draftPending}
                       draftError={props.draftError}
+                      documents={props.documents}
+                      tools={props.tools}
                     />
                   )}
                 </Show>
@@ -245,18 +295,23 @@ export function ChangesView(props: {
           </>
         )}
       </Show>
+      <Show when={props.selection.changeID && !detail()}>{props.documents}</Show>
     </section>
   )
 }
 
 function ChangeDetails(props: {
   item: ChangeItem
+  title?: string
   section: ChangeSection
   onSection: (section: ChangeSection) => void
+  onInvestigations?: () => void
   onBack: () => void
   onContinue: () => void
   draftPending?: boolean
   draftError?: string
+  documents?: JSX.Element
+  tools?: JSX.Element
 }) {
   const language = useLanguage()
   const unavailable = () => language.t("changes.unavailable")
@@ -269,13 +324,14 @@ function ChangeDetails(props: {
       </Button>
       <p class="mb-2 mt-5 break-words text-[12px] leading-[16px] text-v2-text-text-muted">{props.item.id}</p>
       <h1 class="mb-3 break-words text-[20px] leading-[28px] [font-weight:530]">
-        {(props.item.title || props.item.id).replace(/^Change:\s*/i, "")}
+        {(props.title || props.item.title || props.item.id).replace(/^Change:\s*/i, "")}
       </h1>
       <div class="mb-5 flex flex-wrap items-center gap-3 text-[12px] leading-[16px] text-v2-text-text-muted">
         <span>{props.item.status}</span>
         <span>{language.t("changes.detail.updated", { time: sourceTime(props.item.updatedAt) ?? unavailable() })}</span>
+        <span class="ml-auto">{props.tools}</span>
       </div>
-      <WorkflowTrack phase={props.item.phase} />
+      <WorkflowTrack phase={props.item.phase} onInvestigations={props.onInvestigations} />
       <nav
         class="mb-6 flex gap-5 overflow-x-auto whitespace-nowrap border-b border-v2-border-border-base"
         aria-label={language.t("changes.detail.label")}
@@ -306,7 +362,7 @@ function ChangeDetails(props: {
         </For>
       </nav>
       <Switch>
-        <Match when={props.section === "overview"}>
+        <Match when={props.section === "overview" && !props.documents}>
           <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-3">
             <dt>{language.t("changes.fact.phase")}</dt>
             <dd>{value(props.item.phase)}</dd>
@@ -381,6 +437,7 @@ function ChangeDetails(props: {
           <p class="mt-5 text-[12px] leading-[16px] text-v2-text-text-muted">{language.t("changes.usage.source")}</p>
         </Match>
       </Switch>
+      <Show when={props.section !== "usage"}>{props.documents}</Show>
       <footer class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-v2-border-border-base pt-5">
         <div>
           <h2 class="mb-2 [font-weight:530]">{language.t("changes.continue.title")}</h2>

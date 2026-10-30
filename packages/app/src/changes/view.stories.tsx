@@ -85,7 +85,8 @@ function Harness(props: {
             project="project"
             scope={scope()}
             search={props.search ?? ""}
-            onScope={setScope}
+            counts={{ active: 2, archive: 14 }}
+            onScope={(next) => next !== "investigations" && setScope(next)}
             onSearch={() => {}}
             onNew={() => {}}
           />

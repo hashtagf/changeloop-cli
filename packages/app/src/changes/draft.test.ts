@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { changeDraft, investigateDraft } from "./draft"
+import { changeDraft, investigateDraft, noteDraft } from "./draft"
 import type { ChangeItem } from "./reader"
 
 const item = (input: Partial<ChangeItem>): ChangeItem => ({
@@ -30,6 +30,14 @@ describe("Changes draft handoff", () => {
   test("drafts nothing when the project has neither the phase command nor the history command", () => {
     expect(changeDraft(item({ phase: "build" }), commands("investigate"))).toBeUndefined()
     expect(changeDraft(item({ phase: "build" }), [])).toBeUndefined()
+  })
+
+  test("continues a saved note with its source path, only when the command exists", () => {
+    const source = "openspec/investigations/note.md"
+
+    expect(noteDraft("investigate", source, commands("investigate", "change"))).toBe(`/investigate ${source}`)
+    expect(noteDraft("change", source, commands("investigate", "change"))).toBe(`/change ${source}`)
+    expect(noteDraft("change", source, commands("investigate"))).toBeUndefined()
   })
 
   test("starts an investigation only when that command exists", () => {

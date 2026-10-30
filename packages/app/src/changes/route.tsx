@@ -1,7 +1,7 @@
 import { useSearchParams } from "@solidjs/router"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { createMediaQuery } from "@solid-primitives/media"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createHomeController } from "@/home/model"
 import { createHomeProjectsController } from "@/home/projects/controller"
 import { HomeProjects } from "@/home/projects/region"
@@ -11,15 +11,19 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
-import { changeDraft, investigateDraft } from "./draft"
+import { changeDraft, investigateDraft, noteDraft } from "./draft"
+import { createDocumentReader } from "./document-reader"
 import { createChangesReader, type ChangeItem, type ChangeSelection } from "./reader"
 import { createChangesRefresh, type ChangesState } from "./refresh"
-import { ChangesHeading, ChangesView } from "./view"
-import { changeSection } from "./view-model"
+import { ChangesHeading, ChangesView, type ChangeCategory } from "./view"
+import { changeSection, proposalTitle, type ChangeSection } from "./view-model"
+import { DataSourcesButton, DocumentWorkspace } from "./workspace"
 
 const number = (value: unknown) => (typeof value === "string" && /^\d+$/.test(value) ? Number(value) : 0)
 
 const text = (value: unknown) => (typeof value === "string" ? value : undefined)
+
+type Counts = Partial<Record<ChangeCategory, number>>
 
 /**
  * The Changes screen. The server and project come from the Home selection, so a project chosen in the Projects
@@ -36,10 +40,14 @@ export function Changes() {
   const scroll = createHomeScrollController(() => [])
   const [draftPending, setDraftPending] = createSignal(false)
   const [draftError, setDraftError] = createSignal<string>()
+  const [counts, setCounts] = createSignal<{ key: string; values: Counts }>()
+  const [title, setTitle] = createSignal<{ key: string; value?: string }>()
 
   const connection = () => home.server.focused()
   const directory = () => home.selection.value().directory
-  const scope = () => (query.scope === "archive" ? "archive" : "active")
+  const category = (): ChangeCategory =>
+    query.scope === "active" || query.scope === "archive" ? query.scope : "investigations"
+  const section = (): ChangeSection => changeSection(query.section)
   const selection = createMemo<ChangeSelection | undefined>(() => {
     const conn = connection()
     const dir = directory()
@@ -49,17 +57,28 @@ export function Changes() {
     return {
       server: ServerConnection.key(conn),
       directory: dir,
-      scope: scope(),
+      scope: category() === "archive" ? "archive" : "active",
       search: text(query.search) ?? "",
       offset: number(query.offset),
       changeID: text(query.change),
     }
   })
+  const projectKey = () => `${selection()?.server}\0${selection()?.directory}`
 
-  const reader = createMemo(() => {
+  const api = createMemo(() => {
     const conn = connection()
 
-    return conn ? createChangesReader(global.ensureServerCtx(conn).sdk.api.foundation) : undefined
+    return conn ? global.ensureServerCtx(conn).sdk.api.foundation : undefined
+  })
+  const reader = createMemo(() => {
+    const foundation = api()
+
+    return foundation ? createChangesReader(foundation) : undefined
+  })
+  const documents = createMemo(() => {
+    const foundation = api()
+
+    return foundation ? createDocumentReader(foundation) : undefined
   })
 
   const refresh = createChangesRefresh(
@@ -79,17 +98,18 @@ export function Changes() {
   )
 
   const visible = () => document.visibilityState !== "hidden"
+  const active = () => !!selection() && category() !== "investigations" && visible()
 
   createEffect(() => {
     const value = selection()
 
-    refresh.visibility(!!value && visible())
+    refresh.visibility(active())
 
-    if (value) refresh.select(value)
+    if (value && category() !== "investigations") refresh.select(value)
   })
 
   onMount(() => {
-    const onVisible = () => refresh.visibility(!!selection() && visible())
+    const onVisible = () => refresh.visibility(active())
     const onFocus = () => void refresh.focus()
     document.addEventListener("visibilitychange", onVisible)
     window.addEventListener("focus", onFocus)
@@ -110,6 +130,75 @@ export function Changes() {
       : { loading: !!value, stale: false }
   })
 
+  // The number of entries of each category. A category that cannot be counted stays unknown rather than zero.
+  let countRun = 0
+  const loadCounts = () => {
+    // Counting follows the project, not each search or page of the list.
+    const value = untrack(selection)
+    const read = untrack(reader)
+    const notes = untrack(documents)
+    const key = untrack(projectKey)
+
+    if (!value || !read || !notes) return
+    const run = ++countRun
+    const abort = new AbortController()
+    onCleanup(() => abort.abort())
+    void Promise.allSettled([
+      notes.index({ directory: value.directory }, abort.signal).then((result) => result.data.total),
+      ...(["active", "archive"] as const).map((scope) =>
+        read({ server: value.server, directory: value.directory, scope, search: "", offset: 0 }, abort.signal).then(
+          (result) => result.data.total,
+        ),
+      ),
+    ]).then((results) => {
+      if (run !== countRun) return
+      const categories = ["investigations", "active", "archive"] as const
+      setCounts({
+        key,
+        values: Object.fromEntries(
+          results.flatMap((result, index) => (result.status === "fulfilled" ? [[categories[index], result.value]] : [])),
+        ),
+      })
+    })
+  }
+  createEffect(() => {
+    projectKey()
+    loadCounts()
+  })
+
+  // The readable title of the selected change, from the heading of its proposal.
+  let titleRun = 0
+  const loadTitle = () => {
+    const value = untrack(selection)
+    const notes = untrack(documents)
+    const key = `${untrack(projectKey)}\0${value?.changeID}`
+
+    if (!value?.changeID || !notes) return
+    const changeID = value.changeID
+    const run = ++titleRun
+    const abort = new AbortController()
+    onCleanup(() => abort.abort())
+    void notes
+      .index({ directory: value.directory, changeID }, abort.signal)
+      .then((page) => {
+        const proposal = page.data.items.find((item) => item.sourcePath.endsWith("/proposal.md"))
+
+        return proposal
+          ? notes.read({ directory: value.directory, changeID, documentID: proposal.id }, abort.signal)
+          : undefined
+      })
+      .then((result) => result && proposalTitle(result.data.sections))
+      .catch(() => undefined)
+      .then((resolved) => {
+        if (run === titleRun) setTitle({ key, value: resolved || undefined })
+      })
+  }
+  createEffect(() => {
+    projectKey()
+    selection()?.changeID
+    loadTitle()
+  })
+
   const projectName = () => {
     const dir = directory() ?? ""
 
@@ -122,7 +211,7 @@ export function Changes() {
     void refresh.refresh()
   }
 
-  const openDraft = async (item?: ChangeItem) => {
+  const openDraft = async (item?: ChangeItem, note?: { command: "investigate" | "change"; source: string }) => {
     const conn = connection()
     const target = selection()
 
@@ -137,7 +226,11 @@ export function Changes() {
 
       // The project or server changed while the commands loaded.
       if (selection()?.server !== target.server || selection()?.directory !== target.directory) return
-      const prompt = item ? changeDraft(item, commands) : investigateDraft(commands)
+      const prompt = note
+        ? noteDraft(note.command, note.source, commands)
+        : item
+          ? changeDraft(item, commands)
+          : investigateDraft(commands)
 
       if (!prompt) return setDraftError(language.t("changes.draft.unavailable"))
       global.ensureServerCtx(conn).projects.touch(target.directory)
@@ -149,8 +242,78 @@ export function Changes() {
     }
   }
 
-  const setScope = (next: "active" | "archive") =>
-    setQuery({ scope: next, change: undefined, section: undefined, search: undefined, offset: undefined })
+  const setCategory = (next: ChangeCategory) =>
+    setQuery({
+      scope: next,
+      change: undefined,
+      investigation: undefined,
+      document: undefined,
+      anchor: undefined,
+      section: undefined,
+      search: undefined,
+      offset: undefined,
+      documentOffset: undefined,
+    })
+
+  const search = (value: string) =>
+    setQuery({ search: value || undefined, offset: undefined, change: undefined, investigation: undefined }, { replace: true })
+
+  const heading = (value: ChangeSelection) => (
+    <ChangesHeading
+      project={projectName()}
+      scope={category()}
+      search={value.search}
+      counts={counts()?.key === projectKey() ? (counts()?.values ?? {}) : {}}
+      onScope={setCategory}
+      onSearch={search}
+      onNew={() => void openDraft()}
+      pending={draftPending()}
+      tools={<DataSourcesButton />}
+    />
+  )
+
+  const workspace = (value: ChangeSelection, notes: boolean) => (
+    <Show when={documents()}>
+      {(reader) => (
+        <DocumentWorkspace
+          reader={reader()}
+          server={value.server}
+          directory={value.directory}
+          changeID={notes ? undefined : value.changeID}
+          item={notes ? undefined : (state().data?.detail ?? state().data?.data.items.find((item) => item.id === value.changeID))}
+          id={text(notes ? query.investigation : query.document)}
+          section={notes ? undefined : section()}
+          anchor={text(query.anchor)}
+          search={value.search}
+          offset={notes ? value.offset : number(query.documentOffset)}
+          onSection={(next) => setQuery({ section: next, document: undefined, anchor: undefined })}
+          onRefreshed={() => {
+            loadCounts()
+            loadTitle()
+          }}
+          onSelect={(id) => setQuery({ [notes ? "investigation" : "document"]: id, anchor: undefined })}
+          onAnchor={(anchor) => setQuery({ anchor })}
+          onPage={(offset) => setQuery({ [notes ? "offset" : "documentOffset"]: offset || undefined })}
+          onReference={(change, archived) =>
+            setQuery({
+              scope: archived ? "archive" : "active",
+              change,
+              section: "documents",
+              investigation: undefined,
+              document: undefined,
+              anchor: undefined,
+              search: undefined,
+              offset: undefined,
+              documentOffset: undefined,
+            })
+          }
+          onDraft={(command, source) => void openDraft(undefined, { command, source })}
+          draftPending={draftPending()}
+          draftError={draftError()}
+        />
+      )}
+    </Show>
+  )
 
   return (
     <div
@@ -181,33 +344,52 @@ export function Changes() {
           <Show when={!mobile()}>
             <HomeProjects projects={projects} scroll={scroll} />
           </Show>
-          <Show when={selection()} fallback={<p class="py-10 text-v2-text-text-muted">{language.t("changes.noProject")}</p>}>
+          <Show
+            when={selection()}
+            fallback={<p class="py-10 text-v2-text-text-muted">{language.t("changes.noProject")}</p>}
+          >
             {(value) => (
-              <ChangesView
-                heading={
-                  <ChangesHeading
-                    project={projectName()}
-                    scope={value().scope}
-                    search={value().search}
-                    onScope={setScope}
-                    onSearch={(search) =>
-                      setQuery({ search: search || undefined, offset: undefined, change: undefined }, { replace: true })
-                    }
-                    onNew={() => void openDraft()}
-                    pending={draftPending()}
-                  />
+              <Show
+                when={category() !== "investigations"}
+                fallback={
+                  <div class="min-w-0 py-6 lg:pb-12 lg:pt-14">
+                    <Show when={!query.investigation}>{heading(value())}</Show>
+                    {workspace(value(), true)}
+                  </div>
                 }
-                state={state()}
-                selection={value()}
-                section={changeSection(query.section)}
-                onSelect={(change) => setQuery({ change, section: undefined })}
-                onSection={(section) => setQuery({ section })}
-                onPage={(offset) => setQuery({ offset: offset || undefined })}
-                onRefresh={reload}
-                onContinue={(item) => void openDraft(item)}
-                draftPending={draftPending()}
-                draftError={draftError()}
-              />
+              >
+                <ChangesView
+                  heading={heading(value())}
+                  title={title()?.key === `${projectKey()}\0${value().changeID}` ? title()?.value : undefined}
+                  state={state()}
+                  selection={value()}
+                  section={section()}
+                  onSelect={(change) =>
+                    setQuery({
+                      change,
+                      section: undefined,
+                      document: undefined,
+                      anchor: undefined,
+                      documentOffset: undefined,
+                    })
+                  }
+                  onSection={(next) =>
+                    setQuery({ section: next, document: undefined, anchor: undefined, documentOffset: undefined })
+                  }
+                  onPage={(offset) => setQuery({ offset: offset || undefined })}
+                  onRefresh={() => {
+                    reload()
+                    loadCounts()
+                    loadTitle()
+                  }}
+                  onContinue={(item) => void openDraft(item)}
+                  onInvestigations={() => setCategory("investigations")}
+                  draftPending={draftPending()}
+                  draftError={draftError()}
+                  documents={<Show when={value().changeID}>{workspace(value(), false)}</Show>}
+                  tools={<DataSourcesButton />}
+                />
+              </Show>
             )}
           </Show>
         </div>

@@ -1,0 +1,330 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "document-reader-index-changeid-search-offset-50",
+      "requirementKey": "document-reader",
+      "scenario": "index ของ change",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-index-changeid",
+      "requirementKey": "document-reader",
+      "scenario": "index ของโน้ต",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-documentid-change-investigationid",
+      "requirementKey": "document-reader",
+      "scenario": "เนื้อหาเอกสารและโน้ต",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-server-foundationdocumentsizeerror-413-foundatio",
+      "requirementKey": "document-reader",
+      "scenario": "เอกสารใหญ่หรือเสีย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-response-document-foundation-document",
+      "requirementKey": "document-reader",
+      "scenario": "body ผิด schema",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-refresh-target-changeid-preferred-proposal-md",
+      "requirementKey": "document-refresh",
+      "scenario": "เลือก proposal",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-refresh-refresh-index-modifiedat-size",
+      "requirementKey": "document-refresh",
+      "scenario": "ใช้ cache",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-refresh-id-index",
+      "requirementKey": "document-refresh",
+      "scenario": "ไม่พบเอกสาร",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-refresh-index-invalid-document",
+      "requirementKey": "document-refresh",
+      "scenario": "body ล้มแต่ index ใช้ได้",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-refresh-selection-request",
+      "requirementKey": "document-refresh",
+      "scenario": "ทิ้ง response เก่า",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-excerpt-findings-options",
+      "requirementKey": "document-excerpt",
+      "scenario": "เปิดส่วน Findings",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-excerpt-anchor-section",
+      "requirementKey": "document-excerpt",
+      "scenario": "anchor ไม่ถูกต้อง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-excerpt-purpose-why",
+      "requirementKey": "document-excerpt",
+      "scenario": "Why",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-excerpt-sections",
+      "requirementKey": "document-excerpt",
+      "scenario": "โน้ตไม่มีหัวข้อ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "safe-markdown-script-alert-1-script-img-onerror-x",
+      "requirementKey": "safe-markdown",
+      "scenario": "raw HTML",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "safe-markdown-javascript-data-http",
+      "requirementKey": "safe-markdown",
+      "scenario": "ลิงก์อันตราย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "safe-markdown-https-example-com",
+      "requirementKey": "safe-markdown",
+      "scenario": "ลิงก์ https",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "safe-markdown-sourcepath-index",
+      "requirementKey": "safe-markdown",
+      "scenario": "ลิงก์ไปเอกสารที่ index",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "safe-markdown-alt-https-tracker-example-x-png",
+      "requirementKey": "safe-markdown",
+      "scenario": "รูปภาพ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "safe-markdown-slug-section-id",
+      "requirementKey": "safe-markdown",
+      "scenario": "anchor ของหัวข้อ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "investigations-library-index-2",
+      "requirementKey": "investigations-library",
+      "scenario": "รายการโน้ต",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "investigations-library-total-0-search",
+      "requirementKey": "investigations-library",
+      "scenario": "ว่างแยกกรณี",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "investigations-library-references",
+      "requirementKey": "investigations-library",
+      "scenario": "ไม่มี reference",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "investigations-library-reference-change-openspec-changes-archive",
+      "requirementKey": "investigations-library",
+      "scenario": "ตาม reference",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "investigations-library-continue-investigation-draft-change-sourc",
+      "requirementKey": "investigations-library",
+      "scenario": "draft จากโน้ต",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "investigations-library-6",
+      "requirementKey": "investigations-library",
+      "scenario": "นับหมวด",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-documents-proposal-md-1",
+      "requirementKey": "change-documents",
+      "scenario": "ชื่อจาก proposal",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-documents-tasks-md-3-tasks-1",
+      "requirementKey": "change-documents",
+      "scenario": "tasks เป็น checklist",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-documents-checkbox",
+      "requirementKey": "change-documents",
+      "scenario": "tasks ไม่รู้จัก",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-documents-evidence-change-evidence-yaml",
+      "requirementKey": "change-documents",
+      "scenario": "claims ที่ประกาศ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-documents-proposal-md-document-too-large",
+      "requirementKey": "change-documents",
+      "scenario": "เอกสารอ่านไม่ได้",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-documents-index-change-proposal-md-design-md",
+      "requirementKey": "change-documents",
+      "scenario": "ทางลัดเอกสาร",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-documents-snapshot-branch",
+      "requirementKey": "change-documents",
+      "scenario": "ข้อมูลที่ไม่มี",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "markdown-dependencies",
+      "requirementKey": "markdown-dependencies",
+      "scenario": "lockfile ตรง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(bun install --frozen-lockfile --lockfile-only) && (o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/document-reader.test.ts ./src/changes/document-refresh.test.ts ./src/changes/document-excerpt.test.ts ./src/changes/markdown.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/view-model.test.ts ./src/changes/draft.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (bun run --cwd packages/app typecheck && bun run --cwd packages/app build)"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared",
+      "segments": [
+        "bun install --frozen-lockfile --lockfile-only",
+        "o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/document-reader.test.ts ./src/changes/document-refresh.test.ts ./src/changes/document-excerpt.test.ts ./src/changes/markdown.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/view-model.test.ts ./src/changes/draft.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "bun run --cwd packages/app typecheck && bun run --cwd packages/app build"
+      ]
+    }
+  }
+}

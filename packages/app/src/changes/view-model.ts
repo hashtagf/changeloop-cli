@@ -1,6 +1,56 @@
 import type { ChangeItem, ChangeSelection } from "./reader"
 
-export const CHANGE_SECTIONS = ["overview", "evidence", "usage"] as const
+export const CHANGE_SECTIONS = ["overview", "documents", "tasks", "evidence", "usage"] as const
+
+export type DocumentSection = { id: string; title: string; line: number; level: number }
+
+/** The file a section of a change opens first. An empty name means the proposal, or the first file when it has none. */
+export function preferredFile(section: ChangeSection) {
+  if (section === "documents") return ""
+
+  if (section === "tasks") return "tasks.md"
+
+  if (section === "evidence") return "evidence.yaml"
+
+  return "proposal.md"
+}
+
+/** The readable title of a proposal: its level-1 heading without a leading "Change:". */
+export function proposalTitle(sections: readonly DocumentSection[]) {
+  return sections
+    .find((section) => section.level === 1)
+    ?.title.replace(/^Change:\s*/i, "")
+    .trim()
+}
+
+/** A note's title without the leading "Investigation:" the file name convention adds. */
+export function noteTitle(title: string) {
+  return title.replace(/^Investigation:\s*/i, "")
+}
+
+/** The last path segment of a document's source path. */
+export function fileName(sourcePath: string) {
+  return sourcePath.split("/").at(-1) ?? sourcePath
+}
+
+export function isArchivedReference(sourcePath: string) {
+  return sourcePath.startsWith("openspec/changes/archive/")
+}
+
+/** Sections of a document that describe planned tests, offered as shortcuts. */
+export function plannedTestSections(sections: readonly DocumentSection[]) {
+  return sections.filter((section) => /test|verification|scenario/i.test(section.title))
+}
+
+/** How many checklist items are checked, as the document declares them. */
+export function checklistCounts(tasks: readonly { checked: boolean }[]) {
+  return { checked: tasks.filter((task) => task.checked).length, total: tasks.length }
+}
+
+/** A task line without the `[key:…]` metadata the harness appends. */
+export function taskLabel(text: string) {
+  return text.split(" [")[0]
+}
 
 export type ChangeSection = (typeof CHANGE_SECTIONS)[number]
 

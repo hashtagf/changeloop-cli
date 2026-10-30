@@ -1,0 +1,80 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "extend-changes-route",
+      "choice": "ต่อยอด route /changes เดิมด้วย query scope=investigations|active|archive, section=overview|documents|tasks|evidence|usage, investigation, document, anchor, documentOffset",
+      "reason": "คง Home selection และ draft handoff ของตอนที่ 1 และรักษา back/forward ของ browser ตาม spec investigation-draft-navigation"
+    },
+    {
+      "id": "markdown-sanitized-html",
+      "choice": "แปลง Markdown ด้วย marked แล้วกรองด้วย DOMPurify allowlist; raw HTML ถูก escape, รูปภาพถูกละ, ลิงก์รับเฉพาะ https และลิงก์ในเอกสารที่ index แล้ว",
+      "reason": "ตรงกับ v1 ที่ผู้ใช้อนุมัติ (safe-document-reader) และไม่มี remote fetch อัตโนมัติ"
+    },
+    {
+      "id": "deps-in-app",
+      "choice": "เพิ่ม marked (catalog) และ dompurify 3.4.14 เป็น dependency ของ packages/app และปรับ bun.lock ใน change เดียวกัน",
+      "reason": "ตัวแสดงอยู่ใน app ไม่แตะ packages/ui; เวอร์ชันตรงกับที่ session-ui ใช้อยู่แล้ว"
+    },
+    {
+      "id": "english-i18n-only",
+      "choice": "ข้อความใหม่เป็น key changes.* ใน en.ts เท่านั้น",
+      "reason": "กฎ Localization ของ packages/app/AGENTS.md"
+    },
+    {
+      "id": "checklist-not-proof",
+      "choice": "checkbox ใน tasks.md และ claims ใน evidence.yaml แสดงเป็นคำประกาศในเอกสาร พร้อมข้อความว่าไม่ใช่ proof และไม่ปนกับ evidence จาก snapshot",
+      "reason": "spec truthful-evidence และ document-task-provenance ของ v1"
+    },
+    {
+      "id": "draft-with-note-reference",
+      "choice": "Continue investigation เปิด draft /investigate <sourcePath> และ Draft change เปิด /change <sourcePath> ผ่านกลไก draft เดิม ไม่ submit",
+      "reason": "spec investigation-draft-navigation ของ v1"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase4-webui-w2",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-29T14:00:00.000Z",
+    "decisions": [
+      {
+        "id": "extend-changes-route",
+        "question": "Documents และ Investigations อยู่ที่ไหน",
+        "answer": "ใน route /changes เดิมผ่าน query",
+        "source": "recommended-default"
+      },
+      {
+        "id": "markdown-sanitized-html",
+        "question": "แสดง Markdown อย่างไรให้ปลอดภัย",
+        "answer": "marked + DOMPurify allowlist ตาม v1",
+        "source": "recommended-default"
+      },
+      {
+        "id": "deps-in-app",
+        "question": "dependency ของตัวแสดง Markdown อยู่ที่ไหน",
+        "answer": "packages/app พร้อม bun.lock",
+        "source": "recommended-default"
+      },
+      {
+        "id": "english-i18n-only",
+        "question": "ข้อความใหม่ใช้ภาษาอะไร",
+        "answer": "key English ใน en.ts",
+        "source": "recommended-default"
+      },
+      {
+        "id": "checklist-not-proof",
+        "question": "checkbox และ claim ในเอกสารนับเป็น proof หรือไม่",
+        "answer": "ไม่ เป็นคำประกาศเท่านั้น",
+        "source": "user-batch"
+      },
+      {
+        "id": "draft-with-note-reference",
+        "question": "ปุ่มต่อจากโน้ตทำอะไร",
+        "answer": "เปิด draft พร้อม reference ของโน้ต ไม่ submit",
+        "source": "user-batch"
+      }
+    ]
+  }
+}

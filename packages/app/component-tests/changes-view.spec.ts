@@ -18,7 +18,7 @@ story("lists changes by title or ID with phase, status, evidence and the snapsho
 story("explains delivered history for archived changes and why an empty list is empty", async ({ mount }) => {
   const archived = await mount("app-changes-view--archived")
   await expect(archived.getByText("Delivered history.", { exact: false })).toBeVisible()
-  await expect(archived.getByRole("button", { name: "Archived" })).toHaveAttribute("aria-pressed", "true")
+  await expect(archived.getByRole("button", { name: /^Archived/ })).toHaveAttribute("aria-pressed", "true")
 
   const empty = await mount("app-changes-view--empty")
   await expect(empty.getByText("No active changes.")).toBeVisible()
@@ -88,14 +88,14 @@ story("moves between the detail tabs with the arrow keys and wraps around", asyn
   const view = await mount("app-changes-view--detail")
   const tabs = view.getByRole("navigation", { name: "Change details" }).getByRole("button")
 
-  await expect(tabs).toHaveText(["Overview", "Evidence", "Usage"])
+  await expect(tabs).toHaveText(["Overview", "Documents", "Tasks", "Evidence", "Usage"])
   await tabs.nth(0).focus()
   await tabs.nth(0).press("ArrowRight")
   await expect(tabs.nth(1)).toBeFocused()
   await expect(tabs.nth(1)).toHaveAttribute("aria-current", "page")
   await tabs.nth(1).press("ArrowLeft")
   await tabs.nth(0).press("ArrowLeft")
-  await expect(tabs.nth(2)).toHaveAttribute("aria-current", "page")
+  await expect(tabs.nth(4)).toHaveAttribute("aria-current", "page")
 })
 
 story("continues in a session by handing the phase command to the caller", async ({ mount }) => {

@@ -16,6 +16,11 @@ export function changeDraft(item: ChangeItem, commands: readonly { name: string 
   return command === "changes" ? "/changes" : `/${command} ${item.id}`
 }
 
+/** The draft that continues a saved note with `command`, or undefined when the project does not have that command. */
+export function noteDraft(command: "investigate" | "change", source: string, commands: readonly { name: string }[]) {
+  return commands.some((item) => item.name === command) ? `/${command} ${source}` : undefined
+}
+
 /** The draft for a command that takes no change, such as starting an investigation. */
 export function investigateDraft(commands: readonly { name: string }[]) {
   return commands.some((command) => command.name === "investigate") ? "/investigate" : undefined

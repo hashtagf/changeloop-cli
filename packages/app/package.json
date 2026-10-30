@@ -84,8 +84,10 @@
     "@solidjs/router": "catalog:",
     "@tanstack/solid-query": "5.91.4",
     "@tanstack/solid-virtual": "catalog:",
+    "dompurify": "3.4.14",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
+    "marked": "catalog:",
     "qr-scanner": "1.4.2",
     "solid-js": "catalog:"
   }
