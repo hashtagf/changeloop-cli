@@ -256,7 +256,10 @@ it.live("command list stays reachable through CommandPreparation passthrough", (
   Effect.gen(function* () {
     const { status, body } = yield* request("/api/command")
     expect(status).toBe(200)
-    expect(body.data).toEqual([])
+    // The list waits for plugin activation, so the first call already carries the builtin commands.
+    expect(Array.isArray(body.data)).toBe(true)
+    expect(body.data.length).toBeGreaterThan(0)
+    for (const command of body.data) expect(typeof command.name).toBe("string")
   }),
 )
 
