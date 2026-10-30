@@ -1,0 +1,47 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "generate-by-script",
+      "choice": "สร้าง openapi.json ด้วย `bun run generate` ของ packages/protocol และ client generated ด้วย `bun run generate` ของ packages/client เท่านั้น ห้ามแก้มือ",
+      "reason": "snapshot ที่แก้มือเฉพาะ response 503 ของ command.list ทำให้ไม่ตรงกับ generator; สคริปต์ deterministic (รันสองรอบได้ไฟล์เดียวกัน) จึงเป็นแหล่งความจริงเดียว"
+    },
+    {
+      "id": "scope-of-diff",
+      "choice": "diff ที่คาดไว้คือ additive ล้วน: 7 operation ของ group server.foundation (/experimental/foundation/*), tag server.foundation และ 9 error schema Foundation*ErrorEncoded; operation/schema เดิมไม่เปลี่ยน; client generated เปลี่ยนเพียง declaredStatuses ของ command.list เพิ่ม 503",
+      "reason": "ตรวจแล้วด้วยการ regenerate ทดลองและเทียบ JSON: 156 → 163 operation, 337 → 346 schema, ไม่มีรายการถูกลบหรือแก้"
+    },
+    {
+      "id": "no-logic-change",
+      "choice": "ไม่แก้ endpoint, handler, schema ต้นทาง, web UI หรือ rebrand",
+      "reason": "งานนี้ทำให้ artifact generated ตรงกับโค้ดที่มีอยู่แล้ว"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase6-openapi-o",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-30T03:00:00.000Z",
+    "decisions": [
+      {
+        "id": "generate-by-script",
+        "question": "แก้ openapi.json อย่างไร",
+        "answer": "regenerate ด้วยสคริปต์ของ repo ห้ามแก้มือ",
+        "source": "user-batch"
+      },
+      {
+        "id": "scope-of-diff",
+        "question": "ยอมรับ diff ขนาดใหญ่ที่เป็น foundation group หรือไม่",
+        "answer": "ยอมรับถ้าอธิบายได้และไม่มีส่วนอื่นเปลี่ยน",
+        "source": "user-batch"
+      },
+      {
+        "id": "no-logic-change",
+        "question": "ขอบเขต",
+        "answer": "ไม่แก้ logic ของ endpoint/handler, web UI, rebrand",
+        "source": "user-batch"
+      }
+    ]
+  }
+}

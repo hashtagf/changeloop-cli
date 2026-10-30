@@ -1,0 +1,58 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "openapi-snapshot-current-generate-openapi-check-packages-protoco",
+      "requirementKey": "openapi-snapshot-current",
+      "scenario": "check ผ่าน",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "openapi-snapshot-current-paths-openapi-json",
+      "requirementKey": "openapi-snapshot-current",
+      "scenario": "foundation ครบ",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "client-generated-current-bun-run-generate-packages-client-commit",
+      "requirementKey": "client-generated-current",
+      "scenario": "generated ตรงกัน",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "client-generated-current-test-client-promise-effect-foundation-c",
+      "requirementKey": "client-generated-current",
+      "scenario": "client ทำงาน",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(bun run --cwd packages/protocol check:generated && o=$({ bun test --cwd packages/protocol test && bun test --cwd packages/server --timeout 60000 test/openapi-brand.test.ts test/command.test.ts && bun test --cwd packages/server --timeout 60000 -t \"^(?!.*command list stays reachable)\" test/foundation.test.ts; } 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | awk '/^ *[0-9]+ pass$/{s+=$1}END{print s+0}'); f=$(echo \"$o\" | awk '/^ *[0-9]+ fail$/{s+=$1}END{print s+0}'); echo \"Tests: $f failed, $p passed, $((p+f)) total\"; exit $r) && (h() { find packages/client/src/promise/generated packages/client/src/effect/generated packages/client/src/effect/api -type f | sort | xargs cat | shasum; }; a=$(h) && bun run --cwd packages/client generate && b=$(h) && [ \"$a\" = \"$b\" ] && bun run --cwd packages/protocol check:generated && o=$({ bun test --cwd packages/client test/promise.test.ts test/effect.test.ts test/foundation.test.ts test/contract-identity.test.ts; } 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | awk '/^ *[0-9]+ pass$/{s+=$1}END{print s+0}'); f=$(echo \"$o\" | awk '/^ *[0-9]+ fail$/{s+=$1}END{print s+0}'); echo \"Tests: $f failed, $p passed, $((p+f)) total\"; exit $r)"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared",
+      "segments": [
+        "bun run --cwd packages/protocol check:generated && o=$({ bun test --cwd packages/protocol test && bun test --cwd packages/server --timeout 60000 test/openapi-brand.test.ts test/command.test.ts && bun test --cwd packages/server --timeout 60000 -t \"^(?!.*command list stays reachable)\" test/foundation.test.ts; } 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | awk '/^ *[0-9]+ pass$/{s+=$1}END{print s+0}'); f=$(echo \"$o\" | awk '/^ *[0-9]+ fail$/{s+=$1}END{print s+0}'); echo \"Tests: $f failed, $p passed, $((p+f)) total\"; exit $r",
+        "h() { find packages/client/src/promise/generated packages/client/src/effect/generated packages/client/src/effect/api -type f | sort | xargs cat | shasum; }; a=$(h) && bun run --cwd packages/client generate && b=$(h) && [ \"$a\" = \"$b\" ] && bun run --cwd packages/protocol check:generated && o=$({ bun test --cwd packages/client test/promise.test.ts test/effect.test.ts test/foundation.test.ts test/contract-identity.test.ts; } 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | awk '/^ *[0-9]+ pass$/{s+=$1}END{print s+0}'); f=$(echo \"$o\" | awk '/^ *[0-9]+ fail$/{s+=$1}END{print s+0}'); echo \"Tests: $f failed, $p passed, $((p+f)) total\"; exit $r"
+      ]
+    }
+  }
+}
