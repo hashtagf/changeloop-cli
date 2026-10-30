@@ -200,6 +200,10 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       OPENCODE_CLI_NAME: "'changeloop'",
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_ARTIFACT: `'cli'`,
+      // Unset means this build has no Changeloop release channel, so it never checks for or installs updates.
+      CHANGELOOP_UPDATE_URL: process.env.CHANGELOOP_UPDATE_URL
+        ? JSON.stringify(process.env.CHANGELOOP_UPDATE_URL)
+        : "undefined",
       ...(highlights ? { OPENCODE_RELEASE_HIGHLIGHTS: JSON.stringify(highlights) } : {}),
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "undefined",
       // FFF_LIBC selects the fff native lib variant: "musl" or "gnu".

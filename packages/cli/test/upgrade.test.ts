@@ -74,6 +74,19 @@ describe("upgrade command", () => {
     expect(result.stdout).toContain("Update check failed")
   })
 
+  test("explains the missing release channel without detecting, looking up, or installing", async () => {
+    const env = { UPGRADE_TEST_NO_CHANNEL: "1" }
+    for (const args of [[], ["2.0.0", "--method", "npm"], ["--method", "brew"]]) {
+      const result = await cli(args, env)
+      expect(result.exitCode).toBe(1)
+      expect(result.events).toEqual([])
+      expect(result.stdout).toContain("Changeloop has no release channel yet")
+      expect(result.stdout).toContain("bun run --cwd packages/cli build --single")
+      expect(result.stdout).not.toContain("Upgrade complete")
+      expect(result.stdout).not.toContain("Using method")
+    }
+  })
+
   test("reports installation failures with a nonzero exit code", async () => {
     const result = await cli([], { UPGRADE_TEST_INSTALL_ERROR: "1" })
     expect(result.exitCode).toBe(1)

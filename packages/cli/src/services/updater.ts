@@ -1,7 +1,13 @@
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { EffectFlock } from "@opencode/util/effect-flock"
-import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
+import {
+  CHANGELOOP_UPDATE_URL,
+  OPENCODE_ARTIFACT,
+  OPENCODE_CHANNEL,
+  OPENCODE_LOCAL,
+  OPENCODE_VERSION,
+} from "../version"
 import { Context, Duration, Effect, FileSystem, Layer, Option, Ref, Schema } from "effect"
 import { ChildProcess } from "effect/process"
 import { parse, type ParseError } from "jsonc-parser"
@@ -41,7 +47,18 @@ export class UpgradeError extends Error {
   }
 }
 
-const decodeVpPackages = Schema.decodeUnknownOption(
+// Without a release channel there is nothing Changeloop can update from; the upstream OpenCode
+// update service and installers must never stand in for one.
+export const noChannelError = () =>
+  new UpgradeError({
+    title: "Changeloop has no release channel yet",
+    detail:
+      "This build of Changeloop has no release channel, so it cannot check for or install updates. Nothing was changed.",
+    retry:
+      "Update by building from source and replacing the installed binary: bun run --cwd packages/cli build --single",
+  })
+
+const decodeVpPackages =Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Array(Schema.Struct({ name: Schema.String }))),
 )
 
@@ -106,6 +123,8 @@ function resultDetail(result: { code: number; stdout: string; stderr: string }) 
 }
 
 export interface Interface {
+  /** Whether this build has a release channel. Without one every other operation refuses to reach out. */
+  readonly released: boolean
   readonly run: (onInstall?: (version: string) => void) => Effect.Effect<RunResult | undefined>
   readonly check: () => Effect.Effect<CheckResult | undefined, Error>
   readonly apply: (version: string) => Effect.Effect<void, Error>
@@ -136,7 +155,7 @@ export function decodePolicy(text: string): Policy | undefined {
   if (input.autoupdate === true) return "auto"
 }
 
-const make = Effect.gen(function* () {
+const make = (updateUrl: string | undefined) => Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const global = yield* Global.Service
   const appProcess = yield* AppProcess.Service
@@ -212,6 +231,9 @@ const make = Effect.gen(function* () {
   })
 
   const method = Effect.fnUntraced(function* () {
+    // The installation method only matters for updating or removing a release; without a channel
+    // this build owns no package, so no package manager is asked about (or later asked to remove) one.
+    if (!updateUrl) return
     if (executable === curlBinary) return "curl"
     if (installedFormula) return "brew"
     if (installedWinget) return "winget"
@@ -258,7 +280,7 @@ const make = Effect.gen(function* () {
   }
 
   const removal = (method: Method) => {
-    const command = removalCommand(method)
+    const command = updateUrl ? removalCommand(method) : undefined
     if (!command) return undefined
     return {
       command,
@@ -273,6 +295,7 @@ const make = Effect.gen(function* () {
   }
 
   const release = Effect.fnUntraced(function* (method?: Method) {
+    if (!updateUrl) return yield* Effect.fail(noChannelError())
     const distribution = method === "brew" ? "homebrew" : "npm"
     // Homebrew Core builds its formula on its own schedule, so the tap release does not describe it.
     const core = method === "brew" && installedFormula === "opencode"
@@ -281,7 +304,7 @@ const make = Effect.gen(function* () {
         fetch(
           core
             ? "https://formulae.brew.sh/api/formula/opencode.json"
-            : `https://opencode.ai/update/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/${distribution}?current=${encodeURIComponent(OPENCODE_VERSION)}`,
+            : `${updateUrl.replace(/\/+$/, "")}/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/${distribution}?current=${encodeURIComponent(OPENCODE_VERSION)}`,
           {
             signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
@@ -358,12 +381,11 @@ const make = Effect.gen(function* () {
     return version
   })
 
-  const latest = (selected?: Method) =>
-    (selected ? Effect.succeed(selected) : method()).pipe(
-      Effect.flatMap((method) =>
-        method === "winget" ? wingetVersion() : release(method).pipe(Effect.map((data) => data.version)),
-      ),
-    )
+  const latest = Effect.fnUntraced(function* (selected?: Method) {
+    if (!updateUrl) return yield* Effect.fail(noChannelError())
+    const chosen = selected ?? (yield* method())
+    return chosen === "winget" ? yield* wingetVersion() : (yield* release(chosen)).version
+  })
 
   const temporaryDirectory = (prefix: string) =>
     Effect.acquireRelease(fs.makeTempDirectory({ directory: global.cache, prefix }), (directory) =>
@@ -423,6 +445,7 @@ const make = Effect.gen(function* () {
   }
 
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
+    if (!updateUrl) return yield* Effect.fail(noChannelError())
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
     const packageName =
@@ -531,9 +554,13 @@ const make = Effect.gen(function* () {
   })
 
   const inspect = Effect.fnUntraced(function* () {
-    if (OPENCODE_LOCAL || ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")) {
+    if (
+      !updateUrl ||
+      OPENCODE_LOCAL ||
+      ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")
+    ) {
       yield* Effect.logInfo("update check skipped", {
-        reason: OPENCODE_LOCAL ? "local-install" : "disabled",
+        reason: !updateUrl ? "no-release-channel" : OPENCODE_LOCAL ? "local-install" : "disabled",
         version: OPENCODE_VERSION,
         channel: OPENCODE_CHANNEL,
       })
@@ -574,6 +601,7 @@ const make = Effect.gen(function* () {
   })
 
   const apply = Effect.fn("cli.updater.apply")(function* (version: string) {
+    if (!updateUrl) return yield* Effect.fail(noChannelError())
     if (!(yield* install(version)))
       return yield* Effect.fail(
         new Error(
@@ -583,6 +611,11 @@ const make = Effect.gen(function* () {
   })
 
   const check = Effect.fn("cli.updater.check")(function* () {
+    if (!updateUrl)
+      return {
+        type: "unavailable" as const,
+        message: "Changeloop has no release channel yet. Update by building from source.",
+      }
     if (OPENCODE_LOCAL)
       return {
         type: "unavailable" as const,
@@ -619,10 +652,13 @@ const make = Effect.gen(function* () {
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )
 
-  return Service.of({ run, check, apply, method, latest, upgrade, removal })
+  return Service.of({ released: updateUrl !== undefined, run, check, apply, method, latest, upgrade, removal })
 })
 
-export const layer = Layer.effect(Service, make)
+/** An updater bound to the given update API base URL; `undefined` means no release channel. */
+export const layerWith = (updateUrl: string | undefined) => Layer.effect(Service, make(updateUrl))
+
+export const layer = layerWith(CHANGELOOP_UPDATE_URL)
 
 export * as Updater from "./updater"
 export { action, type Action, type Policy } from "./updater-action"

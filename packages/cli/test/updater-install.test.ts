@@ -81,7 +81,8 @@ function fixture(
     }
     const commands: string[][] = []
     const updater = yield* Updater.Service.pipe(
-      Effect.provide(Updater.layer),
+      // These tests exercise the install flow behind a release channel; the channel URL is injected.
+      Effect.provide(Updater.layerWith("https://opencode.ai/update/api")),
       Effect.provide(
         LayerNode.compile(EffectFlock.node, {
           replacements: [Global.node.replace(Layer.succeed(Global.Service, global))],

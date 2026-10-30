@@ -13,6 +13,7 @@ export default Runtime.handler(
     function* (input) {
       intro("Upgrade")
       const updater = yield* Updater.Service
+      if (!updater.released) return yield* Effect.fail(Updater.noChannelError())
       const method = Option.getOrUndefined(input.method) ?? (yield* updater.method())
       if (!method)
         return yield* Effect.fail(

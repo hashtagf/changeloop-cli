@@ -119,13 +119,13 @@ for themselves without limiting it to the current project; omit it when they
 explicitly want project-local configuration.
 
 ```sh
-opencode mcp add <name> --global --url <remote-url>
-opencode mcp list
+changeloop mcp add <name> --global --url <remote-url>
+changeloop mcp list
 ```
 
 Remote servers use OAuth by default. If `mcp list` reports that a server needs
 authentication, tell the user to run `/mcps`, select the server, and sign in.
-Do not run `opencode mcp auth` through the shell tool: it starts an interactive
+Do not run `changeloop mcp auth` through the shell tool: it starts an interactive
 flow whose authorization link can be hidden in background process output.
 Use the user-facing MCP interface instead.
 
@@ -177,13 +177,13 @@ automatically. Restart it only if it is stuck or unhealthy, not to apply
 configuration changes:
 
 ```sh
-opencode service restart
+changeloop service restart
 ```
 
 Check its status after restarting:
 
 ```sh
-opencode service status
+changeloop service status
 ```
 
 ## [API](https://opencode.ai/v2/docs/api)
@@ -199,15 +199,15 @@ HTTP method and path or an OpenAPI operation ID.
 Call an endpoint with an HTTP method and path:
 
 ```sh
-opencode api get /api/info
+changeloop api get /api/info
 ```
 
 Pass a request body with `--data` or `-d`, and additional headers with
 `--header` or `-H`:
 
 ```sh
-opencode api post /api/example --data '{"key":"value"}'
-opencode api get /api/example --header 'X-Example:value'
+changeloop api post /api/example --data '{"key":"value"}'
+changeloop api get /api/example --header 'X-Example:value'
 ```
 
 Request bodies default to `Content-Type: application/json`. When OpenCode is
@@ -249,9 +249,9 @@ Effect applications. For Cloudflare Durable Objects, use the
 OpenCode runs a client and a background server. Start by determining whether a
 problem belongs to the client, the shared server, or one project.
 
-- Check the service with `opencode service status` and verify the API with
-  `opencode api get /api/info`.
-- Compare with `opencode --standalone`, which runs the TUI with a private
+- Check the service with `changeloop service status` and verify the API with
+  `changeloop api get /api/info`.
+- Compare with `changeloop --standalone`, which runs the TUI with a private
   server, to isolate shared-service issues.
 - Inspect `~/.local/share/opencode/log/opencode.log`. Filter `role=cli` for
   client startup and `role=server` for sessions, providers, plugins,
