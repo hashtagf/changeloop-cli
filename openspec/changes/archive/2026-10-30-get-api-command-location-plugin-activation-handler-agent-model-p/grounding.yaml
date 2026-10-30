@@ -1,0 +1,47 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "root-cause",
+      "choice": "handler command.list อ่าน Command.Service ทันทีโดยไม่เรียก awaitPlugins คำสั่งทุกตัวมาจาก command.transform ของ plugin ที่ activate เป็น fiber เบื้องหลังในแต่ละ location จึงได้ 0 รายการก่อน activation เสร็จ (วัดบน binary จริง: คำขอแรก 0 รายการ แล้ว 10 รายการที่ ~1.3-2.4 วินาที)",
+      "reason": "ยืนยันด้วยการวัดบน binary จริงและอ่านโค้ด: agent.list/model.list/provider.list เรียก awaitPlugins แต่ command.list ไม่เรียก ทำให้ไม่ใช่ปัญหาเฉพาะ Foundation (builtin อื่นก็หายด้วย)"
+    },
+    {
+      "id": "await-in-handler",
+      "choice": "เรียก awaitPlugins (timeout 5 วินาที แล้ว ServiceUnavailableError) ที่ต้นของ handler command.list และประกาศ error ServiceUnavailableError ในสัญญา endpoint พร้อมเพิ่ม response 503 ใน openapi.json",
+      "reason": "ทางเล็กที่สุดและตรงกับ endpoint อื่นที่อ่านค่าจาก plugin; ไม่ทำให้ server start หรือ activation ช้าลง เพราะรอเฉพาะคำขอที่มาถึงก่อน activation เสร็จ ทางเลือกที่ปฏิเสธ: ทำ activation ให้เร็วขึ้น (ไม่ใช่ต้นเหตุ เพราะเวลาขึ้นกับ I/O ของ plugin) และ prewarm location ตอน start (ยังต้องมี await อยู่ดีเพราะ location ใหม่เกิดตามคำขอ)"
+    },
+    {
+      "id": "openapi-handpatch",
+      "choice": "แก้ openapi.json ด้วยการเพิ่มเฉพาะ response 503 ของ command.list ไม่รัน generate ทั้งไฟล์",
+      "reason": "openapi.json ที่ commit ไว้ stale อยู่ก่อนแล้ว (generate --check ล้มบน HEAD) การรัน generate จะดึง diff ที่ไม่เกี่ยวหลายพันบรรทัดเข้ามา รายงานเป็นข้อค้าง"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase6-activation-a2",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-30T08:00:00.000Z",
+    "decisions": [
+      {
+        "id": "root-cause",
+        "question": "ต้นเหตุของรายการคำสั่งที่ว่างในคำขอแรก",
+        "answer": "แก้ที่ต้นเหตุ ให้ command.list ไม่คืนรายการที่ยังไม่ครบโดยเงียบ",
+        "source": "user-batch"
+      },
+      {
+        "id": "await-in-handler",
+        "question": "ให้ endpoint รอ activation หรือแก้ด้วยวิธีอื่น",
+        "answer": "เลือกทางที่เล็กและบันทึกเหตุผลเป็น decision",
+        "source": "user-batch"
+      },
+      {
+        "id": "openapi-handpatch",
+        "question": "จัดการ openapi.json ที่ stale อยู่ก่อนแล้วอย่างไร",
+        "answer": "แก้เฉพาะส่วนที่เกี่ยวและรายงานเป็นข้อค้าง",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "command-list-awaits-activation-get-api-command-location-config-f",
+      "requirementKey": "command-list-awaits-activation",
+      "scenario": "คำขอแรกของ location ใหม่",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "command-list-awaits-activation-plugin-activation-location-5",
+      "requirementKey": "command-list-awaits-activation",
+      "scenario": "activation ไม่เสร็จ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "command-list-contract-503",
+      "requirementKey": "command-list-contract-503",
+      "scenario": "openapi ประกาศ 503",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "o=$(bun test --cwd packages/server --timeout 60000 test/command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}
