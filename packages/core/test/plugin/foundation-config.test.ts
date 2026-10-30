@@ -195,6 +195,70 @@ describe("Foundation v1 config keys on a real instance", () => {
     }),
   )
 
+  it.live("foundation_runtime alone in the project does not reopen a plugin the global config switched off", () =>
+    Effect.gen(function* () {
+      const state = yield* boot({ global: { foundation_workflow: false }, project: { foundation_runtime: "path" } })
+
+      expect(state.inventory.some((plugin) => plugin.id === id)).toBe(false)
+      expect(state.registered).toEqual([])
+      expect(state.path).toBe("/usr/bin")
+    }),
+  )
+
+  it.live("a project foundation_workflow true with foundation_runtime reopens a global false and keeps the runtime", () =>
+    Effect.gen(function* () {
+      const state = yield* boot({
+        global: { foundation_workflow: false },
+        project: { foundation_workflow: true, foundation_runtime: "path" },
+      })
+
+      expect(state.inventory.find((plugin) => plugin.id === id)?.state).toEqual({ status: "active" })
+      expect(state.registered).toHaveLength(names.length)
+      expect(state.path).toBe("/usr/bin")
+    }),
+  )
+
+  it.live("a project that switches the workflow off stays off whatever the runtime says", () =>
+    Effect.gen(function* () {
+      const state = yield* boot({ project: { foundation_workflow: false, foundation_runtime: "path" } })
+
+      expect(state.inventory.some((plugin) => plugin.id === id)).toBe(false)
+      expect(state.registered).toEqual([])
+    }),
+  )
+
+  it.live("a plugins entry with options for the builtin outranks foundation_runtime in the same file", () =>
+    Effect.gen(function* () {
+      const state = yield* boot({
+        project: { foundation_runtime: "path", plugins: [{ package: "opencode.foundation", options: { runtime: "bundled" } }] },
+      })
+
+      expect(state.inventory.find((plugin) => plugin.id === id)?.state).toEqual({ status: "active" })
+      expect(state.path).not.toBe("/usr/bin")
+    }),
+  )
+
+  it.live("a plugins entry with options for the builtin reopens a plugin the global config switched off", () =>
+    Effect.gen(function* () {
+      const state = yield* boot({
+        global: { foundation_workflow: false },
+        project: { plugins: [{ package: "opencode.foundation", options: { runtime: "path" } }] },
+      })
+
+      expect(state.inventory.find((plugin) => plugin.id === id)?.state).toEqual({ status: "active" })
+      expect(state.path).toBe("/usr/bin")
+    }),
+  )
+
+  it.live("a plugins remove outranks foundation_workflow true in the same file", () =>
+    Effect.gen(function* () {
+      const state = yield* boot({ project: { foundation_workflow: true, plugins: ["-opencode.foundation"] } })
+
+      expect(state.inventory.some((plugin) => plugin.id === id)).toBe(false)
+      expect(state.registered).toEqual([])
+    }),
+  )
+
   it.live("invalid values load the rest of the config and keep the defaults", () =>
     Effect.gen(function* () {
       const state = yield* boot({

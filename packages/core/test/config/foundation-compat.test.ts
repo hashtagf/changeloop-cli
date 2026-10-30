@@ -24,7 +24,9 @@ describe("Foundation v1 config keys", () => {
   test("foundation_runtime becomes add options for the builtin", () => {
     const result = normalize({ foundation_runtime: "path" })
 
-    expect(result.encoded.plugins).toEqual([{ package: "opencode.foundation", options: { runtime: "path" } }])
+    expect(result.encoded.plugins).toEqual([
+      { package: "opencode.foundation", options: { runtime: "path", $configureOnly: true } },
+    ])
     expect(result.diagnostics).toEqual([])
   })
 
@@ -32,7 +34,7 @@ describe("Foundation v1 config keys", () => {
     const result = normalize({ foundation_workflow: false, foundation_runtime: "bundled", plugin: ["a"] })
 
     expect(result.encoded.plugins).toEqual([
-      { package: "opencode.foundation", options: { runtime: "bundled" } },
+      { package: "opencode.foundation", options: { runtime: "bundled", $configureOnly: true } },
       "-opencode.foundation",
       "a",
     ])
@@ -43,7 +45,10 @@ describe("Foundation v1 config keys", () => {
       normalize({ foundation_workflow: false, foundation_runtime: "path" }).encoded,
     )
 
-    expect(info.plugins).toEqual([{ package: "opencode.foundation", options: { runtime: "path" } }, "-opencode.foundation"])
+    expect(info.plugins).toEqual([
+      { package: "opencode.foundation", options: { runtime: "path", $configureOnly: true } },
+      "-opencode.foundation",
+    ])
   })
 
   test("invalid values are skipped with a diagnostic and the rest of the config loads", () => {

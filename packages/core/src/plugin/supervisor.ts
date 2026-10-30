@@ -4,6 +4,7 @@ import { Event } from "@opencode/schema/config"
 import { Cause, Effect, Layer, Queue, Stream } from "effect"
 import path from "path"
 import { ConfigPluginSource } from "../config/plugin/source.js"
+import { configureOnly } from "../config/plugin/configure-only.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { ManagedPolicy } from "../managed-policy.js"
 import { Bus } from "../bus.js"
@@ -53,11 +54,11 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       operation.target.endsWith(".*") ||
       operation.target.startsWith("opencode.")
     if (selectsPlugins) {
+      const { [configureOnly]: only, ...options } = operation.options
       matched.forEach((plugin) => {
-        enabled.add(plugin.id)
+        if (only !== true) enabled.add(plugin.id)
         // A builtin named exactly by an add operation takes its options, as a package plugin does.
-        if (operation.target === plugin.id && Object.keys(operation.options).length > 0)
-          builtinOptions.set(plugin.id, operation.options)
+        if (operation.target === plugin.id && Object.keys(options).length > 0) builtinOptions.set(plugin.id, options)
       })
       continue
     }

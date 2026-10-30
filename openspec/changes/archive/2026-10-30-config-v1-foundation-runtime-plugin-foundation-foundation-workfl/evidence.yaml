@@ -1,0 +1,131 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "runtime-key-configure-only-translation-normalize-config-foundati",
+      "requirementKey": "runtime-key-configure-only-translation",
+      "scenario": "แปลง runtime",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "runtime-key-configure-only-translation-foundation-workflow-no-fo",
+      "requirementKey": "runtime-key-configure-only-translation",
+      "scenario": "ค่าไม่ถูกต้องในอินสแตนซ์จริง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "native-plugins-precedence-foundation-runtime-path-plugins-packag",
+      "requirementKey": "native-plugins-precedence",
+      "scenario": "options ใน plugins ชนะ runtime",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "native-plugins-precedence-foundation-workflow-true-plugins-openc",
+      "requirementKey": "native-plugins-precedence",
+      "scenario": "ลบใน plugins ชนะ workflow true",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-read-gated-by-plugin-config-location-foundation-workf",
+      "requirementKey": "foundation-read-gated-by-plugin",
+      "scenario": "ปิดด้วย config",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-read-gated-by-plugin-config-foundation-workflow-list",
+      "requirementKey": "foundation-read-gated-by-plugin",
+      "scenario": "เปิดอยู่",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-read-gated-by-plugin-location-location-workflow",
+      "requirementKey": "foundation-read-gated-by-plugin",
+      "scenario": "คนละ location",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "runtime-key-keeps-disabled-global-config-foundation-workflow-fal",
+      "requirementKey": "runtime-key-keeps-disabled",
+      "scenario": "global ปิด และโปรเจกต์มี runtime เท่านั้น",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "runtime-key-keeps-disabled-global-foundation-workflow-false-foun",
+      "requirementKey": "runtime-key-keeps-disabled",
+      "scenario": "global ปิด และโปรเจกต์เปิดชัด",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "runtime-key-keeps-disabled-config-foundation-workflow-foundation",
+      "requirementKey": "runtime-key-keeps-disabled",
+      "scenario": "ไม่มี key",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "runtime-key-keeps-disabled-foundation-workflow-false-foundation",
+      "requirementKey": "runtime-key-keeps-disabled",
+      "scenario": "โปรเจกต์ปิดเอง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "runtime-key-keeps-disabled-foundation-workflow-true-foundation-r",
+      "requirementKey": "runtime-key-keeps-disabled",
+      "scenario": "runtime พร้อม workflow true",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/core test/config/foundation-compat.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(XDG_CACHE_HOME=$(mktemp -d) bun test --cwd packages/core test/plugin/foundation-config.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/server test/foundation.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared",
+      "segments": [
+        "o=$(bun test --cwd packages/core test/config/foundation-compat.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(XDG_CACHE_HOME=$(mktemp -d) bun test --cwd packages/core test/plugin/foundation-config.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/server test/foundation.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ]
+    }
+  }
+}

@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util"
 import { isRecord } from "@opencode/util/record"
 import { Option, Schema } from "effect"
 import { Info } from "@opencode/schema/config"
+import { configureOnly } from "./plugin/configure-only.js"
 import { ConfigAgent } from "@opencode/schema/config/agent"
 import { ConfigCommand } from "@opencode/schema/config/command"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
@@ -738,7 +739,7 @@ const FoundationRuntime = Schema.Literals(["bundled", "path"])
 // Changeloop v1 switched its Foundation workflow with top-level `foundation_workflow` and `foundation_runtime`.
 // v2 owns that workflow as the builtin `opencode.foundation` plugin, so the keys become plugin operations in the
 // same document: a remove operation switches it off, an add operation switches it back on, and add options
-// select the runtime. Native `plugin` and `plugins` entries follow, so they outrank the legacy keys.
+// select the runtime without switching it on (configure-only), so a removed plugin stays removed. Native `plugin` and `plugins` entries follow, so they outrank the legacy keys.
 function foundationCompatibility(input: Record<string, unknown>, diagnostics: Diagnostic[]) {
   const workflow = own(input, "foundation_workflow")
     ? decodeValue(Schema.Boolean, input.foundation_workflow, ["foundation_workflow"], diagnostics)
@@ -747,7 +748,7 @@ function foundationCompatibility(input: Record<string, unknown>, diagnostics: Di
     ? decodeValue(FoundationRuntime, input.foundation_runtime, ["foundation_runtime"], diagnostics)
     : undefined
   const plugins: Array<string | { package: string; options: Record<string, unknown> }> = []
-  if (runtime !== undefined) plugins.push({ package: foundationPluginID, options: { runtime } })
+  if (runtime !== undefined) plugins.push({ package: foundationPluginID, options: { runtime, [configureOnly]: true } })
   if (workflow === false) plugins.push(`-${foundationPluginID}`)
   if (workflow === true) plugins.push(foundationPluginID)
   return plugins

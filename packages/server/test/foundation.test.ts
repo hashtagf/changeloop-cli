@@ -37,16 +37,26 @@ const request = (
     script?: string
     initialized?: boolean
     prepare?: (project: Project) => Promise<void>
+    /** Server-level config document (JSON text). */
+    content?: string
+    /** Reads opencode.json from the project directory; default off. */
+    project?: boolean
+    /** A second project on the same server, with its own opencode.json; its answer comes back as `other`. */
+    other?: { config: string }
   } = {},
 ) =>
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()
     const project = yield* tmpdirScoped()
     const bin = yield* tmpdirScoped()
-    if (config.initialized) {
-      yield* Effect.promise(() => mkdir(path.join(project.path, ".claude/harness"), { recursive: true }))
-      yield* Effect.promise(() => Bun.write(path.join(project.path, ".claude/harness/protocol.json"), "{}"))
+    const sibling = config.other ? yield* tmpdirScoped() : undefined
+    for (const dir of [project, sibling]) {
+      if (!dir || !config.initialized) continue
+      yield* Effect.promise(() => mkdir(path.join(dir.path, ".claude/harness"), { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(dir.path, ".claude/harness/protocol.json"), "{}"))
     }
+    if (sibling && config.other)
+      yield* Effect.promise(() => Bun.write(path.join(sibling.path, "opencode.json"), config.other!.config))
     yield* Effect.promise(async () => {
       const executable = path.join(bin.path, "claude-foundation")
       await Bun.write(executable, `#!/bin/sh\n${config.script ?? `cat <<'JSON'\n${snapshot}\nJSON`}\n`)
@@ -62,7 +72,7 @@ const request = (
       createEmbeddedRoutes({
         database: { path: ":memory:" },
         models: { fetch: false },
-        config: { directory: directory.path, project: false, content: "{}" },
+        config: { directory: directory.path, project: config.project ?? false, content: config.content ?? "{}" },
         fs: { filewatcher: false },
         foundation: config.foundation ?? { runtime: "path" },
       }).pipe(Layer.provide(HttpServer.layerServices)),
@@ -70,11 +80,15 @@ const request = (
     const handler = Context.get(context, HttpRouter.HttpRouter)
       .asHttpEffect()
       .pipe(HttpEffect.toWebHandlerWith(context))
-    const url = new URL(route, "http://opencode.local")
-    url.searchParams.set("location[directory]", project.path)
-    for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
-    const response = yield* Effect.promise(() => handler(new Request(url)))
-    return { status: response.status, body: (yield* Effect.promise(() => response.json())) as any }
+    const ask = (directory: string) =>
+      Effect.gen(function* () {
+        const url = new URL(route, "http://opencode.local")
+        url.searchParams.set("location[directory]", directory)
+        for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
+        const response = yield* Effect.promise(() => handler(new Request(url)))
+        return { status: response.status, body: (yield* Effect.promise(() => response.json())) as any }
+      })
+    return { ...(yield* ask(project.path)), other: sibling ? yield* ask(sibling.path) : undefined }
   })
 
 const initialized = { initialized: true }
@@ -241,6 +255,47 @@ it.live("foundation.enabled=false answers unsupported even for an initialized pr
     const documents = yield* request(`${base}/changes/x/documents`, {}, options)
     expect(documents.status).toBe(503)
     expect(documents.body.data.code).toBe("unsupported")
+  }),
+)
+
+const workflowOff = JSON.stringify({ foundation_workflow: false })
+
+it.live("foundation_workflow false answers unsupported on every Foundation endpoint without spawning the runtime", () =>
+  Effect.gen(function* () {
+    const marker = path.join(tmpdir(), `foundation-spawned-${crypto.randomUUID()}`)
+    const options = { ...initialized, content: workflowOff, script: `touch '${marker}'` }
+    const capability = yield* request(`${base}/capability`, {}, options)
+    expect(capability.status).toBe(200)
+    expect(capability.body.data).toMatchObject({ available: false, code: "unsupported", runtime: null })
+
+    for (const route of [`${base}/changes`, `${base}/changes/alpha`, `${base}/changes/alpha/documents`, `${base}/investigations`]) {
+      const { status, body } = yield* request(route, {}, options)
+      expect(status).toBe(503)
+      expect(body.data).toMatchObject({ code: "unsupported" })
+    }
+    expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+  }),
+)
+
+it.live("a config without foundation_workflow keeps answering real data", () =>
+  Effect.gen(function* () {
+    const { status, body } = yield* request(`${base}/changes`, {}, { ...initialized, content: JSON.stringify({ username: "x" }) })
+    expect(status).toBe(200)
+    expect(body.data.total).toBe(2)
+  }),
+)
+
+it.live("a project that switches the workflow off is unsupported while another project on the server is served", () =>
+  Effect.gen(function* () {
+    const { status, body, other } = yield* request(
+      `${base}/changes`,
+      {},
+      { ...initialized, project: true, other: { config: "{}" }, prepare: (project) => Bun.write(path.join(project.path, "opencode.json"), workflowOff).then(() => undefined) },
+    )
+    expect(status).toBe(503)
+    expect(body.data.code).toBe("unsupported")
+    expect(other?.status).toBe(200)
+    expect(other?.body.data.total).toBe(2)
   }),
 )
 
