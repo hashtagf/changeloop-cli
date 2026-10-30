@@ -186,8 +186,15 @@ export function normalize(input: unknown): Result {
     (plugin) => (typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] }),
   )
   const nativePlugins = decodeList(input.plugins, ConfigPlugin.Plugin, ["plugins"], diagnostics, decodeEncoded)
-  if (legacyPlugins.length || nativePlugins.length || Array.isArray(input.plugin) || Array.isArray(input.plugins))
-    encoded.plugins = [...legacyPlugins, ...nativePlugins]
+  const foundationPlugins = foundationCompatibility(input, diagnostics)
+  if (
+    foundationPlugins.length ||
+    legacyPlugins.length ||
+    nativePlugins.length ||
+    Array.isArray(input.plugin) ||
+    Array.isArray(input.plugins)
+  )
+    encoded.plugins = [...foundationPlugins, ...legacyPlugins, ...nativePlugins]
 
   normalizeSkills(input, encoded, diagnostics)
   normalizeMcp(input, encoded, diagnostics)
@@ -723,6 +730,27 @@ function decodeMap<S extends Schema.Codec<unknown, unknown, never>, A>(
       return decoded === undefined ? [] : [[name, decoded]]
     }),
   )
+}
+
+const foundationPluginID = "opencode.foundation"
+const FoundationRuntime = Schema.Literals(["bundled", "path"])
+
+// Changeloop v1 switched its Foundation workflow with top-level `foundation_workflow` and `foundation_runtime`.
+// v2 owns that workflow as the builtin `opencode.foundation` plugin, so the keys become plugin operations in the
+// same document: a remove operation switches it off, an add operation switches it back on, and add options
+// select the runtime. Native `plugin` and `plugins` entries follow, so they outrank the legacy keys.
+function foundationCompatibility(input: Record<string, unknown>, diagnostics: Diagnostic[]) {
+  const workflow = own(input, "foundation_workflow")
+    ? decodeValue(Schema.Boolean, input.foundation_workflow, ["foundation_workflow"], diagnostics)
+    : undefined
+  const runtime = own(input, "foundation_runtime")
+    ? decodeValue(FoundationRuntime, input.foundation_runtime, ["foundation_runtime"], diagnostics)
+    : undefined
+  const plugins: Array<string | { package: string; options: Record<string, unknown> }> = []
+  if (runtime !== undefined) plugins.push({ package: foundationPluginID, options: { runtime } })
+  if (workflow === false) plugins.push(`-${foundationPluginID}`)
+  if (workflow === true) plugins.push(foundationPluginID)
+  return plugins
 }
 
 function decodeList<S extends Schema.Codec<unknown, unknown, never>, A>(

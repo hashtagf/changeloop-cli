@@ -35,6 +35,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
   >()
   const plugins = () => [...definitions, ...packages.values()]
+  const builtinOptions = new Map<string, Readonly<Record<string, unknown>>>()
 
   for (const operation of operations) {
     if (operation.type === "remove") {
@@ -52,7 +53,12 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       operation.target.endsWith(".*") ||
       operation.target.startsWith("opencode.")
     if (selectsPlugins) {
-      matched.forEach((plugin) => enabled.add(plugin.id))
+      matched.forEach((plugin) => {
+        enabled.add(plugin.id)
+        // A builtin named exactly by an add operation takes its options, as a package plugin does.
+        if (operation.target === plugin.id && Object.keys(operation.options).length > 0)
+          builtinOptions.set(plugin.id, operation.options)
+      })
       continue
     }
 
@@ -96,10 +102,20 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     enabled.add(plugin.id)
   }
 
+  // The revision carries the options so a changed option reactivates the builtin.
+  const configured = (plugin: Plugin.Generation): Plugin.Generation => {
+    const options = builtinOptions.get(plugin.id)
+    if (!options) return plugin
+    return {
+      ...plugin,
+      revision: `${plugin.revision}:${JSON.stringify(options)}`,
+      effect: (host) => plugin.effect({ ...host, options: { ...host.options, ...options } }),
+    }
+  }
   const ordered = [
-    ...pre.filter((plugin) => enabled.has(plugin.id)),
+    ...pre.filter((plugin) => enabled.has(plugin.id)).map(configured),
     ...[...packages.values()].filter((plugin) => enabled.has(plugin.id)),
-    ...post.filter((plugin) => enabled.has(plugin.id)),
+    ...post.filter((plugin) => enabled.has(plugin.id)).map(configured),
   ]
   // Registry activation dies on a duplicate ID, which would drop the whole generation including builtins.
   // Keep the first occurrence in boot order and report later ones like any other plugin setup failure.
