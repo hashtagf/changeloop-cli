@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Canonical Command Dispatch — รายงานรอบงาน</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231c7c63'/%3E%3Cpath d='M18 21h28v7H25v15h21v7H18z' fill='white'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #f3f2ec;
+      --panel: #fffef8;
+      --ink: #18211d;
+      --muted: #627069;
+      --line: #d7dcd6;
+      --pass: #176b55;
+      --pass-bg: #dff3e9;
+      --warn: #8a5a00;
+      --warn-bg: #fff0c7;
+      --stop: #a43b35;
+      --stop-bg: #f9dfdc;
+      --accent: #246bce;
+      --shadow: 0 10px 28px rgba(35, 48, 41, .07);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #101512;
+        --panel: #171e1a;
+        --ink: #eef4ef;
+        --muted: #a7b4ad;
+        --line: #334139;
+        --pass: #72d7b2;
+        --pass-bg: #193b31;
+        --warn: #ffd078;
+        --warn-bg: #47371b;
+        --stop: #ffaaa1;
+        --stop-bg: #492725;
+        --accent: #8db8ff;
+        --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.55 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1500px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 64px; }
+    header, section, footer {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+    header { padding: clamp(24px, 4vw, 52px); border-top: 6px solid var(--pass); }
+    section { margin-top: 18px; padding: clamp(20px, 3vw, 34px); }
+    footer { margin-top: 18px; padding: 22px 28px; color: var(--muted); }
+    .eyebrow { color: var(--pass); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { font-size: clamp(38px, 7vw, 76px); line-height: .98; letter-spacing: -.05em; margin: 16px 0 22px; max-width: 980px; }
+    h2 { font-size: clamp(24px, 3vw, 34px); letter-spacing: -.025em; margin: 0 0 8px; }
+    h3 { font-size: 17px; margin: 0 0 8px; }
+    p { margin: 8px 0; }
+    .lede { font-size: 19px; color: var(--muted); max-width: 900px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+    .chip, .tag { display: inline-flex; align-items: center; border-radius: 999px; font-weight: 750; white-space: nowrap; }
+    .chip { padding: 7px 11px; background: var(--bg); border: 1px solid var(--line); }
+    .tag { padding: 3px 8px; font-size: 12px; }
+    .pass { color: var(--pass); background: var(--pass-bg); }
+    .warn { color: var(--warn); background: var(--warn-bg); }
+    .stop { color: var(--stop); background: var(--stop-bg); }
+    .muted { color: var(--muted); }
+    .mono, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+    .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+    .kpi, .card { border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: color-mix(in srgb, var(--panel) 88%, var(--bg)); }
+    .kpi .label { color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .kpi .value { font-size: 28px; font-weight: 850; letter-spacing: -.035em; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+    .kpi .sub { color: var(--muted); font-size: 13px; }
+    .section-head { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 22px; }
+    .section-head p { max-width: 760px; color: var(--muted); }
+    .bars { display: grid; gap: 11px; margin: 20px 0 26px; }
+    .bar-row { display: grid; grid-template-columns: 92px 1fr 120px; align-items: center; gap: 12px; }
+    .track { height: 13px; border-radius: 999px; background: var(--bg); overflow: hidden; border: 1px solid var(--line); }
+    .fill { height: 100%; background: var(--accent); border-radius: inherit; }
+    .fill.passfill { background: var(--pass); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { padding: 12px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-size: 12px; letter-spacing: .055em; text-transform: uppercase; background: var(--bg); }
+    tbody tr:last-child td, tfoot tr:last-child td { border-bottom: 0; }
+    td.num, th.num { text-align: right; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+    .card p { color: var(--muted); }
+    .callout { border-left: 5px solid var(--accent); padding: 12px 16px; background: var(--bg); border-radius: 0 10px 10px 0; }
+    .quote { display: block; margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; }
+    .score { font-size: 52px; line-height: 1; font-weight: 900; letter-spacing: -.06em; color: var(--pass); }
+    .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    a { color: var(--accent); }
+    @media (max-width: 900px) {
+      .kpis, .cards, .two { grid-template-columns: 1fr; }
+      .bar-row { grid-template-columns: 76px 1fr; }
+      .bar-row .num { grid-column: 2; text-align: left; }
+    }
+    @media print {
+      body { background: white; }
+      main { width: 100%; padding: 0; }
+      header, section, footer { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Foundation harness · รายงานรอบงาน</div>
+    <h1>Canonical Command Dispatch</h1>
+    <p class="lede">รอบงานนี้แก้ version drift ของ builtin Foundation commands โดยเปลี่ยนคำสั่งทั้ง 8 ตัวจาก workflow body ที่ถูกตรึงไว้ เป็น thin dispatcher ไปยังคำสั่ง canonical ของ project พร้อมหยุดแบบ fail closed เมื่อ installation ไม่ครบ</p>
+    <p class="lede">ผลสุดท้ายผ่านหลักฐานครบทุก provider ปิดงาน (land) เข้าสู่ worktree และเก็บ change เข้าคลังแล้ว โดยไม่มี finding ค้าง</p>
+    <div class="chips">
+      <span class="chip pass">PASS · archived</span>
+      <span class="chip mono">foundation-builtin-command-dispatch</span>
+      <span class="chip">foundation-standard · medium / isolated</span>
+      <span class="chip">archive 17 ส.ค. 2026</span>
+      <span class="chip">next round: ไม่มี active change</span>
+      <span class="chip">อัปเดตรายงาน 17 ส.ค. 2026</span>
+    </div>
+    <div class="kpis" aria-label="ตัวชี้วัดหลัก">
+      <article class="kpi"><div class="label">คุณภาพ · Quality</div><div class="value">4/4 claims</div><div class="sub">discovery, test, review, proof = <b>pass</b></div></article>
+      <article class="kpi"><div class="label">บั๊ก · Bug</div><div class="value">1 → 1 · 0 open</div><div class="sub">version drift ถูกปิด; reviewer ไม่พบ finding</div></article>
+      <article class="kpi"><div class="label">เวลา · Time</div><div class="value">21:24.897</div><div class="sub">17:21:23 → 17:42:48 ICT; รวมเวลารอมนุษย์</div></article>
+      <article class="kpi"><div class="label">ความเร็ว · Speed</div><div class="value">5:39.606</div><div class="sub">busy 26.4%; ช้าที่สุด authority-run 197.314s</div></article>
+      <article class="kpi"><div class="label">โทเคน · Token</div><div class="value">ไม่มีข้อมูล</div><div class="sub"><span class="mono">unavailable-until-external-events</span>; requests/model usage ไม่ถูก ingest</div></article>
+      <article class="kpi"><div class="label">ต้นทุน · Cost</div><div class="value">ไม่มีข้อมูล</div><div class="sub"><span class="mono">unavailable-until-external-events</span>; ไม่สร้างค่าประมาณ</div></article>
+      <article class="kpi"><div class="label">ตัวคุมงาน · Harness</div><div class="value">13 / 34</div><div class="sub">blocked operations / operations ทั้งหมด</div></article>
+      <article class="kpi"><div class="label">โค้ด · Code</div><div class="value">+155 / −175</div><div class="sub">working-tree projection: prod +72/−159 · test +36/−5</div></article>
+      <article class="kpi"><div class="label">เอกสาร · Docs</div><div class="value">+47 / −11</div><div class="sub">CONFIGURATION, ROADMAP, synced spec; ยังไม่มี commit</div></article>
+      <article class="kpi"><div class="label">สุขภาพรวม · Well</div><div class="value">แข็งแรง</div><div class="sub">3/3 tasks · 12 tests · 5 critical cases · 0 findings</div></article>
+    </div>
+  </header>
+
+  <section>
+    <div class="section-head"><div><h2>1. Timeline</h2><p>แบ่งเวลาทั้ง span แบบไม่ทับซ้อน: ทุกช่วงถูกนับให้ phase ของคำสั่งล่าสุด ณ เวลานั้น จึงรวมกันได้ 21:24.897 พอดี และรวมเวลารอมนุษย์ไว้แล้ว</p></div></div>
+    <div class="bars">
+      <div class="bar-row"><b>Change</b><div class="track"><div class="fill" style="width:17.4%"></div></div><div class="num">3:43.506 · 17.4%</div></div>
+      <div class="bar-row"><b>Build</b><div class="track"><div class="fill" style="width:36.1%"></div></div><div class="num">7:44.028 · 36.1%</div></div>
+      <div class="bar-row"><b>Prove</b><div class="track"><div class="fill" style="width:31.5%"></div></div><div class="num">6:44.348 · 31.5%</div></div>
+      <div class="bar-row"><b>Land</b><div class="track"><div class="fill" style="width:15.0%"></div></div><div class="num">3:13.015 · 15.0%</div></div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Phase</th><th class="num">Commands</th><th class="num">Blocked</th><th class="num">Busy</th><th class="num">Requests</th><th class="num">Output</th><th class="num">Cache write</th><th class="num">Cache read</th><th class="num">Cost</th></tr></thead>
+      <tbody>
+        <tr><td>Change</td><td class="num">13</td><td class="num">8</td><td class="num">6.029s</td><td class="num">ไม่มีข้อมูล</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+        <tr><td>Build</td><td class="num">7</td><td class="num">1</td><td class="num">6.635s</td><td class="num">ไม่มีข้อมูล</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+        <tr><td>Prove</td><td class="num">7</td><td class="num">2</td><td class="num">5:19.973</td><td class="num">ไม่มีข้อมูล</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+        <tr><td>Land</td><td class="num">7</td><td class="num">2</td><td class="num">6.969s</td><td class="num">ไม่มีข้อมูล</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+      </tbody>
+      <tfoot><tr><td><b>รวม</b></td><td class="num"><b>34</b></td><td class="num"><b>13</b></td><td class="num"><b>5:39.606</b></td><td class="num">ไม่มีข้อมูล</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr></tfoot>
+    </table></div>
+    <p class="muted">ช่วงเงียบยาวที่สุด 5:01.220 หลัง <code>sandbox</code> ใน Build ซึ่งเป็นช่วง implementation ในพื้นที่แยก ส่วน busy share ของทั้งรอบคือ 26.4%.</p>
+    <div class="track" aria-label="busy share"><div class="fill passfill" style="width:26.4%"></div></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>2. Harness interventions</h2><p>“Blocked” หมายถึงตัวคุมงานหยุดการเดินหน้าก่อนความเสี่ยงจะหลุดไป phase ถัดไป ไม่ใช่ผลล้มเหลวสุดท้าย</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>กลุ่ม</th><th class="num">ครั้ง</th><th>สิ่งที่หยุด · เวลา UTC</th><th>ความเสี่ยงที่ป้องกัน</th><th>สิ่งที่ทำให้ผ่าน</th></tr></thead>
+      <tbody>
+        <tr><td>Start</td><td class="num">1</td><td><code>change/start</code> · 10:21:23</td><td>ไม่ให้ change ที่มี impact medium เดินต่อด้วยสัญญา rapid ที่บางเกินไป</td><td>resolve เป็น <code>foundation-standard</code>; runtime บันทึก <code>upgradedFrom: foundation-rapid</code></td></tr>
+        <tr><td>Contract validation</td><td class="num">7</td><td><code>change/validate</code> · 10:22:36–10:23:53</td><td>ไม่ให้ proposal, delta spec, evidence contract และ task ledger ที่ยังไม่ครบกลายเป็นฐาน Build</td><td>เติม packet ทีละส่วนจน validate ผ่านเวลา 10:24:05</td></tr>
+        <tr><td>Sandbox grounding</td><td class="num">1</td><td><code>build/sandbox</code> · 10:24:57</td><td>ไม่ให้พื้นที่แยกอ้าง readSet ที่ resolve ไม่ได้จาก untracked investigation note</td><td>reopen grounding พร้อม decision ref และย้าย decision ที่ต้องใช้เข้า proposal/design</td></tr>
+        <tr><td>Proof readiness</td><td class="num">2</td><td><code>proof-readiness</code>, <code>authority-run</code> · 10:32:51–10:33:22</td><td>ไม่ให้ Proof ผ่านโดยไม่มีใบรับรอง test/discovery และ configured review</td><td>เก็บ deterministic evidence แล้ว dispatch reviewer ตาม policy</td></tr>
+        <tr><td>Land projection</td><td class="num">2</td><td><code>land/archive</code> · 10:39:41, 10:42:18</td><td>ไม่ให้ patch ทับ Roadmap ที่ root ถูกแก้ไว้ก่อนหน้า</td><td>รวม proven Roadmap โดยรักษาเนื้อหาเดิม แล้วให้ projection apply จากฐานที่ตรงกัน</td></tr>
+      </tbody>
+    </table></div>
+    <div class="cards">
+      <article class="card"><h3>ชนะชัดที่สุด</h3><p>Land guard จับ patch conflict ของ <code>docs/plan/ROADMAP.md</code> สองครั้ง จึงไม่มีการเขียนทับ user edit แบบเงียบ ๆ และ transaction สุดท้ายจบที่ <code>status: committed</code>.</p></article>
+      <article class="card"><h3>สิ่งที่ยังมองไม่เห็น</h3><p>host telemetry ไม่ถูก ingest: requests, input/output/cache tokens และ cost เป็น <code>null</code> ทั้งหมด จึงวัดประสิทธิภาพโมเดลของ session นี้ไม่ได้.</p></article>
+      <article class="card"><h3>ราคาที่จ่าย</h3><p>configured review ใช้ 2 attempts รวมราว 5:16.302; Claude attempt แรกเสีย 197.314s ก่อน retry ด้วย <code>codex-sol</code> ผ่านใน 118.988s.</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>3. What took time</h2><p>เรียงตามระยะทำงานของ command ไม่รวม quiet gap ระหว่าง command</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Command</th><th>Phase</th><th class="num">Duration</th><th>Outcome</th><th>สาเหตุ</th></tr></thead>
+      <tbody>
+        <tr><td><code>authority-run</code> · claude-opus</td><td>Prove</td><td class="num">197.314s</td><td><span class="tag warn">infra error</span></td><td>reviewer ไม่คืน exact fresh session ID ที่ dispatch กำหนด</td></tr>
+        <tr><td><code>authority-run</code> · codex-sol</td><td>Prove</td><td class="num">118.988s</td><td><span class="tag pass">pass</span></td><td>full packet-bounded review; ไม่มี finding</td></tr>
+        <tr><td><code>archive</code></td><td>Land</td><td class="num">3.489s</td><td><span class="tag pass">archived</span></td><td>apply projection, sync spec, archive และ cleanup sandbox</td></tr>
+        <tr><td><code>sandbox</code></td><td>Build</td><td class="num">2.564s</td><td><span class="tag pass">complete</span></td><td>สร้างพื้นที่แยกครั้งแรก</td></tr>
+        <tr><td><code>proof-advance</code></td><td>Prove</td><td class="num">2.120s</td><td><span class="tag pass">complete</span></td><td>เก็บ discovery และ test receipts</td></tr>
+        <tr><td><code>validate</code></td><td>Change</td><td class="num">1.830s</td><td><span class="tag pass">complete</span></td><td>validate packet หลัง implementation</td></tr>
+        <tr><td><code>bun test test/plugin/foundation.test.ts</code></td><td>Build</td><td class="num">1.764s</td><td><span class="tag pass">10 pass</span></td><td>focused package suite</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>4. Code volume</h2><p>รอบนี้ยังไม่มี commit จึงไม่มี commit stat ให้ใช้ ตัวเลขด้านล่างมาจาก landed working-tree projection เทียบกับ HEAD ปัจจุบัน และแยก docs ออกจาก prod/test อย่างชัดเจน</p></div></div>
+    <div class="cards">
+      <article class="card"><div class="score">+155</div><p>เพิ่มทั้งหมด · ลบ 175</p></article>
+      <article class="card"><div class="score">+72</div><p>production dispatchers · ลบ 159</p></article>
+      <article class="card"><div class="score">+36</div><p>tests + evidence fixture · ลบ 5</p></article>
+    </div>
+    <div class="table-wrap" style="margin-top:16px"><table>
+      <thead><tr><th>File</th><th>กลุ่ม</th><th class="num">+</th><th class="num">−</th></tr></thead>
+      <tbody>
+        <tr><td><code>docs/CONFIGURATION.md</code></td><td>Docs</td><td class="num">20</td><td class="num">3</td></tr>
+        <tr><td><code>docs/plan/ROADMAP.md</code></td><td>Docs</td><td class="num">8</td><td class="num">4</td></tr>
+        <tr><td><code>openspec/specs/foundation-workflow/spec.md</code></td><td>Synced spec</td><td class="num">19</td><td class="num">4</td></tr>
+        <tr><td><code>foundation/build.txt</code></td><td>Prod</td><td class="num">9</td><td class="num">24</td></tr>
+        <tr><td><code>foundation/change.txt</code></td><td>Prod</td><td class="num">9</td><td class="num">25</td></tr>
+        <tr><td><code>foundation/changes.txt</code></td><td>Prod</td><td class="num">9</td><td class="num">7</td></tr>
+        <tr><td><code>foundation/dev.txt</code></td><td>Prod</td><td class="num">9</td><td class="num">21</td></tr>
+        <tr><td><code>foundation/feature.txt</code></td><td>Prod</td><td class="num">9</td><td class="num">19</td></tr>
+        <tr><td><code>foundation/investigate.txt</code></td><td>Prod</td><td class="num">9</td><td class="num">19</td></tr>
+        <tr><td><code>foundation/land.txt</code></td><td>Prod</td><td class="num">9</td><td class="num">21</td></tr>
+        <tr><td><code>foundation/prove.txt</code></td><td>Prod</td><td class="num">9</td><td class="num">23</td></tr>
+        <tr><td><code>test/plugin/foundation.test.ts</code></td><td>Test</td><td class="num">33</td><td class="num">3</td></tr>
+        <tr><td><code>script/evidence-foundation-workflow-test.ts</code></td><td>Evidence fixture</td><td class="num">3</td><td class="num">2</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>5. Gates and receipts</h2><p>ใบรับรอง (receipt) ทุกใบผูกกับ contract fingerprint และ workspace hash; proof สุดท้ายคือ <code>proof-1786963169717</code>.</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Provider</th><th>Status</th><th>Claims</th><th class="num">Duration</th><th>Observed · คำอธิบายไทย</th></tr></thead>
+      <tbody>
+        <tr><td><code>discovery</code></td><td><span class="tag pass">pass</span></td><td>4/4</td><td class="num">1.544s</td><td><span class="quote mono">“12 discovered; minimum 8”</span> พบการทดสอบ 12 รายการ สูงกว่าขั้นต่ำ 8</td></tr>
+        <tr><td><code>test</code></td><td><span class="tag pass">pass</span></td><td>4/4</td><td class="num">1.544s</td><td><span class="quote mono">“exit 0; 1544ms; readiness observed; critical cases CC-canonical-dispatch=pass, CC-partial-install=pass, CC-precedence=pass, CC-optout=pass, CC-version-docs=pass”</span> ทุก critical case ผ่าน</td></tr>
+        <tr><td><code>review</code></td><td><span class="tag pass">pass</span></td><td>4/4</td><td class="num">118.988s attempt</td><td><span class="quote">“No blocker, major, or minor findings within the packet-bounded review scope.”</span> reviewer ไม่พบ blocker, major หรือ minor finding</td></tr>
+        <tr><td><code>proof</code></td><td><span class="tag pass">pass</span></td><td>3 providers</td><td class="num">—</td><td><span class="quote mono">status: “pass”; providers: [“discovery”, “review”, “test”]; advisories: []</span> รวมใบรับรองครบและไม่มี advisory</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>6. Tasks</h2><p>task ledger ของรอบที่จบแล้วครบทุกข้อ และไม่มี active round ต่อท้าย</p></div></div>
+    <div class="two">
+      <article class="card"><div class="score">3/3</div><h3>รอบ foundation-builtin-command-dispatch</h3><p><b>T001</b> เปลี่ยน 8 templates เป็น canonical dispatchers · <b>T002</b> ปรับ focused/structured evidence · <b>T003</b> อธิบาย version model ในเอกสาร</p></article>
+      <article class="card"><div class="score">0</div><h3>Active next round</h3><p><code>claude-foundation changes</code> รายงาน <b>No active changes.</b> จึงไม่มี unfinished scope หรือ usage ของรอบถัดไป</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>7. Bugs and findings</h2><p>แยก product defect ออกจาก infrastructure error ของ reviewer เพื่อไม่สรุปความล้มเหลวให้กลายเป็น pass</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>ชนิด</th><th>สถานะ</th><th>สิ่งที่พบ</th><th>ผลที่วัดได้ในรอบ</th></tr></thead>
+      <tbody>
+        <tr><td>Product defect</td><td><span class="tag pass">fixed</span></td><td>builtin bodies มาจาก Foundation 3.2.27 ขณะที่ project runtime เป็น 3.2.29 ทำให้ semantics drift ได้แม้ runtime API ยัง compatible</td><td>8/8 commands เปลี่ยนเป็น thin dispatcher; 12 tests และ 5 critical cases ผ่าน</td></tr>
+        <tr><td>Review infrastructure</td><td><span class="tag warn">recovered</span></td><td>Claude Code reviewer ไม่คืน exact fresh session ID</td><td>บังคับ retry 1 ครั้ง; ใช้เวลาเพิ่ม 197.314s; <code>codex-sol</code> ผ่าน</td></tr>
+        <tr><td>Review findings</td><td><span class="tag pass">0 open</span></td><td>ไม่มี blocker, major หรือ minor finding ใน bounded scope</td><td><code>verified: 0</code>, <code>unresolvedBlockers: 0</code></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>8. Risks and waivers</h2><p>ข้อจำกัดของหลักฐานและ policy ที่ runtime บันทึกไว้โดยตรง</p></div></div>
+    <div class="cards">
+      <article class="card"><h3>Review independence</h3><p><span class="tag warn">waived</span> receipt ระบุ <code>independenceWaived: true</code> ภายใต้ config <code>independence: self</code>. อย่างไรก็ดี reviewer สุดท้ายระบุ <code>independent: true</code> และ <code>diverse: true</code>.</p></article>
+      <article class="card"><h3>Human acceptance</h3><p><span class="tag pass">not-required</span> runtime ระบุ <code>acceptance.decision: “not-required”</code> และ <code>required: false</code>; ไม่มี claim ที่ต้องรับรองด้วยมือ</p></article>
+      <article class="card"><h3>Attestations</h3><p>ไม่มีไฟล์ใต้ <code>.foundation/attestations/</code> และ proof ไม่มี advisory จึงไม่มี waiver หรือ attestation เพิ่มเติมให้ตีความ</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>9. Improvement candidates</h2><p>ข้อเสนอจากข้อมูลที่เกิดขึ้นจริงในรอบ ไม่ใช่สถานะใหม่ของ harness</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th class="num">#</th><th>Observation</th><th>Proposal</th><th>Source row</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td><code>validate</code> ถูก block 7 ครั้ง</td><td>เพิ่ม preflight checklist ที่ชี้ missing standard packet fields ในผลครั้งเดียว เพื่อลดรอบแก้ทีละข้อ</td><td><code>operations.jsonl</code> · change/validate 10:22:36–10:23:53</td></tr>
+        <tr><td class="num">2</td><td>Claude reviewer ใช้ 197.314s ก่อนจบด้วย session-ID error</td><td>ตรวจ session handshake ทันทีหลัง dispatch และ fail fast ก่อนรอ review เต็มรอบ</td><td><code>review-attempts/0001-154daacce361.json</code></td></tr>
+        <tr><td class="num">3</td><td>archive block 2 ครั้งเมื่อ proven hunk ถูก pre-apply ใน Roadmap</td><td>ทำ projection apply ให้ยอมรับไฟล์ที่ byte-identical กับ desired result หรือเสนอ merge-aware automatic recovery</td><td><code>operations.jsonl</code> · land/archive 10:39:41, 10:42:18</td></tr>
+        <tr><td class="num">4</td><td>token/cost/request เป็น <code>null</code> ทุก operation</td><td>นำ host telemetry เข้า Foundation logs ก่อนปิดรอบ เพื่อวัด cost และ output/cache-write ตาม budget จริง</td><td><code>runtime.budget.measurement: “unavailable-until-external-events”</code></td></tr>
+        <tr><td class="num">5</td><td>sandbox block เพราะ untracked investigation note อยู่ใน readSet</td><td>เพิ่ม grounding portability check ก่อนสร้าง sandbox พร้อมระบุ path ที่พื้นที่แยกจะอ่านไม่ได้</td><td><code>runtime.groundingReopens[0]</code></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>
+    <p><b>Read-only projection:</b> รายงานนี้อ่านจาก <code>.foundation/</code>, archived OpenSpec packet และ Git working-tree diff เท่านั้น ไม่แก้ harness state และไม่สร้าง status store คู่ขนาน</p>
+    <p>รวมรอบที่จบ: <b>34 operations</b> · requests/tokens/cost <b>ไม่มีข้อมูล</b> · reviewer models: <code>opus</code> (infra error), <code>gpt-5.6-sol</code> (pass). Active round: <b>ไม่มี</b>.</p>
+  </footer>
+</main>
+</body>
+</html>
