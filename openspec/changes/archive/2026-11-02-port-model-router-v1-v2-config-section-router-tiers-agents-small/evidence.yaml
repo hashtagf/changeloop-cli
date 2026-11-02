@@ -1,0 +1,158 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "router-config-normalize-normalize-config-router-tiers-agents-sma",
+      "requirementKey": "router-config-normalize",
+      "scenario": "แปลงตารางที่ถูกต้อง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-config-normalize-normalize-config-router-tier-agents-stri",
+      "requirementKey": "router-config-normalize",
+      "scenario": "รายการผิดรูปถูกข้าม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-config-normalize-normalize-config-router-string",
+      "requirementKey": "router-config-normalize",
+      "scenario": "router ไม่ใช่ object",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-config-normalize-normalize-config-router",
+      "requirementKey": "router-config-normalize",
+      "scenario": "ไม่มี router",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-resolution-provider-anthropic-map-plan-tier-deep-test-tie",
+      "requirementKey": "router-resolution",
+      "scenario": "pin candidate แรกที่พร้อม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-resolution-provider-candidate",
+      "requirementKey": "router-resolution",
+      "scenario": "ข้ามไป candidate ถัดไป",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-resolution-provider",
+      "requirementKey": "router-resolution",
+      "scenario": "ไม่มี candidate พร้อม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-resolution-agent-plan-small-model-model-provider",
+      "requirementKey": "router-resolution",
+      "scenario": "pin ของผู้ใช้ชนะ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-resolution-agents-tier-provider-model",
+      "requirementKey": "router-resolution",
+      "scenario": "ชื่อ tier ไม่มี candidate",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-instance-config-provider-model-router-map-agent-build-tie",
+      "requirementKey": "router-instance",
+      "scenario": "provider พร้อม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-instance-router-map-agent-build-tier-candidate-provider",
+      "requirementKey": "router-instance",
+      "scenario": "provider ไม่พร้อม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-instance-config-model-agent-build-router-map-agent",
+      "requirementKey": "router-instance",
+      "scenario": "pin ของผู้ใช้ชนะ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-instance-config-router",
+      "requirementKey": "router-instance",
+      "scenario": "ไม่มี router",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-instance-router-username",
+      "requirementKey": "router-instance",
+      "scenario": "ค่าผิดรูป",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "router-instance-config-router-plugins-opencode-router",
+      "requirementKey": "router-instance",
+      "scenario": "ปิด plugin",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/core test/config/router-compat.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/core test/plugin/router.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(XDG_CACHE_HOME=$(mktemp -d) bun test --cwd packages/core test/plugin/router-config.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "segments": [
+        "o=$(bun test --cwd packages/core test/config/router-compat.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/core test/plugin/router.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(XDG_CACHE_HOME=$(mktemp -d) bun test --cwd packages/core test/plugin/router-config.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}

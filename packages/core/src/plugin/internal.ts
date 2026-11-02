@@ -93,6 +93,7 @@ import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { PlanPlugin } from "./plan.js"
+import { ModelRouterPlugin } from "./router.js"
 import { ModelsDevPlugin } from "./models-dev.js"
 import { McpCodeModeDefaultsPlugin } from "./mcp-codemode-defaults.js"
 import { ProviderPlugins } from "./provider.js"
@@ -271,6 +272,8 @@ const post = [
   ConfigSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   ConfigWebSearchPlugin.Plugin,
+  // After every plugin that sets an agent model or registers a provider, so a model the user pinned wins.
+  ModelRouterPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 

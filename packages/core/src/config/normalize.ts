@@ -187,7 +187,7 @@ export function normalize(input: unknown): Result {
     (plugin) => (typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] }),
   )
   const nativePlugins = decodeList(input.plugins, ConfigPlugin.Plugin, ["plugins"], diagnostics, decodeEncoded)
-  const foundationPlugins = foundationCompatibility(input, diagnostics)
+  const foundationPlugins = [...foundationCompatibility(input, diagnostics), ...routerCompatibility(input, diagnostics)]
   if (
     foundationPlugins.length ||
     legacyPlugins.length ||
@@ -752,6 +752,50 @@ function foundationCompatibility(input: Record<string, unknown>, diagnostics: Di
   if (workflow === false) plugins.push(`-${foundationPluginID}`)
   if (workflow === true) plugins.push(foundationPluginID)
   return plugins
+}
+
+const routerPluginID = "opencode.router"
+
+// Changeloop v1 routed models with a top-level `router` table. v2 owns that as the builtin `opencode.router`
+// plugin, so the table becomes configure-only options for it in the same document (a user can still remove the
+// plugin). Malformed entries are skipped one by one with a diagnostic; the rest of the table still applies.
+function routerCompatibility(input: Record<string, unknown>, diagnostics: Diagnostic[]) {
+  if (!own(input, "router")) return []
+  const router = input.router
+  if (!isRecord(router)) {
+    invalid(["router"], diagnostics)
+    return []
+  }
+  const table: Record<string, unknown> = {}
+  if (own(router, "tiers")) {
+    if (!isRecord(router.tiers)) invalid(["router", "tiers"], diagnostics)
+    else {
+      const tiers: Record<string, string[]> = {}
+      for (const [name, candidates] of Object.entries(router.tiers)) {
+        if (Array.isArray(candidates) && candidates.every((item) => typeof item === "string"))
+          setOwn(tiers, name, [...candidates])
+        else invalid(["router", "tiers", name], diagnostics)
+      }
+      if (Object.keys(tiers).length) table.tiers = tiers
+    }
+  }
+  if (own(router, "agents")) {
+    if (!isRecord(router.agents)) invalid(["router", "agents"], diagnostics)
+    else {
+      const agents: Record<string, string> = {}
+      for (const [name, target] of Object.entries(router.agents)) {
+        if (typeof target === "string") setOwn(agents, name, target)
+        else invalid(["router", "agents", name], diagnostics)
+      }
+      if (Object.keys(agents).length) table.agents = agents
+    }
+  }
+  if (own(router, "small_model")) {
+    if (typeof router.small_model === "string") table.small_model = router.small_model
+    else invalid(["router", "small_model"], diagnostics)
+  }
+  if (!Object.keys(table).length) return []
+  return [{ package: routerPluginID, options: { router: table, [configureOnly]: true } }]
 }
 
 function decodeList<S extends Schema.Codec<unknown, unknown, never>, A>(

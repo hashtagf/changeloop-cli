@@ -1,0 +1,80 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "config-carrier",
+      "choice": "ConfigNormalize อ่าน key router แล้วแปลงเป็น plugin operation แบบ configure-only ของ builtin opencode.router พร้อม options {router} (ตามแบบ foundation_runtime) ไม่เพิ่ม field ใน Info schema ค่าที่เสียรายตัว (tier ที่ไม่ใช่อาร์เรย์ของ string, agent ที่ไม่ใช่ string, small_model ที่ไม่ใช่ string) ถูกข้ามพร้อม diagnostic ชนิด invalid และส่วนที่เหลือใช้ต่อ",
+      "reason": "schema ปัจจุบันเมิน key ที่ไม่รู้จัก (onExcessProperty ignore) config เดิมที่ไม่มี router จึงไม่เปลี่ยน และไม่แตะ discovery/ชื่อไฟล์ของทีม G1 การไม่เพิ่ม field ใน Info หลีกเลี่ยงการ regenerate OpenAPI/SDK และ configure-only ทำให้ผู้ใช้ปิด plugin ด้วย -opencode.router ได้ ข้อต่างจาก v1: options ของ builtin ถูกแทนด้วยเอกสารที่มีลำดับสูงสุดที่มี router ทั้งก้อน ไม่ merge รายชื่อ tier/agent ข้ามชั้น global กับ project เหมือน v1"
+    },
+    {
+      "id": "plugin-placement",
+      "choice": "builtin opencode.router อยู่ใน packages/core/src/plugin/router.ts ลงทะเบียนในรายการ post ของ internal.ts ต่อจาก ConfigProviderPlugin และก่อน ConfigPolicyPlugin",
+      "reason": "ต้องรันหลัง AgentPlugin, ConfigAgentPlugin และ FoundationPlugin เพื่อเห็น agent และ model ที่ผู้ใช้ pin ไว้ (pin ของผู้ใช้ต้องชนะ) และหลัง provider plugins เพื่อให้ catalog พร้อม core เป็นเจ้าของ Agent/Model service และ normalize อ้างถึง plugin ด้วยสตริง id เท่านั้น จึงไม่เกิด cycle กับ packages/foundation"
+    },
+    {
+      "id": "small-model-slot",
+      "choice": "v2 ไม่มี config small_model แยก: ช่อง small-model คือ model ของ agent title (ConfigNormalize ย้าย small_model ของ v1 ไปเป็น model ของ agent title อยู่แล้ว และ session/context.ts เลือก model ของ title จาก agent.model ก่อนค่า small ของ provider) router จึงตั้ง agent title เมื่อยังไม่มี model ตั้งไว้",
+      "reason": "ใกล้เคียง semantics ของ v1 ที่สุดและใช้ช่องที่ v2 ใช้จริง ผลกระทบ: ใน v2 small model ใช้เฉพาะการตั้งชื่อ session ส่วน summary และ compaction ยังตาม model หลัก"
+    },
+    {
+      "id": "availability-signal",
+      "choice": "candidate ใช้ได้เมื่อ provider/model นั้นอยู่ใน Model.available() ของอินสแตนซ์ (provider ผ่าน credential, env key หรือ config และ catalog รู้จัก model) plugin อ่านค่านี้ตอน activate และอ่านใหม่เมื่อเกิด event model.updated แล้ว reload agent",
+      "reason": "v1 อ่านไฟล์ auth.json และ env เองเพราะ config hook ทำงานก่อน service graph พร้อม v2 มี catalog ที่ resolve credential และ env ให้แล้วจึงไม่ต้องอ่านซ้ำ ข้อต่างจาก v1: ตรวจถึงตัว model ด้วย candidate ที่ provider พร้อมแต่ model ไม่อยู่ใน catalog จะถูกข้ามไปตัวถัดไปแทนที่จะ pin model ที่ใช้ไม่ได้ และ provider ฟรี (opencode) นับเป็นพร้อมใช้เสมอ"
+    },
+    {
+      "id": "unknown-agent",
+      "choice": "agent ที่ตาราง map ไว้แต่ไม่มีอยู่ในอินสแตนซ์ถูกข้ามพร้อมคำเตือน ไม่สร้าง agent เปล่า",
+      "reason": "v1 เขียน agent[name] เปล่าที่มีแค่ model v2 ไม่ควรสร้าง agent ที่ไม่มี prompt จากตารางที่พิมพ์ผิด"
+    },
+    {
+      "id": "warning-surface",
+      "choice": "คำเตือนออกทาง Effect.logWarning ด้วย message ขึ้นต้น changeloop-router หนึ่งครั้งต่อข้อความต่ออินสแตนซ์",
+      "reason": "เป็นช่องทางเตือนที่ plugin อื่นของ v2 ใช้อยู่ (เช่น agent frontmatter ที่ไม่รองรับ) v1 ใช้ console.warn ซึ่ง v2 ไม่ได้ให้ plugin"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase9-router-g2",
+    "mode": "single-batch",
+    "lockedAt": "2026-11-02T09:00:00.000Z",
+    "decisions": [
+      {
+        "id": "config-carrier",
+        "question": "section router ต้องเข้า v2 อย่างไรโดยไม่กระทบ config เดิม",
+        "answer": "ให้ schema รับ router โดย config ที่ไม่มี key นี้ไม่เปลี่ยน และค่าผิดรูปต้องไม่ทำให้ config ล้มทั้งไฟล์",
+        "source": "user-batch"
+      },
+      {
+        "id": "plugin-placement",
+        "question": "router ควรอยู่ที่ไหนและเป็น plugin ตัวใด",
+        "answer": "เป็น builtin plugin บน v2 plugin API ตัดสินที่วางด้วยหลักฐานเรื่องทิศ dependency",
+        "source": "user-batch"
+      },
+      {
+        "id": "small-model-slot",
+        "question": "small-model ใน v2 อยู่ที่ไหนและ router ตั้งอย่างไร",
+        "answer": "ถ้า v2 ไม่มีช่องที่ plugin ตั้งได้ ให้ระบุผลกระทบและทางที่ใกล้เคียงที่สุด อย่าเดา",
+        "source": "user-batch"
+      },
+      {
+        "id": "availability-signal",
+        "question": "ความพร้อมของ provider ตัดสินจากอะไร",
+        "answer": "ตั้ง model ของ agent เป็น candidate ตัวแรกที่ provider พร้อมใช้ตอน activate",
+        "source": "user-batch"
+      },
+      {
+        "id": "unknown-agent",
+        "question": "agent ที่ map ไว้แต่ไม่มีอยู่ควรทำอย่างไร",
+        "answer": "ไม่ทำให้ boot ล้มและเตือนผู้ใช้",
+        "source": "user-batch"
+      },
+      {
+        "id": "warning-surface",
+        "question": "คำเตือนต้องแสดงทางไหน",
+        "answer": "ต้องมีคำเตือนที่ผู้ใช้เห็นได้เหมือน v1",
+        "source": "user-batch"
+      }
+    ]
+  }
+}
