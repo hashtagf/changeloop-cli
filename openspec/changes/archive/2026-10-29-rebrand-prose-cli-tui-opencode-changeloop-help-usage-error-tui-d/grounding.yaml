@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "classification-rule",
+      "choice": "เปลี่ยนเฉพาะ string literal/ข้อความ JSX ที่ผู้ใช้อ่าน และคำสั่งที่แนะนำให้ผู้ใช้พิมพ์ (`opencode <cmd>` เป็น `changeloop <cmd>`) คงไว้ทั้งหมด: ชื่อ package @opencode/*, symbol SDK (OpenCode.make, OpenCodeClient), plugin/command/keybind id opencode.*, env OPENCODE_*, ชื่อไฟล์/โฟลเดอร์ config เดิม (opencode.json, .opencode/, dir ข้อมูล), URL และ endpoint opencode.ai, basic-auth username, ชื่อ theme/provider/integration id `opencode`, ชื่อ formula/package ที่ updater ติดตั้ง, comment และ storybook/demo fixture",
+      "reason": "v1 rebrand เฉพาะ user-visible และคง contract ไว้ (rebrand-opencode-to-changeloop.md) การเปลี่ยน identifier ทำให้ plugin/config/endpoint ของผู้ใช้เดิมพัง ส่วนคำสั่งที่แนะนำต้องตรงกับ binary จริงที่ชื่อ changeloop"
+    },
+    {
+      "id": "service-brand-names",
+      "choice": "คงชื่อ OpenCode Console, OpenCode Go, OpenCode Zen และ 'Web Search via OpenCode' เพราะเป็นชื่อผลิตภัณฑ์/บริการของ opencode.ai ที่ผู้ใช้ต้องจับคู่กับหน้าเว็บและบัญชีจริง",
+      "reason": "endpoint และบัญชียังเป็นของ opencode.ai การเปลี่ยนชื่อในโปรแกรมทำให้ผู้ใช้หาบริการไม่เจอ"
+    },
+    {
+      "id": "command-name-in-hints",
+      "choice": "ข้อความแนะนำคำสั่งฮาร์ดโค้ด changeloop ส่วนชื่อ root ใน help ยังมาจาก OPENCODE_CLI_NAME ที่ build ฝัง (fallback โหมด source คงเป็น opencode เพื่อไม่ทำ test path ของ spec พัง 25 จุด) test ของ help จึงตัดส่วน USAGE ออกก่อนตรวจ และ binary จริงพิสูจน์ usage",
+      "reason": "ชื่อ binary ถูกกำหนดคงที่ใน build.ts เป็น changeloop จึงไม่ต้องเพิ่มกลไกอ่านชื่อตอนรัน"
+    },
+    {
+      "id": "wordmark",
+      "choice": "ใช้ pixel wordmark CHANGE + LOOP (ไอคอน loop แทนตัว O) ตามที่ v1 ตัดสินแล้ว ย้ายมาที่ packages/tui/src/logo.ts และ presentation.ts ปรับ logo.tsx ให้ตัดแถวไม่ผิดกับโลโก้ 5 แถว และ stack เมื่อจอแคบกว่าความกว้างโลโก้",
+      "reason": "ตัดสินใจแล้วใน v1 (commit 7cf7fb9d1d, 75ada8719f) โลโก้ glyph เดิมสะกดว่า opencode ใช้ต่อไม่ได้"
+    },
+    {
+      "id": "guard-test",
+      "choice": "เพิ่ม test ที่สแกน string literal ใน packages/cli/src และ packages/tui/src ว่าไม่เหลือ prose OpenCode/คำสั่ง opencode นอก allowlist ที่ระบุ และ test รัน --help จริงของ root และ subcommand",
+      "reason": "ทำให้ regression ย้อนกลับถูกจับ และให้กฎคัดแยกตรวจได้ด้วยเครื่อง ไม่ใช่ find/replace ทั้ง repo"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase4-rebrand-r",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-29T06:00:00.000Z",
+    "decisions": [
+      {
+        "id": "classification-rule",
+        "question": "ข้อความใดเปลี่ยน ข้อความใดคงไว้",
+        "answer": "เปลี่ยนเฉพาะ prose ที่ผู้ใช้เห็นและคำสั่งแนะนำ คง identifier ที่เป็นสัญญาทั้งหมด",
+        "source": "user-batch"
+      },
+      {
+        "id": "service-brand-names",
+        "question": "ชื่อบริการ OpenCode Console/Go/Zen ควรเปลี่ยนหรือไม่",
+        "answer": "คงไว้ เพราะเป็นชื่อบริการของ opencode.ai",
+        "source": "recommended-default"
+      },
+      {
+        "id": "command-name-in-hints",
+        "question": "คำสั่งแนะนำใช้ชื่ออะไรและ help root ได้ชื่อจากไหน",
+        "answer": "ฮาร์ดโค้ด changeloop ในข้อความ ส่วน root ใน help ยังมาจากชื่อที่ build ฝัง",
+        "source": "recommended-default"
+      },
+      {
+        "id": "wordmark",
+        "question": "wordmark ใช้แบบไหน",
+        "answer": "pixel CHANGE+LOOP แบบ v1",
+        "source": "user-batch"
+      },
+      {
+        "id": "guard-test",
+        "question": "กันการย้อนกลับอย่างไร",
+        "answer": "guard test สแกน string literal พร้อม allowlist และ test help จริง",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}

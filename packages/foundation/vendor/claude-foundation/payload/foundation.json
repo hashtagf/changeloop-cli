@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "execution": {
+    "maxParallelAgents": 3,
+    "maxParallelProviders": 4,
+    "maxParallelSetups": 3,
+    "packetBytes": {
+      "task": 20480,
+      "review": 20480,
+      "repository": 24576,
+      "global": 32768
+    },
+    "tokenBudgets": {
+      "rapid": 800000,
+      "standard": 1600000
+    },
+    "requestBudgets": {
+      "rapid": 100,
+      "standard": 200
+    },
+    "maxContinuationWindows": 3,
+    "planSummaryBytes": 4096,
+    "leaseMinutes": 45,
+    "budgetWatchdog": false
+  },
+  "models": {
+    "routing": false,
+    "fast": {
+      "family": "haiku",
+      "fallbackTier": "standard",
+      "purposes": ["inventory", "logs", "mechanical-docs"]
+    },
+    "standard": {
+      "family": "sonnet",
+      "fallbackTier": "deep",
+      "purposes": ["implementation", "tests", "focused-investigation"]
+    },
+    "deep": {
+      "family": "opus",
+      "fallbackTier": null,
+      "purposes": ["architecture", "security", "migration", "independent-review"]
+    }
+  },
+  "escalation": [
+    "ambiguous-contract",
+    "auth-or-sensitive-data",
+    "migration",
+    "concurrency",
+    "public-compatibility",
+    "cross-repository-conflict",
+    "evidence-anomaly",
+    "two-failed-attempts"
+  ],
+  "review": {
+    "independence": "self",
+    "diversity": "single-model",
+    "defaultReviewer": "claude-opus",
+    "fallbackReviewers": ["codex-sol", "main-session"],
+    "infraFailureThreshold": 2,
+    "reviewers": {
+      "codex-sol": {
+        "adapter": "codex-cli",
+        "executable": "codex",
+        "providerFamily": "openai",
+        "modelFamily": "gpt-5.6",
+        "modelId": "gpt-5.6-sol",
+        "reasoningEffort": "high",
+        "sandbox": "read-only",
+        "ephemeral": true
+      },
+      "claude-opus": {
+        "adapter": "claude-cli",
+        "executable": "claude",
+        "providerFamily": "anthropic",
+        "modelFamily": "claude",
+        "modelId": "opus",
+        "reasoningEffort": "high",
+        "sandbox": "read-only",
+        "ephemeral": true
+      }
+    }
+  },
+  "telemetry": {
+    "requireUsage": true
+  },
+  "quality": {
+    "changeGate": "off"
+  },
+  "land": {
+    "riskBasedCi": false
+  },
+  "deliver": {
+    "provider": "auto",
+    "remote": "origin",
+    "defaultBaseBranch": "main",
+    "branchPattern": "change/{changeId}",
+    "missingPresentationEvidence": "draft",
+    "missingRequiredEvidence": "block",
+    "updateOwnedPullRequest": true,
+    "allowedHosts": ["github.com"]
+  },
+  "workflow": {
+    "grounding": "optional",
+    "reviewCircuit": "full-delta",
+    "reviewPolicy": "risk-tiered",
+    "handoffDefaultOwner": "devops-team"
+  }
+}

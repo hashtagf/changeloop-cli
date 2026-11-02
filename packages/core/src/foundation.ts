@@ -1,7 +1,7 @@
-export * as Foundation from "./foundation"
+export * as Foundation from "./foundation.js"
 
 import { Context, Effect, Option, Schema } from "effect"
-import { Foundation } from "@opencode-ai/schema/foundation"
+import { Foundation } from "@opencode/schema/foundation"
 
 export class ReadError extends Error {
   constructor(

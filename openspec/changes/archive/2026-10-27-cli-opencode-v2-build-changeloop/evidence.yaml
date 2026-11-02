@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "executable-changeloop-target",
+      "requirementKey": "executable-changeloop-target",
+      "scenario": "รัน bun run build --single --skip-web-ui ใน packages/cli บน",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "changeloop-help-usage-opencode-changeloop-help",
+      "requirementKey": "changeloop-help-usage-opencode",
+      "scenario": "บรรทัด usage ขึ้นต้นด้วยชื่อ changeloop",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "changeloop-help-usage-opencode-changeloop-version",
+      "requirementKey": "changeloop-help-usage-opencode",
+      "scenario": "พิมพ์หมายเลข version ที่ไม่ว่างและ exit code เป็น 0",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "bun test --cwd packages/cli test/changeloop-identity.test.ts"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}

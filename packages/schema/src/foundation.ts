@@ -1,4 +1,4 @@
-export * as Foundation from "./foundation"
+export * as Foundation from "./foundation.js"
 
 import { Schema } from "effect"
 

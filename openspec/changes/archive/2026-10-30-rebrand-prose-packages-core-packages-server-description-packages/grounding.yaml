@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "classification-rule",
+      "choice": "ใช้กติกาเดียวกับ cli-tui-brand-prose: เปลี่ยนเฉพาะ string ที่ผู้ใช้อ่านและคำสั่งที่แนะนำให้พิมพ์ (`opencode <cmd>` เป็น `changeloop <cmd>`) คงทั้งหมด: package @opencode/*, symbol SDK, id opencode.*, env OPENCODE_*, header x-opencode-*, cookie/session key, basic-auth username, config/dir เดิม, URL opencode.ai, id ของ integration/provider/tool namespace `opencode`, ชื่อ daemon/binary opencode-pty, comment",
+      "reason": "การเปลี่ยน identifier ทำให้ plugin, config, client และ endpoint ของผู้ใช้เดิมพัง ส่วนข้อความที่ผู้ใช้อ่านต้องไม่เรียกโปรแกรมว่า OpenCode"
+    },
+    {
+      "id": "service-brand-names",
+      "choice": "คงชื่อ OpenCode Console, OpenCode Go, OpenCode Zen และ 'Web Search via OpenCode' รวมข้อความ error ใน plugin ของบริการ opencode.ai (provider/opencode.ts, opencode-legacy.ts) ที่พูดถึงบริการนั้นโดยตรง",
+      "reason": "เป็นชื่อบริการที่ผู้ใช้ต้องจับคู่กับหน้าเว็บและบัญชีจริงของ opencode.ai"
+    },
+    {
+      "id": "model-facing-text-kept",
+      "choice": "คง system prompt (plugin/system-prompt/*.txt, session/runner/prompt/system.txt), skill guide (plugin/skill/*.md, skill.ts) และ description ของ tool namespace `opencode` ที่ส่งให้โมเดลไว้เหมือนเดิม และรายงานเป็นข้อค้างให้ผู้ใช้ตัดสินใจ",
+      "reason": "ข้อความเหล่านี้เป็นสัญญาเชิงพฤติกรรมของโมเดล (ตัวตน, คำสั่งในคู่มือ, ชื่อ tool) การเปลี่ยนโดยไม่มีผลประเมินอาจเปลี่ยนพฤติกรรม และคำสั่งในคู่มือผูกกับการตัดสินใจเรื่องชื่อ binary ที่ยังไม่ได้ตัดสิน"
+    },
+    {
+      "id": "third-party-identity-kept",
+      "choice": "คงตัวตนที่โปรแกรมส่งให้ระบบภายนอก: MCP clientInfo/client_name, User-Agent, originator, X-Title, agentName ของ ChatGPT, wordmark SVG ในหน้า OAuth",
+      "reason": "ผู้ให้บริการภายนอกลงทะเบียนหรือกรองตามค่าเหล่านี้ และ wordmark ต้องมีโลโก้ Changeloop ใหม่ซึ่งเป็นงานออกแบบ ไม่ใช่การแก้ข้อความ"
+    },
+    {
+      "id": "guard-test",
+      "choice": "เพิ่ม guard test ใน packages/core/test ที่สแกนบรรทัดโค้ด (ไม่รวม comment) ของ core/server/protocol src ว่าไม่เหลือ prose OpenCode นอก allowlist ที่ระบุเหตุผล และ test /openapi.json จาก server จริง",
+      "reason": "ให้กติกาคัดแยกตรวจได้ด้วยเครื่องและจับ regression แทนการ find/replace"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase5-rebrand-r2",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-29T08:00:00.000Z",
+    "decisions": [
+      {
+        "id": "classification-rule",
+        "question": "ข้อความใดเปลี่ยน ข้อความใดคงไว้",
+        "answer": "เปลี่ยนเฉพาะ prose ที่ผู้ใช้เห็นและคำสั่งแนะนำ คง identifier ที่เป็นสัญญา",
+        "source": "user-batch"
+      },
+      {
+        "id": "service-brand-names",
+        "question": "ชื่อบริการ OpenCode Console/Go/Zen ควรเปลี่ยนหรือไม่",
+        "answer": "คงไว้ เพราะเป็นชื่อบริการของ opencode.ai",
+        "source": "user-batch"
+      },
+      {
+        "id": "model-facing-text-kept",
+        "question": "system prompt และ skill guide ที่ส่งให้โมเดลควรเปลี่ยนหรือไม่",
+        "answer": "ถ้าไม่แน่ใจให้คงไว้และรายงาน",
+        "source": "user-batch"
+      },
+      {
+        "id": "third-party-identity-kept",
+        "question": "ตัวตนที่ส่งให้ระบบภายนอกและ wordmark ในหน้า OAuth",
+        "answer": "คงไว้ ไม่เปลี่ยน identifier ที่เป็นสัญญา",
+        "source": "recommended-default"
+      },
+      {
+        "id": "guard-test",
+        "question": "กันการย้อนกลับอย่างไร",
+        "answer": "guard test พร้อม allowlist และ test /openapi.json จริง",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}

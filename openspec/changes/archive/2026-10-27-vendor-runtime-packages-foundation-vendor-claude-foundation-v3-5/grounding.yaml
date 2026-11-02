@@ -1,0 +1,36 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "vendor-source",
+      "choice": "sync จาก checkout ในเครื่องที่ tag v3.6.8 (commit 402a2eb7c5784816657cfd00bd4c1f5833e07926) ด้วย script/sync-foundation.ts เดิม และยืนยันว่า .claude ของ checkout ตรงกับ payload ที่ Homebrew ติดตั้ง claude-foundation 3.6.8 ทุกไฟล์",
+      "reason": "ตรวจสอบได้สองทาง (git tag และ binary ที่ติดตั้ง) โดยไม่ดาวน์โหลดจากอินเทอร์เน็ต"
+    },
+    {
+      "id": "test-fidelity",
+      "choice": "แก้ hash ที่ฝังใน test ของ install-opencode.sh ให้ตรงรุ่นใหม่ และเพิ่ม test ตรวจ release/version/tagged/commit ของ manifest กับ checksum ทุกไฟล์ ไม่ลดความเข้มของ assertion เดิม",
+      "reason": "hash เดิมผูกกับ 3.5.14 จึงต้องเปลี่ยนตามรุ่น แต่ต้องมี test ใหม่พิสูจน์รุ่นที่ถูกต้อง"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase3-wiring-e",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-27T15:00:00.000Z",
+    "decisions": [
+      {
+        "id": "vendor-source",
+        "question": "ใช้แหล่งใดเป็นต้นทางของ vendor 3.6.8",
+        "answer": "checkout ในเครื่องที่ tag v3.6.8 ห้ามดาวน์โหลดจากอินเทอร์เน็ต",
+        "source": "user-batch"
+      },
+      {
+        "id": "test-fidelity",
+        "question": "ถ้า test เดิมผูกกับ 3.5.14 ให้จัดการอย่างไร",
+        "answer": "ปรับให้ตรงเวอร์ชันอย่างซื่อตรง ห้ามลดความเข้มของ assertion",
+        "source": "user-batch"
+      }
+    ]
+  }
+}

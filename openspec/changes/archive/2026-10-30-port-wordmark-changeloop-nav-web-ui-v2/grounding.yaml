@@ -1,0 +1,80 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "static-wordmark",
+      "choice": "หน้าเริ่ม session แสดง ChangeloopWordmark แบบ SVG นิ่ง (viewBox 310x25, กว้างไม่เกิน 720px, ห่าง composer 32px) แทน wordmark pin-board ของ v2 โดยไม่ลบโค้ด pin-board/brick-breaker เดิม",
+      "reason": "prototype ที่ผู้ใช้อนุมัติและ spec changeloop-session-brand ของ v1 กำหนดสัดส่วนนี้ การไม่ลบโค้ดเดิมช่วยให้ merge กับ upstream ง่าย"
+    },
+    {
+      "id": "pixels-from-tui",
+      "choice": "ใช้ glyph จาก packages/tui/src/logo.ts ผ่านตาราง rows ใน brand.ts (O ทั้งสองเป็น circular-arrow) และแยกน้ำหนัก CHANGE กับ LOOP ด้วย opacity",
+      "reason": "v1 ใช้แหล่งเดียวกันและ prototype ระบุ Changeloop SVG pixels จากไฟล์นี้"
+    },
+    {
+      "id": "scopeless-change-link",
+      "choice": "ลิงก์ที่มี change แต่ไม่มี scope ใช้ status ของ change จาก foundation.get เป็นตัวเลือก active หรือ archive แล้วเขียน scope ลง address แบบ replace",
+      "reason": "ผู้ใช้ยืนยันข้อเสนอนี้ และ foundation.get ให้ status ของ change โดยไม่ขึ้นกับ scope"
+    },
+    {
+      "id": "narrow-entry",
+      "choice": "จอแคบกว่า 768px แสดงปุ่ม Changes เดี่ยวใต้ dropdown โปรเจกต์ของ Home โดยไม่เพิ่ม Settings/Help",
+      "reason": "เพิ่มเฉพาะทางเข้าที่ขาด และไม่เปลี่ยนพฤติกรรมเดิมของ Home"
+    },
+    {
+      "id": "note-link-gaps",
+      "choice": "แก้ลิงก์ #slug ไปส่วนนอก excerpt ของโน้ต, id ที่ไม่อยู่ในหน้า index ปัจจุบัน และ fragment ของลิงก์ไปเอกสารอื่น",
+      "reason": "advisory 3 ข้อของ review ใน change 2 ที่แก้ได้ในขอบเขต reader เดิมโดยไม่เพิ่ม endpoint"
+    },
+    {
+      "id": "fidelity-by-assertion",
+      "choice": "ความตรงกับ prototype พิสูจน์ด้วย assertion เรื่อง hierarchy และ geometry ใน component spec (Playwright) และรายงานภาพเทียบแยก ไม่ถือ screenshot เป็นการอนุมัติ",
+      "reason": "บทเรียนจาก investigation changeloop-webui-prototype-drift ของ v1"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase5-webui-w3",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-30T09:00:00.000Z",
+    "decisions": [
+      {
+        "id": "static-wordmark",
+        "question": "หน้าเริ่ม session ใช้โลโก้อะไร",
+        "answer": "pixel wordmark Changeloop ตาม prototype",
+        "source": "user-batch"
+      },
+      {
+        "id": "pixels-from-tui",
+        "question": "glyph มาจากไหน",
+        "answer": "packages/tui/src/logo.ts",
+        "source": "recommended-default"
+      },
+      {
+        "id": "scopeless-change-link",
+        "question": "ลิงก์ ?change= ไม่มี scope ทำอย่างไร",
+        "answer": "ถือ scope ตามที่พบ (active หรือ archive)",
+        "source": "user-batch"
+      },
+      {
+        "id": "narrow-entry",
+        "question": "ทางเข้า Changes บนจอแคบ",
+        "answer": "ปุ่มเดี่ยวใต้ dropdown โปรเจกต์",
+        "source": "user-batch"
+      },
+      {
+        "id": "note-link-gaps",
+        "question": "advisory ของตัวอ่านโน้ต",
+        "answer": "แก้เท่าที่ทำได้ซื่อตรง ข้อใหญ่เกินให้รายงาน",
+        "source": "user-batch"
+      },
+      {
+        "id": "fidelity-by-assertion",
+        "question": "พิสูจน์ fidelity อย่างไร",
+        "answer": "assertion เชิงโครงสร้างและ geometry พร้อมภาพเทียบที่ผู้ตรวจดู",
+        "source": "user-batch"
+      }
+    ]
+  }
+}

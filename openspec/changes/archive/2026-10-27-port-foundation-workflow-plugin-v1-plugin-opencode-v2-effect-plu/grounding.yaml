@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "plugin-location",
+      "choice": "วาง plugin ที่ packages/foundation/src/plugin.ts เป็น factory ของ define() ที่ผูกกับ FoundationRuntime และ export default เพื่อโหลดเป็น plugin ภายนอกผ่าน config plugin entry ได้ ยังไม่ลงทะเบียนเป็น builtin ใน packages/core",
+      "reason": "builtin ของ v2 อยู่ใน core/plugin/internal.ts แต่ core ยังไม่พึ่ง @opencode/foundation และการ embed bundle เข้า build ของ packages/cli เป็นงานเฟสถัดไป การลงทะเบียนใน core จึงเป็นข้อค้างให้ผู้ใช้ตัดสินใจ"
+    },
+    {
+      "id": "command-execution",
+      "choice": "คำสั่งใช้ CommandDefinition.execute ที่ resolve instruction จาก claude-foundation แล้วเรียก session.prompt ด้วยข้อความ instruction (ต่อท้ายด้วย arguments ผ่านตัว CLI) แทน template ของ Command.Info",
+      "reason": "Command.Info ของ v2 มีเฉพาะ name และ description จึงไม่มี template/agent/model ให้ endpoint session.command ใช้ ผลที่ได้เทียบเท่า v1 เพราะ prompt สุดท้ายคือ instruction ที่ resolve แล้ว"
+    },
+    {
+      "id": "options-mapping",
+      "choice": "foundation_workflow และ foundation_runtime ของ v1 เปลี่ยนเป็น options ของ plugin entry ชื่อ workflow และ runtime ส่วน executable และ timeoutMs ไว้สำหรับ test",
+      "reason": "config schema ของ v2 ไม่มี key foundation_* และไม่ควรแก้ schema ในงานนี้ options ของ plugin (ctx.options) คือช่องทางที่ v2 มีให้"
+    },
+    {
+      "id": "no-override",
+      "choice": "plugin ไม่ตรวจชื่อซ้ำเอง เพราะ State ของ command เป็น map ที่ entry ลงทะเบียนทีหลังทับก่อนหน้า และ config command plugin ลงทะเบียนหลัง builtin อยู่แล้ว",
+      "reason": "ใช้กลไกลำดับของ v2 แทนการเพิ่ม logic ซ้ำ"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase2-team-a",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-27T15:00:00.000Z",
+    "decisions": [
+      {
+        "id": "plugin-location",
+        "question": "Foundation workflow plugin บน v2 ควรอยู่ที่ไหนและลงทะเบียนอย่างไร",
+        "answer": "packages/foundation/src/plugin.ts ผูกกับ FoundationRuntime โหลดผ่าน plugin entry ยังไม่เป็น builtin ใน core",
+        "source": "recommended-default"
+      },
+      {
+        "id": "command-execution",
+        "question": "คำสั่ง builtin ทำงานผ่านกลไกใดบน v2 ที่ Command.Info ไม่มี template",
+        "answer": "CommandDefinition.execute แล้ว session.prompt ด้วย instruction ที่ resolve จาก CLI",
+        "source": "recommended-default"
+      },
+      {
+        "id": "options-mapping",
+        "question": "foundation_workflow และ foundation_runtime ควรเป็นอะไรบน v2",
+        "answer": "options workflow และ runtime ของ plugin entry",
+        "source": "recommended-default"
+      },
+      {
+        "id": "no-override",
+        "question": "plugin ต้องไม่ทับคำสั่งที่ผู้ใช้ตั้งชื่อซ้ำอย่างไร",
+        "answer": "พึ่งลำดับการลงทะเบียนของ State ใน v2 ที่ entry หลังทับก่อนหน้า",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}

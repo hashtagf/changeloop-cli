@@ -1,0 +1,249 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "snapshot-reader-directory-claude-harness-protocol-json",
+      "requirementKey": "snapshot-reader",
+      "scenario": "project ยังไม่ init",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "snapshot-reader-mode-path-path-claude-foundation",
+      "requirementKey": "snapshot-reader",
+      "scenario": "runtime path หาไม่พบ",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "snapshot-reader-executable-json-schemaversion-3-foundationversio",
+      "requirementKey": "snapshot-reader",
+      "scenario": "snapshot สำเร็จ",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "snapshot-reader-executable-schemaversion-4-json-exit-1",
+      "requirementKey": "snapshot-reader",
+      "scenario": "schema ไม่รองรับ ผิดรูป หรือ exit ไม่ใช่ศูนย์",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "snapshot-reader-executable-1-mib-5",
+      "requirementKey": "snapshot-reader",
+      "scenario": "เกินขีดจำกัด",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "snapshot-reader-project-symlink",
+      "requirementKey": "snapshot-reader",
+      "scenario": "อ่านซ้อน",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "snapshot-reader-mode-bundled-project-init-bundle",
+      "requirementKey": "snapshot-reader",
+      "scenario": "bundled จากไฟล์ที่ฝัง",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-openspec-investigations-project-runtime",
+      "requirementKey": "document-reader",
+      "scenario": "investigation ก่อน init",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-change-active-proposal-md-tasks-md-evidence-yaml",
+      "requirementKey": "document-reader",
+      "scenario": "เอกสารของ change",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-change-active-archive-yyyy-mm-dd-id",
+      "requirementKey": "document-reader",
+      "scenario": "archive",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-ancestor-symlink-id-sha256-hex-64",
+      "requirementKey": "document-reader",
+      "scenario": "ป้องกันการออกนอก project",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-256-kib-id",
+      "requirementKey": "document-reader",
+      "scenario": "เอกสารใหญ่เกินและไม่พบ",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "document-reader-change-markdown-investigation-code-fence-inline",
+      "requirementKey": "document-reader",
+      "scenario": "references",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "server-foundation-endpoints-project-init-runtime-snapshot-change",
+      "requirementKey": "server-foundation-endpoints",
+      "scenario": "ข้อมูลจริง",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "server-foundation-endpoints-get-id-snapshot",
+      "requirementKey": "server-foundation-endpoints",
+      "scenario": "change ไม่มี",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "server-foundation-endpoints-project-claude-harness-protocol-json",
+      "requirementKey": "server-foundation-endpoints",
+      "scenario": "ไม่ได้ init",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "server-foundation-endpoints-limit-0-change-id",
+      "requirementKey": "server-foundation-endpoints",
+      "scenario": "input ไม่ถูกต้อง",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "server-foundation-endpoints-runtime-5",
+      "requirementKey": "server-foundation-endpoints",
+      "scenario": "runtime ค้าง",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "server-foundation-endpoints-runtime-1-mib",
+      "requirementKey": "server-foundation-endpoints",
+      "scenario": "runtime พิมพ์เกิน",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "server-foundation-endpoints-documents-investigations-index-read",
+      "requirementKey": "server-foundation-endpoints",
+      "scenario": "เอกสารผ่าน HTTP",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "server-foundation-endpoints-read-id-sha256-hex-id",
+      "requirementKey": "server-foundation-endpoints",
+      "scenario": "id เอกสารผิดรูปหรือไม่พบ",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "server-foundation-endpoints-server-foundation-enabled-false",
+      "requirementKey": "server-foundation-endpoints",
+      "scenario": "ปิด Foundation",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "binary-routes-foundation-api-get-experimental-foundation-capabil",
+      "requirementKey": "binary-routes-foundation-api",
+      "scenario": "ไม่มี credential",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "binary-routes-foundation-api-get-experimental-foundation-capab-2",
+      "requirementKey": "binary-routes-foundation-api",
+      "scenario": "มี credential",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "binary-routes-foundation-api-path-api-settings",
+      "requirementKey": "binary-routes-foundation-api",
+      "scenario": "path ของ web shell",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/foundation test/foundation-webui.test.ts test/plugin.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/core test/foundation-document-reader.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/server test/foundation.test.ts test/options.test.ts test/workerd.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/web-ui.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared",
+      "segments": [
+        "o=$(bun test --cwd packages/foundation test/foundation-webui.test.ts test/plugin.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/core test/foundation-document-reader.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/server test/foundation.test.ts test/options.test.ts test/workerd.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/cli test/web-ui.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ]
+    }
+  }
+}

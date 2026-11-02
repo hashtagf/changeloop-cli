@@ -1,37 +1,21 @@
-import { Foundation } from "@opencode-ai/schema/foundation"
-import { Location } from "@opencode-ai/schema/location"
+import { Foundation } from "@opencode/schema/foundation"
+import { Location } from "@opencode/schema/location"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
-import { LocationQuery, locationQueryOpenApi } from "./location"
+import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
+import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const fields = {
-  name: Schema.Literal("FoundationError"),
   data: Schema.Struct({ code: Foundation.ErrorCode, message: Schema.String }),
 }
-export class FoundationInputError extends Schema.ErrorClass<FoundationInputError>("FoundationInputError")(fields, {
-  httpApiStatus: 400,
-}) {}
-export class FoundationMissingError extends Schema.ErrorClass<FoundationMissingError>("FoundationMissingError")(
-  fields,
-  { httpApiStatus: 404 },
-) {}
-export class FoundationUninitializedError extends Schema.ErrorClass<FoundationUninitializedError>(
-  "FoundationUninitializedError",
-)(fields, { httpApiStatus: 409 }) {}
-export class FoundationResponseError extends Schema.ErrorClass<FoundationResponseError>("FoundationResponseError")(
-  fields,
-  { httpApiStatus: 502 },
-) {}
-export class FoundationUnavailableError extends Schema.ErrorClass<FoundationUnavailableError>(
-  "FoundationUnavailableError",
-)(fields, { httpApiStatus: 503 }) {}
-export class FoundationTimeoutError extends Schema.ErrorClass<FoundationTimeoutError>("FoundationTimeoutError")(
-  fields,
-  { httpApiStatus: 504 },
-) {}
-export class FoundationDeniedError extends Schema.ErrorClass<FoundationDeniedError>("FoundationDeniedError")(fields, { httpApiStatus: 403 }) {}
-export class FoundationDocumentSizeError extends Schema.ErrorClass<FoundationDocumentSizeError>("FoundationDocumentSizeError")(fields, { httpApiStatus: 413 }) {}
-export class FoundationDocumentInvalidError extends Schema.ErrorClass<FoundationDocumentInvalidError>("FoundationDocumentInvalidError")(fields, { httpApiStatus: 422 }) {}
+export class FoundationInputError extends Schema.TaggedError<FoundationInputError>()("FoundationInputError", fields, { httpApiStatus: 400 }) {}
+export class FoundationMissingError extends Schema.TaggedError<FoundationMissingError>()("FoundationMissingError", fields, { httpApiStatus: 404 }) {}
+export class FoundationUninitializedError extends Schema.TaggedError<FoundationUninitializedError>()("FoundationUninitializedError", fields, { httpApiStatus: 409 }) {}
+export class FoundationResponseError extends Schema.TaggedError<FoundationResponseError>()("FoundationResponseError", fields, { httpApiStatus: 502 }) {}
+export class FoundationUnavailableError extends Schema.TaggedError<FoundationUnavailableError>()("FoundationUnavailableError", fields, { httpApiStatus: 503 }) {}
+export class FoundationTimeoutError extends Schema.TaggedError<FoundationTimeoutError>()("FoundationTimeoutError", fields, { httpApiStatus: 504 }) {}
+export class FoundationDeniedError extends Schema.TaggedError<FoundationDeniedError>()("FoundationDeniedError", fields, { httpApiStatus: 403 }) {}
+export class FoundationDocumentSizeError extends Schema.TaggedError<FoundationDocumentSizeError>()("FoundationDocumentSizeError", fields, { httpApiStatus: 413 }) {}
+export class FoundationDocumentInvalidError extends Schema.TaggedError<FoundationDocumentInvalidError>()("FoundationDocumentInvalidError", fields, { httpApiStatus: 422 }) {}
 const errors = [
   FoundationInputError,
   FoundationMissingError,

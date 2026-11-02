@@ -1,0 +1,130 @@
+{
+  "version": 2,
+  "purpose": "research",
+  "language": "th",
+  "intent": {
+    "goal": "ตัดสินว่า fork changeloop-cli ควรตาม opencode upstream ไป v2.x ด้วยวิธีใด (merge เป็นช่วง / rebase / cherry-pick / port ใหม่) และงานใหญ่แค่ไหน",
+    "outcome": "ข้อสรุปพร้อมหลักฐานเกี่ยวกับความเป็นไปได้ ความเสี่ยง ขนาดงาน และทางเลือกที่แนะนำ โดยไม่แก้ product code",
+    "actors": ["เจ้าของ fork changeloop-cli"],
+    "scope": ["packages/opencode (v1 runtime ของ fork)", "packages/cli/core/server/app", "plugin Foundation", "build/delivery ของ binary changeloop"]
+  },
+  "requirements": [],
+  "conversation": [],
+  "questions": [],
+  "experiments": [],
+  "work": [],
+  "historyGaps": [
+    "ไม่มีข้อความสนทนาก่อนหน้า session นี้ที่อ่านได้ (ไม่ทราบว่าผู้ใช้เคยกำหนดเงื่อนไขเรื่อง v2 ไว้หรือไม่)"
+  ],
+  "id": "upgrade-to-opencode-v2",
+  "activeChange": null,
+  "problem": "fork อยู่ที่ opencode 1.18.18 (merge-base 92d29ba4a3) upstream อยู่ที่ v2.2.0 ห่าง 6,038 commits: ควรอัพเกรดแบบไหน และเสี่ยง/ใหญ่แค่ไหน",
+  "mode": "analyze",
+  "sources": [
+    "openspec/investigations/upgrade-to-opencode-v2.md",
+    "package.json",
+    "packages/opencode/package.json",
+    "packages/opencode/src/plugin/foundation.ts",
+    "packages/opencode/src/plugin/router.ts",
+    "packages/opencode/src/plugin/foundation-command.ts",
+    "packages/core/src/foundation.ts",
+    "packages/server/src/routes.ts"
+  ],
+  "facts": [
+    {
+      "key": "gap-size",
+      "statement": "fork อยู่ที่ opencode 1.18.18 ส่วน upstream มี tag ล่าสุด v2.2.0 และห่าง 6,038 commits จาก merge-base 92d29ba4a3",
+      "sources": ["openspec/investigations/upgrade-to-opencode-v2.md", "packages/opencode/package.json"]
+    },
+    {
+      "key": "v1-runtime-deleted-upstream",
+      "statement": "upstream ลบ packages/opencode ทั้ง package (commit 44b6938b2a) ปัจจุบันมี 0 ไฟล์ และไม่มี branch ดูแล v1 เหลืออยู่ ขณะที่ fork เก็บ runtime ทั้งหมดไว้ใน package นี้ (1,301 ไฟล์)",
+      "sources": ["openspec/investigations/upgrade-to-opencode-v2.md", "packages/opencode/package.json"]
+    },
+    {
+      "key": "toolchain-namespace-break",
+      "statement": "upstream เปลี่ยนชื่อ package จาก @opencode-ai/* เป็น @opencode/*, effect 4.0.0-beta.83→4.0.1, TypeScript 5.8→6 และ bun 1.3.14→1.4.4 ทำให้โค้ดที่ merge สะอาดก็ยังคอมไพล์ไม่ผ่าน",
+      "sources": ["openspec/investigations/upgrade-to-opencode-v2.md", "package.json"]
+    },
+    {
+      "key": "dry-run-conflicts",
+      "statement": "dry-run merge (git merge-tree) ของ HEAD กับ upstream/dev ไม่สะอาด: 99 ไฟล์ conflict (app 40, opencode 32 แบบ modify/delete, core 8, client 5, server 4, อื่นๆ) ยังไม่นับ rename ของ namespace",
+      "sources": ["openspec/investigations/upgrade-to-opencode-v2.md"]
+    },
+    {
+      "key": "fork-delta-shape",
+      "statement": "งานของ fork 1,364 ไฟล์ แต่ 502 ไฟล์เป็น vendor/ ที่ generate ซ้ำได้ ส่วนที่เขียนเองใน packages/opencode ราว 60 ไฟล์ (plugin Foundation, router, branding ของ CLI, build/verify script) และนอก package นั้นคือ app 49, core 17, client 5, server 4 ไฟล์ โดย 47 ไฟล์ import @opencode-ai/* รวม 173 บรรทัด",
+      "sources": ["openspec/investigations/upgrade-to-opencode-v2.md", "packages/opencode/src/plugin/foundation.ts", "packages/opencode/src/plugin/router.ts"]
+    },
+    {
+      "key": "fork-services-in-core",
+      "statement": "fork เพิ่ม Foundation, FoundationDocuments และ CommandPreparation เป็น service ใน core/server ซึ่งตัว implement จริงอยู่ใน packages/opencode/src/plugin/foundation-*.ts; packages/server/routes.ts มีเฉพาะ fallback แบบ unsupported สำหรับ server แบบ standalone",
+      "sources": ["packages/core/src/foundation.ts", "packages/opencode/src/plugin/foundation-command.ts", "packages/server/src/routes.ts"]
+    },
+    {
+      "key": "v1-hooks-absent-in-v2",
+      "statement": "plugin Foundation ของ fork พึ่ง v1 hook config, command.execute.before, shell.env และ experimental.chat.system.transform แต่ไม่พบ hook ชื่อเหล่านี้ใน packages/*/src ของ upstream/dev",
+      "sources": ["packages/opencode/src/plugin/foundation.ts", "packages/opencode/src/plugin/router.ts", "openspec/investigations/upgrade-to-opencode-v2.md"]
+    },
+    {
+      "key": "v2-plugin-equivalents",
+      "statement": "v2 plugin API (Effect-based) มีจุดต่อที่ใกล้เคียง: command.transform + CommandDefinition, shell hook create.before ที่แก้ env ได้, agent/skill/tool transform และ session hook ที่มี system: Array<SystemPart> จึงมีเส้นทาง port แต่ยังไม่ได้ทดลอง",
+      "sources": ["openspec/investigations/upgrade-to-opencode-v2.md"]
+    },
+    {
+      "key": "v2-breaking-and-migration",
+      "statement": "v2.1 (commit acdcdb8dd9) ปรับ session compaction/history/projector และ schema/openapi/client types; upstream มี v1-migration ฝั่ง core สำหรับข้อมูลและ config เดิมของผู้ใช้",
+      "sources": ["openspec/investigations/upgrade-to-opencode-v2.md"]
+    },
+    {
+      "key": "v2-build-and-rebrand-surface",
+      "statement": "entry และ build ของ v2 ย้ายไป packages/cli (script build, build:node, pack; bin opencode) แทน packages/opencode ที่ Delivery ของ fork ใช้ และ literal ที่มีคำว่า opencode ใน cli+tui มี 633 บรรทัดใน 257 ไฟล์ที่ต้อง rebrand ใหม่",
+      "sources": ["openspec/investigations/upgrade-to-opencode-v2.md", "packages/opencode/package.json"]
+    },
+    {
+      "key": "last-v1-stretch",
+      "statement": "มี 699 commits ระหว่าง merge-base กับ commit ก่อนการลบ packages/opencode (จุดสุดท้ายที่ v1 runtime ยังมีอยู่ ที่ 1.18.4/effect beta.98) ซึ่งยังเป็นเส้นทางที่ merge เข้า runtime v1 ของ fork ได้ในทางทฤษฎี แต่ยังไม่ได้ dry-run",
+      "sources": ["openspec/investigations/upgrade-to-opencode-v2.md"]
+    }
+  ],
+  "hypotheses": [
+    {
+      "key": "git-merge-direct",
+      "statement": "merge หรือ rebase upstream/dev เข้า fork ตรงๆ (เป็นช่วงหรือทีเดียว) ทำได้อย่างปลอดภัย",
+      "status": "falsified",
+      "factKeys": ["v1-runtime-deleted-upstream", "toolchain-namespace-break", "dry-run-conflicts", "fork-delta-shape"]
+    },
+    {
+      "key": "port-fork-layer-to-v2",
+      "statement": "ชั้นที่ fork เพิ่ม (branding, Foundation plugin/service, web UI, build/delivery) ย้ายไปอยู่บน v2 ได้ในรูป re-apply บน upstream v2.x",
+      "status": "supported",
+      "factKeys": ["fork-delta-shape", "fork-services-in-core", "v2-plugin-equivalents", "v2-build-and-rebrand-surface"]
+    },
+    {
+      "key": "cherry-pick-fixes-onto-v1",
+      "statement": "ค้างที่ v1 แล้ว cherry-pick เฉพาะ security/crash fix จาก upstream มาใช้ได้",
+      "status": "open",
+      "factKeys": []
+    }
+  ],
+  "options": [],
+  "selection": null,
+  "decisions": [
+    {
+      "key": "upgrade-strategy",
+      "status": "open",
+      "question": "จะตาม opencode ด้วยวิธีใด เมื่อ upstream ลบ v1 runtime ที่ fork ใช้อยู่ไปแล้ว",
+      "alternatives": [
+        "port-to-v2: เปิด branch ใหม่จาก upstream v2.2.x แล้ว re-apply ชั้นของ fork (branding, Foundation เป็น v2 plugin/service, web UI, build/delivery) ทำเป็นเฟสผ่าน Change Loop",
+        "freeze-v1: อยู่ที่ 1.18.18 ไม่ตาม upstream (อาจ backport fix เป็นรายตัวด้วยมือ ซึ่งยังไม่ได้ตรวจว่า apply ได้)",
+        "merge-last-v1-then-decide: merge เฉพาะ 699 commits สุดท้ายก่อน upstream ลบ v1 เพื่อรับ fix ล่าสุดของ v1 แล้วค่อยตัดสินเรื่อง v2 ทีหลัง"
+      ],
+      "recommended": "port-to-v2: เปิด branch ใหม่จาก upstream v2.2.x แล้ว re-apply ชั้นของ fork ทำเป็นเฟสผ่าน Change Loop",
+      "recommendationFactKeys": ["v1-runtime-deleted-upstream", "toolchain-namespace-break", "dry-run-conflicts", "fork-delta-shape", "v2-plugin-equivalents"]
+    }
+  ],
+  "conclusion": {
+    "summary": "git merge/rebase ตรงๆ ไม่คุ้มและเสี่ยง เพราะ upstream ลบ packages/opencode ที่ fork ใช้ทั้ง package, เปลี่ยน namespace/toolchain และ dry-run ชน 99 ไฟล์. ชั้นของ fork ส่วนใหญ่เล็กและแยกได้ (≈60 ไฟล์ใน packages/opencode + vendor ที่ generate ซ้ำได้) จึงแนะนำให้ port ไปบน v2.2.x เป็นเฟส ไม่ใช่ merge; ต้องให้ผู้ใช้ตัดสินกลยุทธ์"
+  },
+  "changeIntent": null
+}

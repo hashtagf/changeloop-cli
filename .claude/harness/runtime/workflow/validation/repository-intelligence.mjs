@@ -5,13 +5,13 @@ import { isExcludedPath } from "../../core/workspace-surface.mjs";
 import { requiredDiscoveryDimensions } from "./semantic-intake.mjs";
 
 const DEFAULT_LIMITS = Object.freeze({
-  maxEntries: 12_000,
-  maxFiles: 3_000,
-  maxBytes: 32 * 1024 * 1024,
+  maxEntries: 60_000,
+  maxFiles: 30_000,
+  maxBytes: 256 * 1024 * 1024,
   maxFileBytes: 256 * 1024,
   maxDepth: 12,
   maxReadSet: 24,
-  maxGraphEdges: 6_000
+  maxGraphEdges: 150_000
 });
 const SOURCE_EXTENSIONS = new Set([
   ".c", ".cc", ".cpp", ".cs", ".css", ".go", ".graphql", ".gql", ".h",

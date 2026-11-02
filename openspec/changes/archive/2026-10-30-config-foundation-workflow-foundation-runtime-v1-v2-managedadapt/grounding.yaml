@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "config-translation",
+      "choice": "แปลง foundation_workflow=false เป็น plugin operation `-opencode.foundation`, true เป็น `opencode.foundation`, และ foundation_runtime เป็น operation เพิ่มพร้อม options {runtime} ในขั้น ConfigNormalize ของเอกสารเดียวกัน วางก่อน plugin/plugins ที่ผู้ใช้เขียนเองเพื่อให้ของ v2 ชนะ แล้วให้ supervisor ส่ง options ของ operation เพิ่มให้ builtin ที่ตรง id (revision รวม options เพื่อให้เปลี่ยนค่าแล้ว activate ใหม่)",
+      "reason": "ใช้กลไก plugins/remove ที่ v2 มีอยู่และมี test อยู่แล้ว ลำดับ operation ตามลำดับความสำคัญของเอกสารตรงกับการ merge ของ v1 (project ชนะ global) ไม่เพิ่ม field ใน Info schema จึงไม่กระทบ OpenAPI/SDK และ config ที่ไม่มี key นี้ไม่เปลี่ยนพฤติกรรม"
+    },
+    {
+      "id": "invalid-value-handling",
+      "choice": "ค่าที่ไม่ถูกต้อง (foundation_workflow ที่ไม่ใช่ boolean, foundation_runtime นอก bundled|path) ถูกข้ามพร้อม diagnostic ชนิด invalid เหมือน key อื่นที่รู้จักและโหลด config ที่เหลือต่อ",
+      "reason": "v1 ปฏิเสธทั้ง config เมื่อค่าไม่ถูกต้อง แต่ normalize ของ v2 ออกแบบให้ข้ามเฉพาะค่าที่เสียและเตือน ผู้ใช้เดิมจึงไม่ล้มตอนโหลด"
+    },
+    {
+      "id": "managed-adapter-not-ported",
+      "choice": "ไม่ port managedAdapter ของ v1 บันทึกเป็น decision",
+      "reason": "ใน v1 managedAdapter คำนวณเป็น workflow!==false && runtime=bundled && มี adapter ของโปรเจกต์ จึงไม่เคยทำงานเมื่อ workflow=false ผลของมันคือเติม env และ agent contract เมื่อผู้ใช้ override ครบทั้ง 8 คำสั่งเท่านั้น v2 เติม env และ contract ทุกครั้งที่ plugin เปิดอยู่ จึงเป็น superset ของพฤติกรรม v1 ผลกระทบเดียวคือผู้ใช้ที่ override ครบ 8 คำสั่งโดยไม่มี adapter จะได้ contract เพิ่ม"
+    },
+    {
+      "id": "service-default-command",
+      "choice": "ไม่แก้ค่าเริ่มต้น opencode serve --service ของ packages/client คง test ที่พิสูจน์ว่า CLI ส่งคำสั่งของ executable ที่กำลังรันเสมอ",
+      "reason": "binary จริง changeloop service start/status/stop ทำงานได้ เพราะ ServiceConfig.options ส่ง command จาก selfCommand ให้ทุกผู้เรียกใน cli และ desktop ค่าเริ่มต้นถูกใช้เฉพาะผู้เรียก SDK ภายนอกที่ไม่ส่ง command ซึ่งเป็น API ของ upstream และ library ไม่รู้ชื่อ CLI ที่ผู้ใช้ติดตั้ง"
+    },
+    {
+      "id": "v1-data-no-fork-schema",
+      "choice": "ไม่เพิ่มทางย้ายข้อมูลเฉพาะ fork เพิ่ม test ที่ย้าย session รูปแบบ v1 ที่มีคำสั่ง Foundation และ tool call ของ harness ผ่าน migration ของ upstream",
+      "reason": "git diff 92d29ba4a3..HEAD บน packages/opencode/migration, packages/opencode/src/storage และไฟล์ *.sql.ts ว่างเปล่า fork เปลี่ยนเฉพาะ config schema ของ v1 (foundation keys) ไม่ใช่ตารางหรือรูปแบบข้อมูล"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase7-compat-m2",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-30T09:00:00.000Z",
+    "decisions": [
+      {
+        "id": "config-translation",
+        "question": "key เดิม foundation_workflow/foundation_runtime ต้องมีผลบน v2 อย่างไร",
+        "answer": "ให้ key เดิมยังมีผลเหมือน v1 โดยไม่ทำให้ config ที่ไม่มี key นี้เปลี่ยนพฤติกรรม",
+        "source": "user-batch"
+      },
+      {
+        "id": "invalid-value-handling",
+        "question": "ค่าที่ไม่ถูกต้องควรทำให้โหลดล้มหรือไม่",
+        "answer": "config เดิมต้องไม่ล้มเมื่อโหลด",
+        "source": "user-batch"
+      },
+      {
+        "id": "managed-adapter-not-ported",
+        "question": "ต้อง port managedAdapter หรือไม่",
+        "answer": "ตัดสินจากหลักฐาน ถ้าไม่ต้อง บันทึกเหตุผลและผลกระทบ",
+        "source": "user-batch"
+      },
+      {
+        "id": "service-default-command",
+        "question": "ค่าเริ่มต้นคำสั่ง service ต้องแก้หรือไม่",
+        "answer": "ตรวจกับ binary จริงก่อน แก้เฉพาะถ้าเกิดจริง",
+        "source": "user-batch"
+      },
+      {
+        "id": "v1-data-no-fork-schema",
+        "question": "ข้อมูลเดิมต้องมีทางย้ายเฉพาะ fork หรือไม่",
+        "answer": "ถ้าไม่มีข้อมูลเฉพาะ fork ให้พิสูจน์ด้วย test ว่า migration ของ upstream ทำงานกับ fixture รูปแบบ v1",
+        "source": "user-batch"
+      }
+    ]
+  }
+}

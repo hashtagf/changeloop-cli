@@ -1,0 +1,47 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "configure-only-marker",
+      "choice": "operation ที่แปลงจาก foundation_runtime พก option สงวน `$configureOnly: true` supervisor อ่านและตัด key นี้ออก ตั้ง options ให้ builtin แต่ไม่ enabled.add",
+      "reason": "เปลี่ยนจุดเดียวใน supervisor และ normalize ไม่เพิ่ม field ใน Info schema (ไม่กระทบ OpenAPI/SDK) และ add-with-options ของ package plugin ทั่วไปยังเปิด plugin ตามเดิม"
+    },
+    {
+      "id": "read-gate-from-inventory",
+      "choice": "handler ของ foundation ตรวจ Plugin.Service ของ location คำขอ ถ้า inventory ไม่มี plugin opencode.foundation ให้ fail ด้วย Foundation.ReadError unsupported ก่อนอ่าน runtime ทั้ง snapshot, investigations และ documents",
+      "reason": "inventory คือสถานะจริงต่อ location หลังรวม config global/project/plugins จึงตรงกับ v1 ที่ถือ foundation_workflow:false เป็น unsupported โดยไม่ต้องอ่าน config ซ้ำ"
+    },
+    {
+      "id": "native-precedence-pinned",
+      "choice": "ไม่แก้โค้ดเรื่อง foundation_runtime ชนกับ plugins ของ opencode.foundation บันทึกพฤติกรรมจริงด้วย test: entry ของผู้ใช้อยู่หลัง operation จากคีย์เดิมจึงชนะ",
+      "reason": "เป็นลำดับที่เลือกไว้แล้วใน change ก่อนหน้า (v2 ชนะ legacy key) งานนี้เพียงพิสูจน์"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase8-compat-gaps-k",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-30T10:00:00.000Z",
+    "decisions": [
+      {
+        "id": "configure-only-marker",
+        "question": "foundation_runtime อย่างเดียวควรเปิด plugin ที่ถูกปิดไว้หรือไม่",
+        "answer": "ไม่ ต้องปิดอยู่เหมือน v1 เลือกทางที่เล็กและไม่เปลี่ยนความหมายของ add-with-options ทั่วไป",
+        "source": "user-batch"
+      },
+      {
+        "id": "read-gate-from-inventory",
+        "question": "web UI ต้องอ่านข้อมูล Foundation ได้หรือไม่เมื่อปิด foundation_workflow",
+        "answer": "ไม่ ต้องตอบ unsupported เหมือน v1",
+        "source": "user-batch"
+      },
+      {
+        "id": "native-precedence-pinned",
+        "question": "พฤติกรรมที่ทราบแล้วต้องแก้โค้ดหรือไม่",
+        "answer": "ไม่ บันทึกเป็น test",
+        "source": "user-batch"
+      }
+    ]
+  }
+}

@@ -1,6 +1,7 @@
-import { Foundation } from "@opencode-ai/core/foundation"
-import { FoundationDocuments } from "@opencode-ai/core/foundation-documents"
-import { Location } from "@opencode-ai/core/location"
+import { Foundation } from "@opencode/core/foundation"
+import { FoundationDocuments } from "@opencode/core/foundation-documents"
+import { Location } from "@opencode/core/location"
+import { Plugin } from "@opencode/core/plugin"
 import {
   FoundationInputError,
   FoundationMissingError,
@@ -11,11 +12,13 @@ import {
   FoundationDeniedError,
   FoundationDocumentSizeError,
   FoundationDocumentInvalidError,
-} from "@opencode-ai/protocol/groups/foundation"
+} from "@opencode/protocol/groups/foundation"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { response } from "../location"
+
+const foundationPluginID = "opencode.foundation"
 
 export const FoundationHandler = HttpApiBuilder.group(Api, "server.foundation", (handlers) =>
   handlers
@@ -62,8 +65,18 @@ export const FoundationHandler = HttpApiBuilder.group(Api, "server.foundation", 
     ),
 )
 
+// The workflow plugin's presence in the location's inventory is the switch: `foundation_workflow: false` removes it.
+const enabled = Effect.gen(function* () {
+  const plugins = yield* Plugin.Service
+  yield* plugins.awaitActivation
+  const inventory = yield* plugins.list()
+  if (!inventory.some((plugin) => plugin.id === foundationPluginID))
+    return yield* Effect.fail(new Foundation.ReadError("unsupported", "Foundation is not available in this project"))
+})
+
 function read() {
   return Effect.gen(function* () {
+    yield* enabled
     const foundation = yield* Foundation.Service
     const location = yield* Location.Service
     return yield* foundation.read(location.directory)
@@ -71,6 +84,7 @@ function read() {
 }
 function documentResponse<A>(operation: (service: FoundationDocuments.Service["Service"], directory: string) => Effect.Effect<A, Foundation.ReadError>) {
   return response(Effect.gen(function* () {
+    yield* enabled
     const documents = yield* FoundationDocuments.Service
     const location = yield* Location.Service
     return yield* operation(documents, location.directory)
@@ -86,7 +100,7 @@ function checked<A>(f: () => A) {
   })
 }
 function httpError(error: Foundation.ReadError) {
-  const input = { name: "FoundationError" as const, data: { code: error.code, message: error.message } }
+  const input = { data: { code: error.code, message: error.message } }
   if (error.code === "invalid_input") return new FoundationInputError(input)
   if (error.code === "denied") return new FoundationDeniedError(input)
   if (error.code === "document_too_large") return new FoundationDocumentSizeError(input)

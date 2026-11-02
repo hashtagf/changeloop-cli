@@ -1,7 +1,7 @@
-export * as CommandPreparation from "./command-preparation"
+export * as CommandPreparation from "./command-preparation.js"
 
 import { Context, Effect } from "effect"
-import { Command } from "@opencode-ai/schema/command"
+import { Command } from "@opencode/schema/command"
 
 export class Error extends globalThis.Error {
   constructor(readonly code: "command_not_found" | "command_unavailable", message: string) {

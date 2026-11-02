@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "single-channel-value",
+      "choice": "release channel คือค่าเดียว base URL ของ update API กำหนดตอน build ด้วย define CHANGELOOP_UPDATE_URL (ไม่ตั้ง = ไม่มี channel) updater รับค่าผ่าน layerWith(url) เพื่อให้ test ฉีดได้ ไม่เดา URL จริง",
+      "reason": "ผู้ใช้ยังไม่ได้ตัดสินใจว่าจะ host ที่ไหน การใส่ภายหลังต้องเป็นการตั้งค่าเดียวโดยไม่แก้ logic"
+    },
+    {
+      "id": "no-channel-behavior",
+      "choice": "ไม่มี channel: run/inspect คืน undefined โดยไม่ fetch, check คืน unavailable พร้อมข้อความ, apply/latest/upgrade ล้มด้วย UpgradeError ข้อความ 'ยังไม่มี release channel ของ Changeloop' + วิธี build จาก source, method() คืน undefined โดยไม่ spawn, removal() คืน undefined, handler upgrade จบ exit code 1",
+      "reason": "ปิดทุกเส้นทางที่ไป network หรือ package manager ของ upstream และไม่ให้ uninstall แตะ package ที่ไม่ใช่ของเรา"
+    },
+    {
+      "id": "installer-identities-out-of-scope",
+      "choice": "ตัวระบุ upstream ที่เหลือเมื่อมี channel (installer opencode.ai/v2/install, winget Anomaly.OpenCode, formula opencode, formulae.brew.sh) ไม่แก้ใน change นี้ รายงานเป็นข้อค้างที่ต้องตัดสินใจพร้อมการตั้ง channel จริง",
+      "reason": "ต้องรู้ช่องทางแจกจริงก่อนจึงจะกำหนดค่าแทนได้ การเดาจะเป็นการสร้าง URL ปลอม"
+    },
+    {
+      "id": "model-commands-only",
+      "choice": "เปลี่ยนเฉพาะคำสั่งที่ให้โมเดลรันใน skill opencode.md และ report.md (mcp, service, api, --standalone, --version) เป็น changeloop คงบรรทัดตัวตน (You are opencode, You are an AI agent running in OpenCode), ชื่อ skill/tool namespace, env OPENCODE_*, path config/log, URL และชื่อบริการ opencode.ai",
+      "reason": "ตัวตนของโมเดลเป็นสัญญาเชิงพฤติกรรมตามกติกาเดิมของ v1 ส่วนคำสั่งที่ไม่มีบนเครื่องผู้ใช้ทำให้โมเดลเรียกสิ่งที่ไม่มีอยู่"
+    },
+    {
+      "id": "guard-test",
+      "choice": "เพิ่ม test ใน packages/core ที่สแกนข้อความ skill และ system prompt ทุกไฟล์ว่าไม่มี `opencode {subcommand}` ที่เป็นคำสั่งให้รัน (allowlist: บรรทัดตัวตน, URL, ชื่อบริการ, path และ env)",
+      "reason": "กันการย้อนกลับด้วยเครื่อง"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase7-upgrade-u",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-30T08:00:00.000Z",
+    "decisions": [
+      {
+        "id": "single-channel-value",
+        "question": "ตั้ง release channel อย่างไรเมื่อผู้ใช้ยังไม่ได้เลือกที่ host",
+        "answer": "ค่าเดียวตอน build ไม่ตั้ง = ไม่มี channel อย่าเดา URL",
+        "source": "user-batch"
+      },
+      {
+        "id": "no-channel-behavior",
+        "question": "เมื่อไม่มี channel ทำอย่างไร",
+        "answer": "ไม่ยิง network ไม่แจ้งเตือน upgrade จบด้วยข้อความชัดเจนและ exit code ไม่ใช่ 0",
+        "source": "user-batch"
+      },
+      {
+        "id": "installer-identities-out-of-scope",
+        "question": "ตัวระบุ installer ของ upstream ที่เหลือ",
+        "answer": "รายงานเป็นข้อค้าง ไม่ตั้ง channel จริงใน change นี้",
+        "source": "recommended-default"
+      },
+      {
+        "id": "model-commands-only",
+        "question": "ข้อความที่ส่งให้โมเดล",
+        "answer": "เปลี่ยนเฉพาะคำสั่งให้รัน คงบรรทัดตัวตน",
+        "source": "user-batch"
+      },
+      {
+        "id": "guard-test",
+        "question": "กันการย้อนกลับอย่างไร",
+        "answer": "test สแกนข้อความพร้อม allowlist",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}

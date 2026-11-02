@@ -1,0 +1,80 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "split-plan",
+      "choice": "แบ่งเป็น 3 change: (1) หน้า Changes รายการ+รายละเอียด Overview/Evidence/Usage+draft handoff (2) Documents/Tasks/Investigations+safe Markdown (3) wordmark session + fidelity/e2e กับ prototype",
+      "reason": "แต่ละตอนพิสูจน์ได้ในตัวและตอนที่ 1 ใช้ได้จริงโดยไม่ต้องมี document reader"
+    },
+    {
+      "id": "route-not-tab",
+      "choice": "Changes เป็น route /changes ที่ไม่เป็น tab โดยใช้ server/project จาก Home selection (layout.home.selection) และเก็บ scope, search, offset, change, section ใน query",
+      "reason": "tab ของ v2 มีแค่ session/draft การเพิ่มชนิด tab กระทบ schema ที่ persist และ titlebar มากเกินกว่าจะพิสูจน์ใน change เดียว"
+    },
+    {
+      "id": "reuse-home-projects",
+      "choice": "ใช้ HomeProjects และ HomeController เดิมเป็น Projects navigation ของหน้า Changes",
+      "reason": "prototype ที่อนุมัติระบุ Home-style Projects navigation และ reuse ทำให้ token, server auth, คอลแลปส์ และ context menu เหมือน Home"
+    },
+    {
+      "id": "client-from-server-ctx",
+      "choice": "อ่านผ่าน global.ensureServerCtx(conn).sdk.api.foundation ของ @opencode/client ที่ generate แล้ว ไม่ใช้ vendor tgz แบบ v1",
+      "reason": "v2 generate group foundation ใน client แล้ว และ credentials/fetch ของ server ถูกจัดการใน sdk ctx"
+    },
+    {
+      "id": "english-i18n-only",
+      "choice": "ข้อความใหม่ทั้งหมดเป็น key ใน runtime/i18n/en.ts และเรียกผ่าน language.t โดยไม่เพิ่มภาษาอื่น",
+      "reason": "กฎ Localization ของ packages/app/AGENTS.md ห้าม hardcode ข้อความ และให้เพิ่มเฉพาะ English source"
+    },
+    {
+      "id": "draft-handoff-only",
+      "choice": "ปุ่มต่อใน session เปิด draft ผ่าน tabs.newDraft พร้อม prompt /phase changeID เฉพาะเมื่อ command มีอยู่ในโปรเจกต์ และไม่ submit เอง",
+      "reason": "คง spec session-draft-handoff ของ v1: เปิด draft ไม่ใช่การสั่ง lifecycle และไม่ให้สิทธิ์ Land"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase4-webui-w",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-29T12:30:00.000Z",
+    "decisions": [
+      {
+        "id": "split-plan",
+        "question": "ขอบเขตทั้งหมดของ Foundation web UI ใหญ่เกินหนึ่ง change แบ่งอย่างไร",
+        "answer": "แบ่งตามลำดับที่แต่ละตอนพิสูจน์ได้ในตัว เริ่มจากหน้า Changes แล้วค่อย Documents/Investigations แล้ว brand/fidelity",
+        "source": "user-batch"
+      },
+      {
+        "id": "route-not-tab",
+        "question": "Changes อยู่ใน tab หรือ route อิสระ",
+        "answer": "route อิสระ /changes ใช้ Home selection",
+        "source": "recommended-default"
+      },
+      {
+        "id": "reuse-home-projects",
+        "question": "Projects navigation ของหน้า Changes ใช้อะไร",
+        "answer": "reuse HomeProjects ตาม prototype ที่อนุมัติ",
+        "source": "recommended-default"
+      },
+      {
+        "id": "client-from-server-ctx",
+        "question": "ใช้ client ตัวไหนอ่าน Foundation",
+        "answer": "sdk.api.foundation จาก server ctx",
+        "source": "recommended-default"
+      },
+      {
+        "id": "english-i18n-only",
+        "question": "ข้อความใหม่ใช้ภาษาอะไร",
+        "answer": "key English ใน en.ts ตามกฎ app",
+        "source": "recommended-default"
+      },
+      {
+        "id": "draft-handoff-only",
+        "question": "ปุ่มต่อใน session ทำอะไร",
+        "answer": "เปิด draft ให้ผู้ใช้ตรวจ ไม่ submit และไม่ผูกสิทธิ์ lifecycle",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}

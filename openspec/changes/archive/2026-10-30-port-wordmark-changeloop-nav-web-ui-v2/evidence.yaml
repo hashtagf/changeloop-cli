@@ -1,0 +1,195 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "session-brand-rows-wordmark",
+      "requirementKey": "session-brand",
+      "scenario": "ตาราง glyph",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "session-brand-36-change-36-loop",
+      "requirementKey": "session-brand",
+      "scenario": "น้ำหนัก CHANGE และ LOOP",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "session-brand-35",
+      "requirementKey": "session-brand",
+      "scenario": "ช่องคั่นระหว่างสองคำ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "session-brand-session-viewport-1440",
+      "requirementKey": "session-brand",
+      "scenario": "ชื่อและสัดส่วนบนหน้า",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "session-brand-session-viewport-390",
+      "requirementKey": "session-brand",
+      "scenario": "จอแคบ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "scopeless-change-link-address-change-scope-change-status-archive",
+      "requirementKey": "scopeless-change-link",
+      "scenario": "archived",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "scopeless-change-link-address-change-scope-change",
+      "requirementKey": "scopeless-change-link",
+      "scenario": "ยังไม่ทราบ status",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "scopeless-change-link-address-change-scope",
+      "requirementKey": "scopeless-change-link",
+      "scenario": "ไม่มี change",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "scopeless-change-link-address-scope-active-change-status-archive",
+      "requirementKey": "scopeless-change-link",
+      "scenario": "scope ชัดเจนชนะ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "narrow-entry-home-390px",
+      "requirementKey": "narrow-entry",
+      "scenario": "ปุ่มบนจอแคบ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "narrow-entry-home-1440px",
+      "requirementKey": "narrow-entry",
+      "scenario": "กลุ่ม utility เต็ม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "note-links-excerpt-findings-options-options",
+      "requirementKey": "note-links",
+      "scenario": "slug ไปส่วนอื่นของโน้ต",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "note-links-missing",
+      "requirementKey": "note-links",
+      "scenario": "slug ที่ไม่มี",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "note-links-target-id-items",
+      "requirementKey": "note-links",
+      "scenario": "id นอกหน้า index",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "note-links-id-index-invalid-input",
+      "requirementKey": "note-links",
+      "scenario": "id ที่ไม่มีจริง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "note-links-design-md-why-now-index",
+      "requirementKey": "note-links",
+      "scenario": "fragment ของเอกสาร",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "prototype-geometry-change-story",
+      "requirementKey": "prototype-geometry",
+      "scenario": "ส่วนหัวของรายการ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "prototype-geometry-change",
+      "requirementKey": "prototype-geometry",
+      "scenario": "รายละเอียดไม่มีตัวควบคุมรายการ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "prototype-geometry-story-viewport-1440",
+      "requirementKey": "prototype-geometry",
+      "scenario": "ความกว้างเนื้อหา",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/new-session/brand.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/markdown.test.ts ./src/changes/document-refresh.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/view-model.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; [ $r -eq 0 ] || exit $r; bun run --cwd packages/app typecheck) && (bun run --cwd packages/app typecheck && bun run --cwd packages/app build)"
+      ],
+      "segments": [
+        "o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/new-session/brand.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/markdown.test.ts ./src/changes/document-refresh.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/view-model.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; [ $r -eq 0 ] || exit $r; bun run --cwd packages/app typecheck",
+        "bun run --cwd packages/app typecheck && bun run --cwd packages/app build"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    }
+  }
+}

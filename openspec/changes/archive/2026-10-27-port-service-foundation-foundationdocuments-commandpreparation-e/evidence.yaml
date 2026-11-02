@@ -1,0 +1,140 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "validate-selection-change-identifier-foundation-selection-offset",
+      "requirementKey": "validate-selection-change-identifier",
+      "scenario": "เรียก Foundation.selection ด้วย offset",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "validate-selection-change-identifier-foundation-identifier-id-pa",
+      "requirementKey": "validate-selection-change-identifier",
+      "scenario": "เรียก Foundation.identifier ด้วย id ที่มี path separator",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "validate-selection-change-identifier-foundation-project-envelope",
+      "requirementKey": "validate-selection-change-identifier",
+      "scenario": "เรียก Foundation.project กับ envelope ที่ schemaVersion",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "validate-selection-change-identifier-foundation-project-envelo-2",
+      "requirementKey": "validate-selection-change-identifier",
+      "scenario": "เรียก Foundation.project กับ envelope ที่มี change ซ้ำ, row",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "endpoint-experimental-foundation-get-experimental-foundation-cap",
+      "requirementKey": "endpoint-experimental-foundation",
+      "scenario": "ตอบ 200 โดย available เป็น false และ code เป็น unsupported",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "endpoint-experimental-foundation-get-experimental-foundation-cha",
+      "requirementKey": "endpoint-experimental-foundation",
+      "scenario": "ตอบ 503 พร้อม error data code unsupported",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "endpoint-experimental-foundation-get-experimental-foundation-c-2",
+      "requirementKey": "endpoint-experimental-foundation",
+      "scenario": "ตอบ 400 พร้อม error data code invalid_input โดยไม่เรียก",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "endpoint-experimental-foundation-get-experimental-foundation-c-3",
+      "requirementKey": "endpoint-experimental-foundation",
+      "scenario": "GET /experimental/foundation/changes/:changeID ด้วย id",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "endpoint-experimental-foundation-get-experimental-foundation-c-4",
+      "requirementKey": "endpoint-experimental-foundation",
+      "scenario": "GET /experimental/foundation/changes/x/documents บน",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "passthrough-standalone-server-get-api-command-standalone-server",
+      "requirementKey": "passthrough-standalone-server",
+      "scenario": "คืนรายการ command ที่ Command ค้นพบโดยไม่เพิ่มหรือตัดรายการ",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "passthrough-standalone-server-prepare-standalone-commandpreparat",
+      "requirementKey": "passthrough-standalone-server",
+      "scenario": "เรียก prepare ของ standalone CommandPreparation โดยไม่มี",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "passthrough-standalone-server-prepare-standalone-commandprepar-2",
+      "requirementKey": "passthrough-standalone-server",
+      "scenario": "เรียก prepare ของ standalone CommandPreparation พร้อม",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "group-foundation-protocol",
+      "requirementKey": "group-foundation-protocol",
+      "scenario": "ไม่มีส่วนต่างหลังจาก generated output ถูก commit รวมกับ",
+      "impact": "medium",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/core test/foundation.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/server test/foundation.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/client test/foundation.test.ts test/promise.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared",
+      "segments": [
+        "o=$(bun test --cwd packages/core test/foundation.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/server test/foundation.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/client test/foundation.test.ts test/promise.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ]
+    }
+  }
+}

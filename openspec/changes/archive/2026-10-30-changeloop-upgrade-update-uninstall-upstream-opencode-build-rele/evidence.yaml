@@ -1,0 +1,155 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "no-channel-no-upstream-run-check-updater-channel-fetch-spawn",
+      "requirementKey": "no-channel-no-upstream",
+      "scenario": "ตรวจตอนเปิดแอป",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "no-channel-no-upstream-apply-latest-upgrade-method-channel",
+      "requirementKey": "no-channel-no-upstream",
+      "scenario": "apply/latest/upgrade",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "no-channel-no-upstream-method-removal-channel",
+      "requirementKey": "no-channel-no-upstream",
+      "scenario": "ตรวจวิธีติดตั้ง",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "no-channel-no-upstream-updater-layerwith-url",
+      "requirementKey": "no-channel-no-upstream",
+      "scenario": "ใส่ channel ภายหลัง",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "upgrade-command-explains-handler-upgrade-updater-channel",
+      "requirementKey": "upgrade-command-explains",
+      "scenario": "ไม่ระบุ method",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "upgrade-command-explains-upgrade-2-0-0-method-npm-channel",
+      "requirementKey": "upgrade-command-explains",
+      "scenario": "ระบุ method และ target",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "upgrade-command-explains-changeloop-upgrade-binary-build-home-pr",
+      "requirementKey": "upgrade-command-explains",
+      "scenario": "binary จริง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "model-facing-commands-skill-opencode-md-report-md",
+      "requirementKey": "model-facing-commands",
+      "scenario": "คำสั่งใน skill",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "model-facing-commands-system-prompt",
+      "requirementKey": "model-facing-commands",
+      "scenario": "บรรทัดตัวตนคงเดิม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "model-facing-commands-troubleshooting-skill",
+      "requirementKey": "model-facing-commands",
+      "scenario": "path และ env คงเดิม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/cli test/updater-no-channel.test.ts test/updater-install.test.ts src/services/updater.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/upgrade.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/core test/model-facing-commands.test.ts test/session-skill.test.ts test/session-system-prompt.test.ts test/skill.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "segments": [
+        "o=$(bun test --cwd packages/cli test/updater-no-channel.test.ts test/updater-install.test.ts src/services/updater.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/cli test/upgrade.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/core test/model-facing-commands.test.ts test/session-skill.test.ts test/session-system-prompt.test.ts test/skill.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    },
+    "integration": {
+      "adapter": "command",
+      "capability": "integration",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/cli test/updater-no-channel.test.ts test/updater-install.test.ts src/services/updater.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/upgrade.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/core test/model-facing-commands.test.ts test/session-skill.test.ts test/session-system-prompt.test.ts test/skill.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "claims": "declared"
+    },
+    "security-static": {
+      "adapter": "command",
+      "capability": "security-static",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/cli test/updater-no-channel.test.ts test/updater-install.test.ts src/services/updater.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/upgrade.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/core test/model-facing-commands.test.ts test/session-skill.test.ts test/session-system-prompt.test.ts test/skill.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "claims": "declared"
+    },
+    "resilience": {
+      "adapter": "command",
+      "capability": "resilience",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/cli test/updater-no-channel.test.ts test/updater-install.test.ts src/services/updater.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/upgrade.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/core test/model-facing-commands.test.ts test/session-skill.test.ts test/session-system-prompt.test.ts test/skill.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "claims": "declared"
+    }
+  }
+}

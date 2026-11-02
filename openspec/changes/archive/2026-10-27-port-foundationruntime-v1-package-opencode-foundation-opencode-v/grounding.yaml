@@ -1,0 +1,36 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "package-location",
+      "choice": "สร้าง package ใหม่ packages/foundation ชื่อ @opencode/foundation พร้อม vendor runtime ของตัวเอง",
+      "reason": "ทีม lead กำหนดให้แยก package เพื่อไม่ชนไฟล์ของ core/schema/server"
+    },
+    {
+      "id": "embed-scope",
+      "choice": "รับ bundle ที่ embed ผ่าน option files และ fallback อ่าน vendor บนดิสก์ ไม่แก้ build ของ packages/cli ในเฟสนี้",
+      "reason": "ต้องไม่ทำให้ build ของ packages/cli พัง และการต่อ embed เข้ากับ build เป็นงานของเฟส plugin"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase2-team-bc",
+    "mode": "single-batch",
+    "lockedAt": "2026-10-27T14:00:00.000Z",
+    "decisions": [
+      {
+        "id": "package-location",
+        "question": "FoundationRuntime บน v2 ควรอยู่ที่ไหน",
+        "answer": "package ใหม่ packages/foundation ชื่อ @opencode/foundation",
+        "source": "user-batch"
+      },
+      {
+        "id": "embed-scope",
+        "question": "เฟส 2 ต้องต่อ bundle เข้ากับ build ของ packages/cli หรือไม่",
+        "answer": "ไม่ต้อง ให้ runtime รับ bundle ผ่าน option หรืออ่าน vendor บนดิสก์ แล้วต่อ build ในเฟสถัดไป",
+        "source": "recommended-default"
+      }
+    ]
+  }
+}

@@ -1,0 +1,257 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "changes-list-foundation-list-2-items-phase-status-evidencestatus",
+      "requirementKey": "changes-list",
+      "scenario": "แสดงรายการ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "changes-list-item-evidencestatus-evidence-null",
+      "requirementKey": "changes-list",
+      "scenario": "ไม่มี evidence",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "changes-list-scope-archive",
+      "requirementKey": "changes-list",
+      "scenario": "archived เป็นประวัติ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "changes-list-scope-active-scope-archive-search",
+      "requirementKey": "changes-list",
+      "scenario": "ว่างแยกตามเงื่อนไข",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "changes-list-total-50-nextoffset-null",
+      "requirementKey": "changes-list",
+      "scenario": "pagination",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "failure-states-foundation-list-foundationunavailableerror-code-u",
+      "requirementKey": "failure-states",
+      "scenario": "server ไม่รองรับ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "failure-states-foundation-list-foundationuninitializederror-code",
+      "requirementKey": "failure-states",
+      "scenario": "ยังไม่ init",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "failure-states-response-401-403-fetch-transport-error",
+      "requirementKey": "failure-states",
+      "scenario": "ไม่มีสิทธิ์หรือ transport ล้ม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "failure-states-foundation-list-body-decode-foundation-page",
+      "requirementKey": "failure-states",
+      "scenario": "response ผิด schema",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "failure-states-refresh",
+      "requirementKey": "failure-states",
+      "scenario": "คงข้อมูลเดิม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-detail-change-evidence-recordedstatus-pass-status-unverif",
+      "requirementKey": "change-detail",
+      "scenario": "evidence แยกสามค่า",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-detail-budget-lifetime-usedrequests-null",
+      "requirementKey": "change-detail",
+      "scenario": "usage เป็น null",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-detail-budget-null",
+      "requirementKey": "change-detail",
+      "scenario": "ไม่มี budget",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-detail-change-phase-build",
+      "requirementKey": "change-detail",
+      "scenario": "workflow track",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "change-detail-focus-arrowright",
+      "requirementKey": "change-detail",
+      "scenario": "เลื่อนแท็บด้วยคีย์บอร์ด",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "selection-refresh-selection-request-request",
+      "requirementKey": "selection-refresh",
+      "scenario": "ทิ้ง response เก่า",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "selection-refresh-visibility-true-10",
+      "requirementKey": "selection-refresh",
+      "scenario": "poll เมื่อมองเห็น",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "selection-refresh-refresh-request",
+      "requirementKey": "selection-refresh",
+      "scenario": "รวม request",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "selection-refresh-reader",
+      "requirementKey": "selection-refresh",
+      "scenario": "ข้อมูลเดิมเมื่อล้ม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "session-draft-handoff-change-phase-build-command-build",
+      "requirementKey": "session-draft-handoff",
+      "scenario": "เลือกคำสั่งตาม phase",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "session-draft-handoff-change-status-archived-phase-change-build",
+      "requirementKey": "session-draft-handoff",
+      "scenario": "archived ใช้ /changes",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "session-draft-handoff-command-phase-changes",
+      "requirementKey": "session-draft-handoff",
+      "scenario": "ไม่มีคำสั่ง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "session-draft-handoff-command",
+      "requirementKey": "session-draft-handoff",
+      "scenario": "โหลด commands ไม่ได้",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "route-and-entry-currentroute-pathname-changes",
+      "requirementKey": "route-and-entry",
+      "scenario": "จำแนก route",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "route-and-entry-home-selection",
+      "requirementKey": "route-and-entry",
+      "scenario": "ไม่มีโปรเจกต์",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "route-and-entry-typecheck-packages-app-layoutroute-changes",
+      "requirementKey": "route-and-entry",
+      "scenario": "typecheck ทั้ง app",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/reader.test.ts ./src/changes/refresh.test.ts ./src/changes/draft.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/view-model.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/shell/state/layout.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; [ $r -eq 0 ] || exit $r; bun run --cwd packages/app typecheck)"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared",
+      "segments": [
+        "o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/reader.test.ts ./src/changes/refresh.test.ts ./src/changes/draft.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/changes/view-model.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/app --conditions=solid --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src/shell/state/layout.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; [ $r -eq 0 ] || exit $r; bun run --cwd packages/app typecheck"
+      ]
+    }
+  }
+}

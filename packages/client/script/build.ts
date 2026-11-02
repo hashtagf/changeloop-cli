@@ -1,49 +1,27 @@
-import { NodeFileSystem } from "@effect/platform-node"
-import { compile, emitEffectImported, emitPromise, write } from "@opencode-ai/httpapi-codegen"
-import { ClientApi, endpointNames, groupNames, omitEndpoints } from "../src/contract"
-import { Effect } from "effect"
-import { fileURLToPath } from "url"
-import { mkdtemp, rm } from "fs/promises"
-import path from "path"
-import os from "os"
+#!/usr/bin/env bun
 
-const check = process.argv.includes("--check")
-const temporary = check ? await mkdtemp(path.join(os.tmpdir(), "changeloop-client-check-")) : undefined
-const generated = temporary ?? fileURLToPath(new URL("../src", import.meta.url))
+import { $ } from "bun"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-const contract = compile(ClientApi, { groupNames, endpointNames, omitEndpoints })
+process.chdir(fileURLToPath(new URL("..", import.meta.url)))
 
-await Effect.runPromise(
-  Effect.all(
-    [
-      write(
-        emitPromise(contract, {
-          outputTypes: {
-            "events.subscribe": {
-              name: "OpenCodeEventEncoded",
-              import: 'import type { OpenCodeEventEncoded } from "@opencode-ai/protocol/groups/event"',
-            },
-          },
-        }),
-        path.join(generated, "generated"),
-      ),
-      write(
-        emitEffectImported(contract, { module: "../contract", api: "ClientApi" }),
-        path.join(generated, "generated-effect"),
-      ),
-    ],
-    { concurrency: 2, discard: true },
-  ).pipe(Effect.provide(NodeFileSystem.layer)),
-)
-if (temporary) {
-  try {
-    for (const directory of ["generated", "generated-effect"]) {
-      const expected = path.join(temporary, directory)
-      const actual = fileURLToPath(new URL(`../src/${directory}`, import.meta.url))
-      const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: expected }))).sort()
-      const existing = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: actual }))).sort()
-      if (JSON.stringify(files) !== JSON.stringify(existing)) throw new Error(`Generated file inventory differs: ${directory}`)
-      for (const file of files) if (!Buffer.from(await Bun.file(path.join(expected, file)).bytes()).equals(Buffer.from(await Bun.file(path.join(actual, file)).bytes()))) throw new Error(`Generated client drift: ${directory}/${file}`)
-    }
-  } finally { await rm(temporary, { recursive: true, force: true }) }
-}
+await $`rm -rf dist`
+await $`bun tsc -p tsconfig.build.json`
+const root = path.resolve("src")
+const result = await Bun.build({
+  entrypoints: await Array.fromAsync(new Bun.Glob("**/*.ts").scan({ cwd: root, absolute: true })).then((files) =>
+    files.filter((file) => !file.endsWith(".d.ts")),
+  ),
+  root,
+  outdir: "dist",
+  target: "node",
+  format: "esm",
+  packages: "external",
+  splitting: true,
+  naming: {
+    entry: "[dir]/[name].[ext]",
+    chunk: "chunks/[name]-[hash].[ext]",
+  },
+})
+if (!result.success) throw new AggregateError(result.logs, "Failed to build Client")
