@@ -42,8 +42,12 @@ changeloop debug config   # ค่า config หลัง merge ทุกชั�
 Global config dir:
 
 ```text
-config.json → opencode.json → opencode.jsonc → changeloop.json → changeloop.jsonc
+opencode.json → opencode.jsonc → changeloop.json → changeloop.jsonc
 ```
+
+(v1 อ่าน `config.json` เป็นชั้นล่างสุดด้วย แต่ OpenCode v2 ไม่เคยอ่านไฟล์นี้
+Changeloop จึงไม่เพิ่มให้ ถ้ายังมีค่าอยู่ใน `config.json` ให้ย้ายไปไว้ใน
+`changeloop.jsonc`)
 
 ในโปรเจกต์: ไฟล์ `opencode.*` ทุกระดับก่อน แล้วตามด้วย `changeloop.*`
 (changeloop ชนะ); โฟลเดอร์ `.opencode` ก่อน `.changeloop` ในระดับเดียวกัน
@@ -56,7 +60,8 @@ config.json → opencode.json → opencode.jsonc → changeloop.json → changel
 `CHANGELOOP_SERVER_USERNAME`, `CHANGELOOP_TEST_HOME`
 
 กติกา: ถ้าตั้ง `CHANGELOOP_*` ใช้ค่านั้น; ถ้าไม่ตั้ง fallback ไปอ่าน
-`OPENCODE_*` เดิม
+`OPENCODE_*` เดิม (ตอนเริ่มโปรเซส `CHANGELOOP_X` ถูกคัดลอกไปทับ `OPENCODE_X`
+ก่อนโค้ดส่วนอื่นอ่านค่า จึงมีผลทุกจุดที่อ่าน `OPENCODE_*`)
 
 ## Model router (`router`)
 
@@ -81,14 +86,23 @@ config.json → opencode.json → opencode.jsonc → changeloop.json → changel
 
 กติกา:
 
-- **พร้อมใช้** = provider มี auth record (`changeloop auth login`), ถูกตั้งใน
-  `provider` ของ config, หรือมี env var ของ API key ตั้งอยู่
-- **Warn + fallback** — rule ที่ resolve ไม่ได้จะ log คำเตือน
-  (`[changeloop-router] …`) แล้วปล่อยช่องว่างให้ fallback chain เดิม
-  (`agent.model → model → default`) ทำงาน; boot ไม่มีวันล้มเพราะตาราง
-- **Pin ผู้ใช้ชนะเสมอ** — `agent.<name>.model` หรือ `small_model` ที่ตั้ง
-  ไว้แล้วไม่ถูก router ทับ
-- ทำงานครั้งเดียวตอน boot; แก้ตารางแล้วต้องเริ่ม session ใหม่
+- **พร้อมใช้** = provider พร้อมใช้งาน (มี auth record จาก `changeloop auth
+  login`, ถูกตั้งใน `provider` ของ config, หรือมี env var ของ API key) **และ
+  model นั้นมีอยู่ใน catalog ของ provider**; candidate ที่ model ไม่มีใน
+  catalog ถูกข้าม ไม่ถูก pin (provider ฟรี `opencode` นับว่าพร้อมเสมอ)
+- **Warn + fallback** — rule ที่ resolve ไม่ได้จะเขียนคำเตือน
+  (`[changeloop-router] …`) ลง **ไฟล์ log** (ไม่ขึ้น stdout) แล้วปล่อยช่องว่าง
+  ให้ fallback chain เดิม (`agent.model → model → default`) ทำงาน; boot ไม่มี
+  วันล้มเพราะตาราง agent ที่ตารางอ้างถึงแต่ instance ไม่มีจะถูกข้ามพร้อมคำเตือน
+  (v1 สร้าง agent ว่างให้)
+- **Pin ผู้ใช้ชนะเสมอ** — `agent.<name>.model` ที่ตั้งไว้แล้วไม่ถูก router ทับ
+- **`small_model`** — OpenCode v2 ไม่มีค่า `small_model` แยก ช่องนี้ใช้ model
+  ของ agent `title` (ตรงกับที่ migration v1→v2 ของ upstream วาง `small_model`)
+  จึงมีผลกับชื่อ session เท่านั้น สรุปและ compaction ยังใช้ model หลัก
+- **การ merge หลายชั้น** — ถ้ามี `router` ทั้งใน global และโปรเจกต์ ตารางของ
+  ชั้นที่ priority สูงกว่า (โปรเจกต์) **ทับทั้งตาราง** ไม่ merge ราย key เหมือน v1
+- ทำงานตอน boot และอ่านใหม่เมื่อรายการ model ของ provider เปลี่ยน; แก้ตาราง
+  แล้วต้องเริ่ม session ใหม่
 
 ## Foundation workflow commands (`foundation_workflow`)
 
@@ -162,6 +176,6 @@ Foundation release ที่ bundle กับ binary รุ่นนั้น �
 
 ## สิ่งที่ยังใช้ชื่อ opencode โดยเจตนา (Phase 3)
 
-npm scope `@opencode-ai/*`, service tags, URL `opencode.ai` (config `$schema`,
+npm scope `@opencode/*`, service tags, URL `opencode.ai` (config `$schema`,
 zen gateway, auth), ชื่อ default username `'opencode'`, mDNS `opencode.local`,
 managed path `/etc/opencode` — ดูนโยบายและเหตุผลใน `docs/sync/UPSTREAM.md`

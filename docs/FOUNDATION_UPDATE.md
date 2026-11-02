@@ -99,33 +99,35 @@ changeloop foundation doctor
 ซึ่งครอบคลุมการตรวจ source, วิเคราะห์ test ที่ล้มเหลว และรายงานผลก่อนส่งมอบ
 
 ใช้ checkout สะอาดของ repository `Maximumsoft-Co-LTD/claude-foundation`
-ที่ checkout release tag เป้าหมายแล้ว ตัวอย่างนี้ใช้ `v3.5.14`
+ที่ checkout release tag เป้าหมายแล้ว ตัวอย่างนี้ใช้ `v3.6.8`
 สคริปต์อ่านไฟล์จาก working tree จึงต้องไม่มีการแก้ไฟล์ค้างใน source checkout
 
-รันจาก `packages/opencode`:
+รันจาก root ของ repository (สคริปต์และ test ของ bundle อยู่ใน `packages/foundation`):
 
 ```sh
-bun script/sync-foundation.ts --source /path/to/claude-foundation --release v3.5.14
-bun script/verify-foundation.ts
-bun test test/plugin/foundation.test.ts test/plugin/foundation-runtime.test.ts test/plugin/foundation-bundle.test.ts
-bun typecheck
+bun packages/foundation/script/sync-foundation.ts --source /path/to/claude-foundation --release v3.6.8
+bun packages/foundation/script/verify-foundation.ts
+bun test --cwd packages/foundation
+bun run --cwd packages/foundation typecheck
 ```
 
 สคริปต์สร้าง payload และ manifest ที่มี release, commit และ checksum รายไฟล์
+และข้ามไดเรกทอรี `tests`/`fixtures` ของ harness ที่ installer ของ upstream
+ประกาศว่าไม่ส่งมอบ (runtime ไม่อ่าน และลึกเกินขีดจำกัดของการสแกนใน Change Loop)
 อย่าแก้ vendor payload หรือ manifest ด้วยมือ และอย่าใช้ `--allow-untagged`
 สำหรับ release ที่จะแจกจ่าย หาก upstream เปลี่ยนข้อความหรือ installer
 ให้ตรวจและอัปเดตค่าคาดหวังใน integration tests ตาม source ของ release นั้น
 
-หลัง checks ผ่าน ให้ build binary สำหรับเครื่องปัจจุบัน:
+หลัง checks ผ่าน ให้ build binary สำหรับเครื่องปัจจุบัน (ต้องใช้ Bun 1.4.4 ขึ้นไป):
 
 ```sh
-bun script/build.ts --single
+cd packages/cli && bun run build --single --skip-install
 ```
 
 Build จะตรวจ bundle และฝังไฟล์เข้า binary ผลลัพธ์อยู่ที่
-`packages/opencode/dist/<target>/bin/opencode` (ชื่อไฟล์ build ยังเป็น `opencode`)
-ทดสอบ `foundation status --json`, `foundation init` ในโปรเจกต์ทดสอบ และ
-`foundation doctor` ด้วย binary ที่ build จริงก่อนแจกจ่ายผ่านช่องทาง Changeloop
+`packages/cli/dist/cli-<target>/bin/changeloop`
+ทดสอบ `changeloop foundation status --json`, `foundation init --yes` ในโปรเจกต์ทดสอบ
+และ `foundation doctor` ด้วย binary ที่ build จริงก่อนแจกจ่ายผ่านช่องทาง Changeloop
 การ sync source อย่างเดียวไม่เปลี่ยน binary ที่ผู้ใช้ติดตั้งไว้
 
 ดูรายละเอียด setting และ ownership ของคำสั่งใน

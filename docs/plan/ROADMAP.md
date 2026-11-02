@@ -1,5 +1,12 @@
 # Changeloop CLI — Priority Roadmap
 
+> **สถานะ (2026-11):** แผนนี้เขียนตอนที่ fork ยังอยู่บน OpenCode v1
+> (`packages/opencode`) ตอนนี้ fork ย้ายมาอยู่บน OpenCode v2 แล้ว (v2.2.0 +
+> ชั้น Changeloop) พาธและชื่อ package ที่อ้างในเอกสารนี้ (`packages/opencode`,
+> `packages/core/src/global.ts`, scope `@opencode-ai/*`) เป็นของ v1 โครงปัจจุบันและ
+> นโยบาย sync ดูที่ [`docs/sync/UPSTREAM.md`](../sync/UPSTREAM.md) เนื้อหาด้านล่าง
+> เก็บไว้เป็นประวัติของเหตุผลและลำดับความสำคัญ ไม่ใช่สถานะงานปัจจุบัน
+
 อ้างอิง: `CHANGELOOP.PRD.md` + ผล survey codebase (OpenCode monorepo, 2026-08)
 
 หลักการจัดลำดับ:
