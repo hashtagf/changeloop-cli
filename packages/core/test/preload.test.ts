@@ -15,12 +15,14 @@ describe("Core test environment", () => {
 
     expect(os.homedir()).toBe(home)
     expect(Global.Path.home).toBe(home)
-    expect(Global.Path.config).toBe(path.join(home, ".config", "opencode"))
-    expect(Global.Path.data).toBe(path.join(home, ".local", "share", "opencode"))
-    expect(Global.Path.cache).toBe(path.join(home, ".cache", "opencode"))
-    expect(Global.Path.state).toBe(path.join(home, ".local", "state", "opencode"))
+    // The isolated home is a fresh install, so every root resolves to changeloop; the wrapper still pins the
+    // config directory through OPENCODE_CONFIG_DIR.
+    expect(Global.Path.config).toBe(path.join(home, ".config", "changeloop"))
+    expect(Global.Path.data).toBe(path.join(home, ".local", "share", "changeloop"))
+    expect(Global.Path.cache).toBe(path.join(home, ".cache", "changeloop"))
+    expect(Global.Path.state).toBe(path.join(home, ".local", "state", "changeloop"))
     expect(os.tmpdir()).toBe(path.join(home, "tmp"))
-    expect(process.env.OPENCODE_CONFIG_DIR).toBe(Global.Path.config)
+    expect(process.env.OPENCODE_CONFIG_DIR).toBe(path.join(home, ".config", "opencode"))
     expect(process.env.OPENCODE_CONFIG).toBeUndefined()
     expect(process.env.OPENCODE_CONFIG_CONTENT).toBeUndefined()
     expect(process.env.AWS_REGION).toBeUndefined()

@@ -6,15 +6,39 @@ import { Context, Effect, Layer } from "effect"
 // The variants resolve through the `workerd` bundle condition, like the
 // native-module stubs, so no runtime sniffing happens here.
 import { roots } from "#global-roots"
+// Must stay the first module that reads the environment: aliases CHANGELOOP_* onto OPENCODE_*.
+import "./env-alias.js"
 import { Flock } from "./flock.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 
-const app = "opencode"
-const { data, cache, config, state, tmp } = roots(app)
+const app = "changeloop"
+const legacyApp = "opencode"
+
+/**
+ * A base directory keeps its legacy `opencode` path when no `changeloop` path exists there yet, so installs that
+ * predate the rename keep their sessions, credentials, and cache without a migration. Neither path is created here.
+ */
+export function resolveAppPath(
+  preferred: string,
+  legacy: string,
+  exists: (candidate: string) => boolean = fs.existsSync,
+): string {
+  if (exists(preferred)) return preferred
+  if (exists(legacy)) return legacy
+  return preferred
+}
+
+const preferredRoots = roots(app)
+const legacyRoots = roots(legacyApp)
+const data = resolveAppPath(preferredRoots.data, legacyRoots.data)
+const cache = resolveAppPath(preferredRoots.cache, legacyRoots.cache)
+const config = resolveAppPath(preferredRoots.config, legacyRoots.config)
+const state = resolveAppPath(preferredRoots.state, legacyRoots.state)
+const tmp = preferredRoots.tmp
 
 const paths = {
   get home() {
-    return process.env.OPENCODE_TEST_HOME ?? os.homedir()
+    return process.env.CHANGELOOP_TEST_HOME ?? process.env.OPENCODE_TEST_HOME ?? os.homedir()
   },
   data,
   bin: path.join(cache, "bin"),
@@ -76,7 +100,9 @@ const acquire = (input: Partial<Interface>) =>
 
 const layer = Layer.effect(
   Service,
-  Effect.suspend(() => acquire({ config: process.env.OPENCODE_CONFIG_DIR ?? Path.config })),
+  Effect.suspend(() =>
+    acquire({ config: process.env.CHANGELOOP_CONFIG_DIR ?? process.env.OPENCODE_CONFIG_DIR ?? Path.config }),
+  ),
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })

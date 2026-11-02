@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "app-path-fallback",
+      "choice": "port resolveAppPath ของ v1: BASE/changeloop ถ้ามี ไม่งั้น BASE/opencode ถ้ามี ไม่งั้น BASE/changeloop ใช้กับ data cache config state ทีละ base ส่วน tmp ใช้ชื่อ changeloop",
+      "reason": "ผู้ใช้เดิมที่มี dir opencode ยังเห็น session และ auth เดิมโดยไม่ migrate ติดตั้งใหม่ได้ dir changeloop ตรงกับ v1 และเอกสาร"
+    },
+    {
+      "id": "env-alias-at-process-start",
+      "choice": "module util/env-alias คัดลอก CHANGELOOP_X ไปทับ process.env.OPENCODE_X ตอน import และ import เป็นตัวแรกใน CLI entry และใน global.ts",
+      "reason": "โค้ด v2 อ่าน process.env.OPENCODE_* กระจายหลายจุดรวมถึง Effect Config จุดเดียวก่อนทุกการอ่านครอบคลุมทั้งหมดโดยไม่แก้ทีละจุด และ changeloop ชนะตาม v1"
+    },
+    {
+      "id": "config-names-order",
+      "choice": "ConfigDiscovery.names เป็น opencode.json, opencode.jsonc, changeloop.json, changeloop.jsonc และรายการ dir ของการเดินขึ้นเป็น .changeloop ก่อน .opencode ในลิสต์ที่ถูก reverse",
+      "reason": "ลำดับการโหลดหลังชนะ จึงได้ opencode ก่อน changeloop ทั้งไฟล์และโฟลเดอร์ ตรงเอกสาร"
+    },
+    {
+      "id": "config-json-not-ported",
+      "choice": "ไม่รองรับ config.json เป็นชั้นล่างสุด",
+      "reason": "v2 ไม่เคยอ่านไฟล์นี้ใน global config dir การเพิ่มคือพฤติกรรมของ opencode ใหม่ ไม่ใช่ความเข้ากันได้กับ Changeloop และต้องรายงานเป็นข้อที่ไม่ port"
+    },
+    {
+      "id": "plan-directory",
+      "choice": "คง ~/.opencode/plan เป็นโฟลเดอร์ใน reminder และเพิ่มสิทธิ์ edit ที่ ~/.changeloop/plan/* ส่วน .opencode/plans และ .changeloop/plans ระดับโปรเจกต์ของ v1 ไม่มีตัวเทียบบน v2",
+      "reason": "v2 เปลี่ยนที่เก็บ plan เป็น dir ใต้ home ไม่เปลี่ยนข้อความที่ model เห็น และ v2 ไม่มีกลไก plans ระดับโปรเจกต์ให้ port"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase9-confignames-g1",
+    "mode": "single-batch",
+    "lockedAt": "2026-11-02T10:00:00.000Z",
+    "decisions": [
+      {
+        "id": "app-path-fallback",
+        "question": "Global ควรใช้ dir changeloop หรือคง opencode",
+        "answer": "port resolveAppPath ตาม v1 (changeloop ถ้ามี, ไม่งั้น opencode ถ้ามี, ไม่งั้นสร้าง changeloop) ใช้กับ data cache config state",
+        "source": "user-batch"
+      },
+      {
+        "id": "env-alias-at-process-start",
+        "question": "CHANGELOOP_* ต้อง alias OPENCODE_* หรือไม่",
+        "answer": "ใช่ ทุกตัวแปร changeloop ชนะ และ CHANGELOOP_TEST_HOME มาก่อน OPENCODE_TEST_HOME",
+        "source": "user-batch"
+      },
+      {
+        "id": "config-names-order",
+        "question": "ลำดับ precedence ของไฟล์และโฟลเดอร์",
+        "answer": "ตามเอกสาร CONFIGURATION.md: changeloop ชนะ opencode ทั้งไฟล์และโฟลเดอร์",
+        "source": "user-batch"
+      },
+      {
+        "id": "config-json-not-ported",
+        "question": "config.json ชั้นล่างสุด",
+        "answer": "ไม่ port เพราะ v2 ไม่อ่าน และรายงานเป็นช่องว่างที่เอกสารต้องแก้",
+        "source": "user-batch"
+      },
+      {
+        "id": "plan-directory",
+        "question": "plan mode ควรเขียนไฟล์ที่ไหน",
+        "answer": "คง ~/.opencode/plan เพิ่มสิทธิ์ ~/.changeloop/plan",
+        "source": "user-batch"
+      }
+    ]
+  }
+}

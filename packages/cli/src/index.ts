@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+// Must stay first: aliases CHANGELOOP_* onto OPENCODE_* before any module reads the environment.
+import "@opencode/util/env-alias"
 import { ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Cause, Effect } from "effect"

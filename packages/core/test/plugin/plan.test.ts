@@ -257,6 +257,23 @@ describe("plan plugin mutations", () => {
     }),
   )
 
+  it.effect("allows edits inside the Changeloop plan directory and still denies the project", () =>
+    Effect.gen(function* () {
+      const { planAgent } = yield* run()
+      const changeloopPlan = path.join(home, ".changeloop", "plan")
+      expect(Permission.evaluate("edit", path.join(changeloopPlan, "work.md"), planAgent.permissions).effect).toBe(
+        "allow",
+      )
+      expect(Permission.evaluate("edit", path.join(planDirectory, "work.md"), planAgent.permissions).effect).toBe(
+        "allow",
+      )
+      expect(Permission.evaluate("edit", "/workspace/.changeloop/plan/work.md", planAgent.permissions).effect).toBe(
+        "deny",
+      )
+      expect(Permission.evaluate("edit", "/workspace/source.ts", planAgent.permissions).effect).toBe("deny")
+    }),
+  )
+
   it.effect("allows external directories without asking", () =>
     Effect.gen(function* () {
       const { planAgent } = yield* run()

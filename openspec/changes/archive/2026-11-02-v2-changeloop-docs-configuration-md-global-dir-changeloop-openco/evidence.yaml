@@ -1,0 +1,231 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "global-app-path-fallback-xdg-base-dir-changeloop-opencode",
+      "requirementKey": "global-app-path-fallback",
+      "scenario": "ติดตั้งใหม่",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "global-app-path-fallback-base-opencode-base-changeloop",
+      "requirementKey": "global-app-path-fallback",
+      "scenario": "ผู้ใช้ opencode เดิม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "global-app-path-fallback-base-changeloop-base-opencode",
+      "requirementKey": "global-app-path-fallback",
+      "scenario": "มีทั้งสอง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "global-app-path-fallback-config-opencode-data-changeloop",
+      "requirementKey": "global-app-path-fallback",
+      "scenario": "ตัดสินแยกต่อ base",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "global-app-path-fallback-changeloop-test-home-opencode-test-home",
+      "requirementKey": "global-app-path-fallback",
+      "scenario": "ลำดับ test home",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "global-app-path-fallback-changeloop-debug-paths-xdg-base-opencod",
+      "requirementKey": "global-app-path-fallback",
+      "scenario": "เห็นผ่าน debug paths จริง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "env-changeloop-alias-changeloop-config-dir-opencode-config-dir",
+      "requirementKey": "env-changeloop-alias",
+      "scenario": "alias ชนะ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "env-changeloop-alias-opencode-config-dir",
+      "requirementKey": "env-changeloop-alias",
+      "scenario": "fallback",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "env-changeloop-alias-changeloop-x",
+      "requirementKey": "env-changeloop-alias",
+      "scenario": "ตัวแปรอื่นไม่ถูกแตะ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "config-file-names-config-dir-opencode-json-changeloop-json-shell",
+      "requirementKey": "config-file-names",
+      "scenario": "global changeloop ชนะ opencode",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "config-file-names-changeloop-json-changeloop-jsonc",
+      "requirementKey": "config-file-names",
+      "scenario": "jsonc ชนะ json",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "config-file-names-root-opencode-json-changeloop-json-global-chan",
+      "requirementKey": "config-file-names",
+      "scenario": "โปรเจกต์",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "config-file-names-opencode-json",
+      "requirementKey": "config-file-names",
+      "scenario": "เฉพาะ opencode เหมือนเดิม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "config-file-names-config-dir-opencode-json-changeloop-json-confi",
+      "requirementKey": "config-file-names",
+      "scenario": "update เลือกไฟล์ที่ชนะ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "config-file-names-config-dir-config-config-update",
+      "requirementKey": "config-file-names",
+      "scenario": "update seed",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "config-file-names-changeloop-json-json-opencode-json",
+      "requirementKey": "config-file-names",
+      "scenario": "ไฟล์เสีย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "project-changeloop-directory-opencode-changeloop",
+      "requirementKey": "project-changeloop-directory",
+      "scenario": "ลำดับ directory",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "project-changeloop-directory-changeloop-opencode-json",
+      "requirementKey": "project-changeloop-directory",
+      "scenario": "เฉพาะ .changeloop",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "project-changeloop-directory-root-changeloop-opencode",
+      "requirementKey": "project-changeloop-directory",
+      "scenario": "ซ้อนหลายระดับ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "project-changeloop-directory-changeloop-commands-hello-md-instan",
+      "requirementKey": "project-changeloop-directory",
+      "scenario": "command ใน .changeloop ใช้ได้จริง",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "plan-changeloop-directory-plan-agent-changeloop-plan-work-md",
+      "requirementKey": "plan-changeloop-directory",
+      "scenario": "อนุญาต changeloop plan",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "plan-changeloop-directory-plan-agent-opencode-plan-work-md",
+      "requirementKey": "plan-changeloop-directory",
+      "scenario": "opencode plan เดิมยังได้",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "plan-changeloop-directory-plan-agent",
+      "requirementKey": "plan-changeloop-directory",
+      "scenario": "ที่อื่นถูกปฏิเสธ",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/util test/global.test.ts test/global-roots.test.ts test/env-alias.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o1=$(bun run --cwd packages/core test test/preload.test.ts 2>&1); r1=$?; o2=$(bun test --cwd packages/core test/config/config.test.ts test/config/watch.test.ts test/config/changeloop-names.test.ts 2>&1); r2=$?; echo \"$o1\"; echo \"$o2\"; p=$(printf '%s\\n%s\\n' \"$o1\" \"$o2\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p' | awk '{s+=$1} END{print s+0}'); f=$(printf '%s\\n%s\\n' \"$o1\" \"$o2\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p' | awk '{s+=$1} END{print s+0}'); echo \"Tests: $f failed, $p passed, $((p+f)) total\"; [ $r1 -eq 0 ] && [ $r2 -eq 0 ]) && (o=$(bun test --cwd packages/core test/plugin/plan.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/debug-paths.test.ts test/service.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared",
+      "segments": [
+        "o=$(bun test --cwd packages/util test/global.test.ts test/global-roots.test.ts test/env-alias.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o1=$(bun run --cwd packages/core test test/preload.test.ts 2>&1); r1=$?; o2=$(bun test --cwd packages/core test/config/config.test.ts test/config/watch.test.ts test/config/changeloop-names.test.ts 2>&1); r2=$?; echo \"$o1\"; echo \"$o2\"; p=$(printf '%s\\n%s\\n' \"$o1\" \"$o2\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p' | awk '{s+=$1} END{print s+0}'); f=$(printf '%s\\n%s\\n' \"$o1\" \"$o2\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p' | awk '{s+=$1} END{print s+0}'); echo \"Tests: $f failed, $p passed, $((p+f)) total\"; [ $r1 -eq 0 ] && [ $r2 -eq 0 ]",
+        "o=$(bun test --cwd packages/core test/plugin/plan.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/cli test/debug-paths.test.ts test/service.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ]
+    }
+  }
+}

@@ -29,6 +29,8 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const global = yield* Global.Service
     const directory = path.join(global.home, ".opencode", "plan")
+    // Changeloop's own plan folder is writable too; the reminder keeps naming the original one.
+    const changeloopDirectory = path.join(global.home, ".changeloop", "plan")
     const enterReminder = enter(directory)
     yield* ctx.agent.transform((editor) => {
       editor.update(plan, (item) => {
@@ -38,6 +40,7 @@ export const Plugin = define({
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
         item.permissions.push({ action: "edit", resource: "*", effect: "deny" })
         item.permissions.push({ action: "edit", resource: path.join(directory, "*"), effect: "allow" })
+        item.permissions.push({ action: "edit", resource: path.join(changeloopDirectory, "*"), effect: "allow" })
       })
     })
 
