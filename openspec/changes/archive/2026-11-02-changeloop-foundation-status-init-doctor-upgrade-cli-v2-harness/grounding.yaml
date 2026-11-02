@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "decisions": [
+    {
+      "id": "logic-in-foundation-package",
+      "choice": "เพิ่มโมดูล FoundationCommand ใน packages/foundation ที่รับ dependency ฉีดได้ (confirm, install, status, doctor, write) และ CLI handler เป็นชั้นบาง",
+      "reason": "ทดสอบพฤติกรรมกับโปรเจกต์และ installer จริงได้โดยไม่ต้องเปิด CLI ทั้งตัว ไม่เปลี่ยนความหมาย API ของ FoundationRuntime ที่ plugin ใช้ และตรงกับโครงของ v1"
+    },
+    {
+      "id": "approval-semantics",
+      "choice": "init และ upgrade เขียนไฟล์เมื่อมี --yes หรือผู้ใช้ยืนยันใน terminal จริง ถ้าไม่มี --yes และไม่ใช่ terminal จริงให้จบ exit 1 โดยไม่เรียก installer",
+      "reason": "ตรงกับ v1 (ถามยืนยัน) และเอกสาร (ต้อง --yes) โดยไม่ให้ pipeline ที่ไม่มีคนเขียนไฟล์เงียบๆ"
+    },
+    {
+      "id": "upgrade-same-installer",
+      "choice": "upgrade เรียก installer ตัวเดียวกับ init (init --host opencode) เพราะ installer converge managed files ไป release ที่ pin อยู่แล้ว",
+      "reason": "ตรงกับ v1 และเอกสารที่ระบุว่า init และ upgrade ติดตั้ง commands, guard และ ownership manifest ชุดเดียวกัน"
+    },
+    {
+      "id": "embedded-runtime-only",
+      "choice": "handler โหลดไฟล์ runtime ที่ฝังใน binary ผ่าน embeddedFiles แล้วส่งเป็น options.files; ถ้าโมดูลฝังมีอยู่แต่โหลดไม่ได้ให้หยุดด้วยข้อความ reinstall",
+      "reason": "ไม่ต้องมี claude-foundation ใน PATH และไม่รันสคริปต์ที่ดาวน์โหลดจากเน็ต ตรงกับพฤติกรรม bundled ของ plugin"
+    }
+  ],
+  "decisionBatch": {
+    "status": "locked",
+    "source": "user-batch",
+    "reference": "conversation:phase9-foundationcli-g3",
+    "mode": "single-batch",
+    "lockedAt": "2026-11-02T09:00:00.000Z",
+    "decisions": [
+      {
+        "id": "logic-in-foundation-package",
+        "question": "ตรรกะคำสั่งควรอยู่ที่ใด",
+        "answer": "ใน packages/foundation ตามที่ทีมลีดสั่ง โดยไม่เปลี่ยนความหมาย API ที่ plugin ใช้",
+        "source": "user-batch"
+      },
+      {
+        "id": "approval-semantics",
+        "question": "ไม่มี --yes ควรเกิดอะไร",
+        "answer": "ไม่แก้ไฟล์ใดโดยไม่ได้รับ --yes ตาม v1 และเอกสาร",
+        "source": "user-batch"
+      },
+      {
+        "id": "upgrade-same-installer",
+        "question": "upgrade ต่างจาก init อย่างไร",
+        "answer": "ใช้ installer เดียวกัน converge ไป release ที่ pin ตามเอกสาร",
+        "source": "user-batch"
+      },
+      {
+        "id": "embedded-runtime-only",
+        "question": "runtime มาจากไหน",
+        "answer": "ใช้ payload ที่ฝังใน binary เท่านั้น ห้ามดาวน์โหลดสคริปต์จากเน็ตมารัน",
+        "source": "user-batch"
+      }
+    ]
+  }
+}

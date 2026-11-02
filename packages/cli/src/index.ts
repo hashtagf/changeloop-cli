@@ -82,6 +82,12 @@ const Handlers = Runtime.handlers(Commands, {
     set: () => import("./commands/handlers/service/set"),
     unset: () => import("./commands/handlers/service/unset"),
   },
+  foundation: {
+    status: () => import("./commands/handlers/foundation/status"),
+    init: () => import("./commands/handlers/foundation/init"),
+    doctor: () => import("./commands/handlers/foundation/doctor"),
+    upgrade: () => import("./commands/handlers/foundation/upgrade"),
+  },
   serve: () => import("./commands/handlers/serve"),
 })
 

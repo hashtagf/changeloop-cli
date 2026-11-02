@@ -45,6 +45,17 @@ const PermissionParams = {
   ),
 }
 
+const FoundationPath = Argument.String("path").pipe(
+  Argument.withDescription("Project directory (defaults to the current directory)"),
+  Argument.optional,
+)
+
+const FoundationYes = Flag.Boolean("yes").pipe(
+  Flag.withAlias("y"),
+  Flag.withDescription("Approve changes to files in the project"),
+  Flag.withDefault(false),
+)
+
 const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
   description: "Changeloop command line interface",
   params: {
@@ -564,6 +575,33 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Flag.withDefault(false),
         ),
       },
+    }),
+    Spec.make("foundation", {
+      description: "Manage the Foundation workflow harness of a project",
+      commands: [
+        Spec.make("status", {
+          description: "Show the bundled and installed Foundation versions",
+          params: {
+            path: FoundationPath,
+            json: Flag.Boolean("json").pipe(
+              Flag.withDescription("Print the status as JSON"),
+              Flag.withDefault(false),
+            ),
+          },
+        }),
+        Spec.make("init", {
+          description: "Install the bundled Foundation harness into a project",
+          params: { path: FoundationPath, yes: FoundationYes },
+        }),
+        Spec.make("doctor", {
+          description: "Run Foundation diagnostics on a project",
+          params: { path: FoundationPath },
+        }),
+        Spec.make("upgrade", {
+          description: "Converge a project's Foundation files to the bundled release",
+          params: { path: FoundationPath, yes: FoundationYes },
+        }),
+      ],
     }),
     Spec.make("serve", {
       description: "Start the v2 API and web server",

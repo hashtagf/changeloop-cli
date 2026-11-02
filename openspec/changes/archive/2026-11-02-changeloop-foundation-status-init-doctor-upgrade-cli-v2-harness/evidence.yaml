@@ -1,0 +1,308 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "foundation-status-reports-versions-status-json",
+      "requirementKey": "foundation-status-reports-versions",
+      "scenario": "โปรเจกต์ยังไม่มี harness",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-status-reports-versions-init-yes-status-json",
+      "requirementKey": "foundation-status-reports-versions",
+      "scenario": "หลัง init",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-status-reports-versions-claude-harness-protocol-json",
+      "requirementKey": "foundation-status-reports-versions",
+      "scenario": "protocol.json เสีย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-status-reports-versions-status-json-2",
+      "requirementKey": "foundation-status-reports-versions",
+      "scenario": "ข้อความอ่านง่าย",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-write-requires-approval-init-stdin-terminal",
+      "requirementKey": "foundation-write-requires-approval",
+      "scenario": "ไม่มี --yes และไม่ใช่ terminal",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "security-static"
+      ]
+    },
+    {
+      "id": "foundation-write-requires-approval-confirm",
+      "requirementKey": "foundation-write-requires-approval",
+      "scenario": "ผู้ใช้ปฏิเสธการยืนยัน",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "security-static"
+      ]
+    },
+    {
+      "id": "foundation-write-requires-approval-upgrade-yes",
+      "requirementKey": "foundation-write-requires-approval",
+      "scenario": "upgrade ก็ต้องอนุมัติ",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "security-static"
+      ]
+    },
+    {
+      "id": "foundation-init-installs-bundled-harness-init-yes-git",
+      "requirementKey": "foundation-init-installs-bundled-harness",
+      "scenario": "โปรเจกต์ใหม่",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "foundation-init-installs-bundled-harness-init-yes-path-claude-fo",
+      "requirementKey": "foundation-init-installs-bundled-harness",
+      "scenario": "ไม่มี claude-foundation ใน PATH",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "foundation-init-installs-bundled-harness-init-yes",
+      "requirementKey": "foundation-init-installs-bundled-harness",
+      "scenario": "รันซ้ำ",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "foundation-init-installs-bundled-harness-init-yes-directory-cwd",
+      "requirementKey": "foundation-init-installs-bundled-harness",
+      "scenario": "ระบุ path",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "foundation-init-installs-bundled-harness-install-exit-code",
+      "requirementKey": "foundation-init-installs-bundled-harness",
+      "scenario": "installer ล้ม",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "foundation-upgrade-converges-managed-files-opencode-commands-md",
+      "requirementKey": "foundation-upgrade-converges-managed-files",
+      "scenario": "ซ่อมไฟล์ที่ถูกแก้",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "foundation-upgrade-converges-managed-files-opencode-commands-upg",
+      "requirementKey": "foundation-upgrade-converges-managed-files",
+      "scenario": "ไฟล์นอก manifest",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "foundation-upgrade-converges-managed-files-opencode-commands-fou",
+      "requirementKey": "foundation-upgrade-converges-managed-files",
+      "scenario": "ไฟล์ชื่อชนที่ manifest ไม่ได้เป็นเจ้าของ",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "integration",
+        "security-static",
+        "resilience"
+      ]
+    },
+    {
+      "id": "foundation-doctor-reports-health-doctor-init-yes",
+      "requirementKey": "foundation-doctor-reports-health",
+      "scenario": "โปรเจกต์ที่ติดตั้งดี",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-doctor-reports-health-doctor-exit-code-7-stderr",
+      "requirementKey": "foundation-doctor-reports-health",
+      "scenario": "doctor ล้ม",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-doctor-reports-health-doctor-harness",
+      "requirementKey": "foundation-doctor-reports-health",
+      "scenario": "ก่อน init",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-rejects-unsafe-target-init-yes-path",
+      "requirementKey": "foundation-rejects-unsafe-target",
+      "scenario": "path ไม่มีอยู่",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "security-static"
+      ]
+    },
+    {
+      "id": "foundation-rejects-unsafe-target-status-path",
+      "requirementKey": "foundation-rejects-unsafe-target",
+      "scenario": "path เป็นไฟล์",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "security-static"
+      ]
+    },
+    {
+      "id": "foundation-rejects-unsafe-target-claude-commands-symlink-init-ye",
+      "requirementKey": "foundation-rejects-unsafe-target",
+      "scenario": "managed path เป็น symlink",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "security-static"
+      ]
+    },
+    {
+      "id": "foundation-rejects-unsafe-target-install-platform-win32",
+      "requirementKey": "foundation-rejects-unsafe-target",
+      "scenario": "แพลตฟอร์ม win32",
+      "impact": "low",
+      "capabilities": [
+        "test",
+        "security-static"
+      ]
+    },
+    {
+      "id": "foundation-commands-registered-foundation-help",
+      "requirementKey": "foundation-commands-registered",
+      "scenario": "help ของ foundation",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-commands-registered-help",
+      "requirementKey": "foundation-commands-registered",
+      "scenario": "root help",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    },
+    {
+      "id": "foundation-commands-registered-status-json-path",
+      "requirementKey": "foundation-commands-registered",
+      "scenario": "path เริ่มต้น",
+      "impact": "low",
+      "capabilities": [
+        "test"
+      ]
+    }
+  ],
+  "providers": {
+    "test": {
+      "adapter": "test-discovery",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/foundation test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "segments": [
+        "o=$(bun test --cwd packages/foundation test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r",
+        "o=$(bun test --cwd packages/cli test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r"
+      ],
+      "minimum": 1,
+      "reportFormat": "auto",
+      "claims": "declared"
+    },
+    "security-static": {
+      "adapter": "command",
+      "capability": "security-static",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/foundation test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "claims": "declared"
+    },
+    "integration": {
+      "adapter": "command",
+      "capability": "integration",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/foundation test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "claims": "declared"
+    },
+    "resilience": {
+      "adapter": "command",
+      "capability": "resilience",
+      "command": [
+        "sh",
+        "-c",
+        "(o=$(bun test --cwd packages/foundation test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r) && (o=$(bun test --cwd packages/cli test/foundation-command.test.ts 2>&1); r=$?; echo \"$o\"; p=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) pass$/\\1/p'); f=$(echo \"$o\" | sed -n 's/^ *\\([0-9]*\\) fail$/\\1/p'); echo \"Tests: ${f:-0} failed, ${p:-0} passed, $((${p:-0}+${f:-0})) total\"; exit $r)"
+      ],
+      "claims": "declared"
+    }
+  }
+}
