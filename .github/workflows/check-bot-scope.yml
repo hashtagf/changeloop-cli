@@ -19,6 +19,7 @@ permissions:
 jobs:
   bot-scope:
     name: bot-scope
+    if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
