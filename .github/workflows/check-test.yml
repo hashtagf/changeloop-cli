@@ -100,6 +100,11 @@ jobs:
         if: runner.os == 'Linux'
         run: bun run lint:effect-simplifications
 
+      # Upstream's runners ship ripgrep; the search tool tests refuse to download it, so GitHub-hosted runners need it.
+      - name: Install ripgrep
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       - name: Configure git identity
         run: |
           git config --global user.email "bot@opencode.ai"

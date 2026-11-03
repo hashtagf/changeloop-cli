@@ -13,7 +13,7 @@ const target = `cli${nodeBuild ? "-node" : ""}-${process.platform === "win32" ? 
 const directory = path.join(import.meta.dir, "..", "dist", ...(nodeBuild ? ["node"] : []), target, "bin")
 const binary = path.join(
   directory,
-  `${nodeBuild ? "opencode2-node" : "opencode"}${process.platform === "win32" ? ".exe" : ""}`,
+  `${nodeBuild ? "opencode2-node" : "changeloop"}${process.platform === "win32" ? ".exe" : ""}`,
 )
 if (!(await Bun.file(binary).exists())) throw new Error(`Missing compiled CLI in ${directory}`)
 
@@ -90,7 +90,7 @@ try {
   processes.forEach((process) => process.kill())
   await Promise.all(processes.map((process) => process.exited))
   if (failure)
-    errors.push(fs.readFile(path.join(root, "data", "opencode", "log", "opencode.log"), "utf8").catch(() => ""))
+    errors.push(fs.readFile(path.join(root, "data", "changeloop", "log", "opencode.log"), "utf8").catch(() => ""))
 }
 
 const output = await Promise.all(errors)
@@ -112,13 +112,16 @@ function spawnService() {
 }
 
 async function waitForRegistration() {
-  const directory = path.join(root, "state", "opencode")
   for (let attempt = 0; attempt < 400; attempt++) {
-    const files = await fs.readdir(directory).catch(() => [])
-    const file = files.find(
-      (file) => file === "service.json" || (file.startsWith("service-") && file.endsWith(".json")),
-    )
-    if (file) return path.join(directory, file)
+    // Changeloop creates its own directory on a fresh home and reuses an existing opencode one.
+    for (const name of ["changeloop", "opencode"]) {
+      const directory = path.join(root, "state", name)
+      const files = await fs.readdir(directory).catch(() => [])
+      const file = files.find(
+        (file) => file === "service.json" || (file.startsWith("service-") && file.endsWith(".json")),
+      )
+      if (file) return path.join(directory, file)
+    }
     await Bun.sleep(25)
   }
   throw new Error("Compiled service did not publish registration")
