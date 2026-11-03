@@ -362,12 +362,12 @@ function harness(
       ...FoundationCommand.dependencies({
         confirm: async () => false,
         write: (text) => out.push(text),
-        error: (text) => err.push(text),
+        error: (text) => { console.log("[fc-debug]", text.slice(0, 500)); err.push(text) },
         runtime: { allowUntagged: true, cache, ...(platform ? { platform } : {}) },
         ...rest,
       }),
       write: (text: string) => void out.push(text),
-      error: (text: string) => void err.push(text),
+      error: (text: string) => { console.log("[fc-debug]", text.slice(0, 500)); err.push(text) },
     }
     return { dep: { ...dep, ...overrides }, out, err }
   })

@@ -9,3 +9,4 @@ packages/client/src/effect/generated/** linguist-generated
 packages/client/src/effect/api/** linguist-generated
 packages/core/src/**/*.txt text eol=lf
 packages/httpapi-codegen/test/generated/*.ts text eol=lf
+packages/foundation/vendor/** -text

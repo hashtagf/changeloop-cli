@@ -25,6 +25,25 @@ function rawTextPlugin(modelsSnapshot?: string): Plugin {
   }
 }
 
+/**
+ * The Node artifact does not embed the Foundation runtime (the embedder reads it with Bun APIs). The module resolves to
+ * one that fails with "Cannot find module", which `embeddedFiles` treats as "not embedded" and falls back to the
+ * vendored bundle, so Foundation commands report an unavailable bundle instead of the build failing to resolve it.
+ */
+function foundationFilesPlugin(): Plugin {
+  const id = "\0virtual:opencode-foundation-files"
+  return {
+    name: "opencode:foundation-files-absent",
+    resolveId(source) {
+      if (source === "virtual:opencode-foundation-files") return id
+    },
+    load(loaded) {
+      if (loaded !== id) return
+      return `throw new Error("Cannot find module 'virtual:opencode-foundation-files'")`
+    },
+  }
+}
+
 /** The web UI archive's SEA asset key. The prelude leaves it in place, and the server reads it from SEA memory. */
 export const appArchiveAsset = "app-archive.bin"
 
@@ -264,6 +283,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
     root: dir,
     plugins: [
       appAssetsPlugin(),
+      foundationFilesPlugin(),
       rawTextPlugin(input.modelsSnapshot),
       runtimeRequirePlugin(),
       fffNodePlugin(),
