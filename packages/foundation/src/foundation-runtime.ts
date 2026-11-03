@@ -317,6 +317,8 @@ async function rejectSymlinks(root: string, parts: string[]) {
   }
   if (info.isSymbolicLink()) throw new Error(`Foundation target contains a symlinked managed path: ${current}`)
   if (!info.isDirectory()) return
+  // Machine-owned npm cache; its node_modules/.bin entries are legitimate symlinks.
+  if (parts.join("/") === ".foundation/tools") return
   await Promise.all(
     (await readdir(current, { withFileTypes: true })).map(async (entry) => {
       const child = path.join(current, entry.name)

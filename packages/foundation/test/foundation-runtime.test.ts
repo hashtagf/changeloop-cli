@@ -240,6 +240,20 @@ describe("bundled Foundation runtime", () => {
     expect(prior).toBe("prior\n")
     expect(retry.exitCode).toBe(0)
   }, 60_000)
+
+  test("install ignores symlinks inside the machine-owned .foundation/tools cache", async () => {
+    const root = await temporary("foundation-tools-cache-")
+    const bin = path.join(root, ".foundation/tools/node_modules/.bin")
+    await mkdir(bin, { recursive: true })
+    await symlink("../openspec/bin/openspec.js", path.join(bin, "openspec"))
+
+    const result = await FoundationRuntime.install(root, {
+      allowUntagged: true,
+      cache: await temporary("foundation-tools-cache-store-"),
+    })
+
+    expect(result.exitCode).toBe(0)
+  }, 60_000)
 })
 
 async function temporary(prefix: string) {
