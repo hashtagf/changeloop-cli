@@ -1,3 +1,4 @@
+import { tmpdir } from "os"
 import path from "path"
 import { chmod, lstat, mkdir, mkdtemp, readdir, rm, symlink } from "fs/promises"
 import { afterAll, expect, test } from "bun:test"
@@ -10,7 +11,7 @@ afterAll(async () => {
 }, 30_000)
 
 async function temporary() {
-  const root = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "foundation-webui-"))
+  const root = await mkdtemp(path.join(tmpdir(), "foundation-webui-"))
   roots.push(root)
   return root
 }

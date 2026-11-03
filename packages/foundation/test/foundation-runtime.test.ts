@@ -1,3 +1,4 @@
+import { tmpdir } from "os"
 import path from "path"
 import { chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "fs/promises"
 import { afterEach, describe, expect, test } from "bun:test"
@@ -257,7 +258,7 @@ describe("bundled Foundation runtime", () => {
 })
 
 async function temporary(prefix: string) {
-  const root = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", prefix))
+  const root = await mkdtemp(path.join(tmpdir(), prefix))
   roots.push(root)
   return root
 }

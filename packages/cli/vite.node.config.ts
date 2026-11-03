@@ -27,8 +27,8 @@ function rawTextPlugin(modelsSnapshot?: string): Plugin {
 
 /**
  * The Node artifact does not embed the Foundation runtime (the embedder reads it with Bun APIs). The module resolves to
- * one that fails with "Cannot find module", which `embeddedFiles` treats as "not embedded" and falls back to the
- * vendored bundle, so Foundation commands report an unavailable bundle instead of the build failing to resolve it.
+ * one with no file map, which `embeddedFiles` treats as "not embedded" and falls back to the vendored bundle, so the
+ * build resolves it. (It must not throw: the import is inlined and would run at startup.)
  */
 function foundationFilesPlugin(): Plugin {
   const id = "\0virtual:opencode-foundation-files"
@@ -39,7 +39,7 @@ function foundationFilesPlugin(): Plugin {
     },
     load(loaded) {
       if (loaded !== id) return
-      return `throw new Error("Cannot find module 'virtual:opencode-foundation-files'")`
+      return `export default undefined`
     },
   }
 }

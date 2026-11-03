@@ -1,3 +1,4 @@
+import { tmpdir } from "os"
 import path from "path"
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, symlink, writeFile } from "fs/promises"
 import { afterAll, describe, expect, test } from "bun:test"
@@ -290,7 +291,7 @@ describe("foundation command: doctor", () => {
 describe("foundation command: unsafe targets", () => {
   test("a symlinked managed folder is refused, nothing is written through it and the installer is not run", async () => {
     const root = await project()
-    const outside = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "foundation-command-outside-"))
+    const outside = await mkdtemp(path.join(tmpdir(), "foundation-command-outside-"))
     roots.push(outside)
     await mkdir(path.join(root, ".claude"))
     await symlink(outside, path.join(root, ".claude/commands"), "dir")
@@ -362,12 +363,15 @@ function harness(
       ...FoundationCommand.dependencies({
         confirm: async () => false,
         write: (text) => out.push(text),
-        error: (text) => { console.log("[fc-debug]", text.slice(0, 500)); err.push(text) },
+        error: (text) => err.push(text),
         runtime: { allowUntagged: true, cache, ...(platform ? { platform } : {}) },
+        // mock.module in another test file is process-global, so never rely on the real virtual-module import.
+        load: () =>
+          Promise.reject(Object.assign(new Error("Cannot find module 'virtual:opencode-foundation-files'"), { code: "ERR_MODULE_NOT_FOUND" })),
         ...rest,
       }),
       write: (text: string) => void out.push(text),
-      error: (text: string) => { console.log("[fc-debug]", text.slice(0, 500)); err.push(text) },
+      error: (text: string) => void err.push(text),
     }
     return { dep: { ...dep, ...overrides }, out, err }
   })
@@ -394,7 +398,7 @@ async function project() {
 }
 
 async function temporary(prefix: string) {
-  const root = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", prefix))
+  const root = await mkdtemp(path.join(tmpdir(), prefix))
   roots.push(root)
   return root
 }

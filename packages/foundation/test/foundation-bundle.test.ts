@@ -1,3 +1,4 @@
+import { tmpdir } from "os"
 import path from "path"
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "fs/promises"
 import { afterEach, describe, expect, test } from "bun:test"
@@ -92,7 +93,7 @@ describe("Foundation build bundle", () => {
 })
 
 async function fixture(tagged = true) {
-  const vendor = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "foundation-bundle-"))
+  const vendor = await mkdtemp(path.join(tmpdir(), "foundation-bundle-"))
   roots.push(vendor)
   await mkdir(path.join(vendor, "payload"))
   const body = "#!/bin/sh\n"
