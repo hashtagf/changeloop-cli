@@ -11,6 +11,9 @@ import { it } from "../../core/test/lib/effect"
 import type { ServerOptions } from "../src/options"
 import { commandPreparationLayer, createEmbeddedRoutes } from "../src/routes"
 
+// These spawn the POSIX shell runtime, which Foundation does not support on win32.
+const itRuntime = process.platform === "win32" ? it.live.skip : it.live
+
 type Project = { path: string; bin: string }
 
 const snapshot = JSON.stringify({
@@ -94,7 +97,7 @@ const request = (
 const initialized = { initialized: true }
 const base = "/experimental/foundation"
 
-it.live("capability reports the runtime and list returns real active changes", () =>
+itRuntime("capability reports the runtime and list returns real active changes", () =>
   Effect.gen(function* () {
     const capability = yield* request(`${base}/capability`, {}, initialized)
     expect(capability.status).toBe(200)
@@ -113,7 +116,7 @@ it.live("capability reports the runtime and list returns real active changes", (
   }),
 )
 
-it.live("list scope=archive returns archived changes and get resolves an archived id", () =>
+itRuntime("list scope=archive returns archived changes and get resolves an archived id", () =>
   Effect.gen(function* () {
     const archive = yield* request(`${base}/changes`, { scope: "archive" }, initialized)
     expect(archive.status).toBe(200)
@@ -128,7 +131,7 @@ it.live("list scope=archive returns archived changes and get resolves an archive
   }),
 )
 
-it.live("get answers 404 not_found for an id that is not in the snapshot", () =>
+itRuntime("get answers 404 not_found for an id that is not in the snapshot", () =>
   Effect.gen(function* () {
     const { status, body } = yield* request(`${base}/changes/missing`, {}, initialized)
     expect(status).toBe(404)
@@ -136,7 +139,7 @@ it.live("get answers 404 not_found for an id that is not in the snapshot", () =>
   }),
 )
 
-it.live("an uninitialized project answers 409 not_initialized while investigations stay readable", () =>
+itRuntime("an uninitialized project answers 409 not_initialized while investigations stay readable", () =>
   Effect.gen(function* () {
     const list = yield* request(`${base}/changes`)
     expect(list.status).toBe(409)
@@ -152,7 +155,7 @@ it.live("an uninitialized project answers 409 not_initialized while investigatio
   }),
 )
 
-it.live("list rejects limit=0 with 400 invalid_input before spawning the runtime", () =>
+itRuntime("list rejects limit=0 with 400 invalid_input before spawning the runtime", () =>
   Effect.gen(function* () {
     const marker = path.join(tmpdir(), `foundation-spawned-${crypto.randomUUID()}`)
     const { status, body } = yield* request(`${base}/changes`, { limit: "0" }, { ...initialized, script: `touch '${marker}'` })
@@ -174,7 +177,7 @@ it.live("get rejects a malformed change id with 400 invalid_input", () =>
   }),
 )
 
-it.live("a runtime that never answers is reported as 504 timeout", () =>
+itRuntime("a runtime that never answers is reported as 504 timeout", () =>
   Effect.gen(function* () {
     const { status, body } = yield* request(`${base}/changes`, {}, { ...initialized, script: "/bin/sleep 30 &\nwait" })
     expect(status).toBe(504)
@@ -183,7 +186,7 @@ it.live("a runtime that never answers is reported as 504 timeout", () =>
   20_000,
 )
 
-it.live("a runtime that prints more than 1 MiB is reported as 502 output_too_large", () =>
+itRuntime("a runtime that prints more than 1 MiB is reported as 502 output_too_large", () =>
   Effect.gen(function* () {
     const { status, body } = yield* request(
       `${base}/changes`,
@@ -277,7 +280,7 @@ it.live("foundation_workflow false answers unsupported on every Foundation endpo
   }),
 )
 
-it.live("a config without foundation_workflow keeps answering real data", () =>
+itRuntime("a config without foundation_workflow keeps answering real data", () =>
   Effect.gen(function* () {
     const { status, body } = yield* request(`${base}/changes`, {}, { ...initialized, content: JSON.stringify({ username: "x" }) })
     expect(status).toBe(200)
@@ -285,7 +288,7 @@ it.live("a config without foundation_workflow keeps answering real data", () =>
   }),
 )
 
-it.live("a project that switches the workflow off is unsupported while another project on the server is served", () =>
+itRuntime("a project that switches the workflow off is unsupported while another project on the server is served", () =>
   Effect.gen(function* () {
     const { status, body, other } = yield* request(
       `${base}/changes`,
