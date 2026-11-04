@@ -31,6 +31,8 @@ async function bundleInputs(specifier: string) {
         "--target=bun",
         "--format=esm",
         "--packages=bundle",
+        // Resolved by the CLI build, not by this boundary check.
+        "--external=virtual:opencode-foundation-files",
         `--metafile=${metafile}`,
         `--outdir=${join(temporary, "out")}`,
       ],

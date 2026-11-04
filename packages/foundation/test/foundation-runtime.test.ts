@@ -4,13 +4,15 @@ import { chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlin
 import { afterEach, describe, expect, test } from "bun:test"
 import { FoundationRuntime } from "../src/foundation-runtime.js"
 
+// Foundation bootstrap needs a POSIX shell and is unsupported on win32 (see docs/FOUNDATION_UPDATE.md).
+const windows = process.platform === "win32"
 const roots: string[] = []
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(removeTree))
 })
 
-describe("bundled Foundation runtime", () => {
+describe.skipIf(windows)("bundled Foundation runtime", () => {
   test("path mode returns the PATH executable without materializing", async () => {
     const cache = path.join(await temporary("foundation-path-mode-"), "cache")
 

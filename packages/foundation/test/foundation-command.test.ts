@@ -4,13 +4,15 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm
 import { afterAll, describe, expect, test } from "bun:test"
 import { FoundationCommand } from "../src/foundation-command.js"
 
+// Foundation bootstrap needs a POSIX shell and is unsupported on win32 (see docs/FOUNDATION_UPDATE.md).
+const windows = process.platform === "win32"
 const roots: string[] = []
 
 afterAll(async () => {
   await Promise.all(roots.splice(0).map(removeTree))
 })
 
-describe("foundation command: status", () => {
+describe.skipIf(windows)("foundation command: status", () => {
   test("a project without a harness reports missing, writes nothing and exits 0", async () => {
     const root = await project()
     const before = await snapshot(root)
@@ -70,7 +72,7 @@ describe("foundation command: status", () => {
   })
 })
 
-describe("foundation command: approval", () => {
+describe.skipIf(windows)("foundation command: approval", () => {
   test("without --yes and without approval the installer is not called and nothing is written", async () => {
     const root = await project()
     const before = await snapshot(root)
@@ -134,7 +136,7 @@ describe("foundation command: approval", () => {
   }, 120_000)
 })
 
-describe("foundation command: init with the bundled installer", () => {
+describe.skipIf(windows)("foundation command: init with the bundled installer", () => {
   test("installs into a new project, keeps user files, and reports status and doctor", async () => {
     const root = await project()
     await writeFile(path.join(root, "owned.txt"), "unchanged\n")
@@ -233,7 +235,7 @@ describe("foundation command: init with the bundled installer", () => {
   })
 })
 
-describe("foundation command: upgrade converges managed files", () => {
+describe.skipIf(windows)("foundation command: upgrade converges managed files", () => {
   test("restores a tampered managed command and keeps files outside the manifest", async () => {
     const root = await project()
     const h = await harness()
@@ -267,7 +269,7 @@ describe("foundation command: upgrade converges managed files", () => {
   }, 120_000)
 })
 
-describe("foundation command: doctor", () => {
+describe.skipIf(windows)("foundation command: doctor", () => {
   test("forwards a failing exit code and prints stderr", async () => {
     const h = await harness({ doctor: async () => ({ exitCode: 7, stdout: "", stderr: "broken" }) })
 
@@ -288,7 +290,7 @@ describe("foundation command: doctor", () => {
   }, 60_000)
 })
 
-describe("foundation command: unsafe targets", () => {
+describe.skipIf(windows)("foundation command: unsafe targets", () => {
   test("a symlinked managed folder is refused, nothing is written through it and the installer is not run", async () => {
     const root = await project()
     const outside = await mkdtemp(path.join(tmpdir(), "foundation-command-outside-"))

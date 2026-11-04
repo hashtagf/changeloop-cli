@@ -55,7 +55,7 @@ const allowedLines: ReadonlyArray<{ file: string; text: string; reason: string }
 function offenders() {
   const found: string[] = []
   for (const file of roots.flatMap(files)) {
-    const rel = path.relative(root, file)
+    const rel = path.relative(root, file).replaceAll("\\", "/")
     if (allowedFiles.some((item) => item.file === rel)) continue
     fs.readFileSync(file, "utf8")
       .split("\n")

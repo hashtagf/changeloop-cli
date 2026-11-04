@@ -43,7 +43,7 @@ const allowed: ReadonlyArray<{ file: string; text: string; reason: string }> = [
 function offenders() {
   const found: string[] = []
   for (const file of roots.flatMap(files)) {
-    const rel = path.relative(path.resolve(import.meta.dir, "../.."), file)
+    const rel = path.relative(path.resolve(import.meta.dir, "../.."), file).replaceAll("\\", "/")
     // The storybook fixtures are development-only sample data.
     if (rel.startsWith("tui/src/feature-plugins/system/storybook/")) continue
     fs.readFileSync(file, "utf8")

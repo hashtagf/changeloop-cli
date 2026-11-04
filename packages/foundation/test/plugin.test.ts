@@ -314,7 +314,7 @@ describe("bootstrap guard", () => {
   })
 })
 
-describe("shell environment", () => {
+describe.skipIf(process.platform === "win32")("shell environment", () => {
   test("bundled mode prepends the runtime bin to the existing PATH and keeps other variables", async () => {
     const fake = await fixture({ responses: responses() })
     const options = { ...(await bundled(fake.dir)), executable: fake.executable }
