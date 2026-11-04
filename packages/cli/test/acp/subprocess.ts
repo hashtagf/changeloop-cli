@@ -97,7 +97,7 @@ export async function createAcpFixture(
       )
       const serverResults = await Promise.allSettled([llm.stop(true)])
       const directoryResults = await Promise.allSettled([
-        fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }),
+        makeWritable(root).then(() => fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })),
       ])
       const failure = [...processResults, ...serverResults, ...directoryResults].find(
         (result): result is PromiseRejectedResult => result.status === "rejected",
@@ -354,4 +354,13 @@ function completion(text: string) {
     },
   ]
   return `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`
+}
+
+// The bundled Foundation runtime is materialised read-only (immutable cache), which blocks recursive removal.
+async function makeWritable(file: string): Promise<void> {
+  const info = await fs.lstat(file).catch(() => undefined)
+  if (!info || info.isSymbolicLink()) return
+  await fs.chmod(file, info.isDirectory() ? 0o700 : 0o600).catch(() => undefined)
+  if (!info.isDirectory()) return
+  await Promise.all((await fs.readdir(file)).map((entry) => makeWritable(path.join(file, entry))))
 }

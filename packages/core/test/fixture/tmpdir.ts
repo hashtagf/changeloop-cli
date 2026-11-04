@@ -35,10 +35,23 @@ async function remove(dir: string, retries = 30): Promise<void> {
   try {
     await fs.rm(dir, { recursive: true, force: true })
   } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "EACCES" && retries > 0) {
+      // The bundled Foundation runtime is materialised read-only, which blocks recursive removal.
+      await makeWritable(dir)
+      return remove(dir, 0)
+    }
     if (retries === 0 || !error || typeof error !== "object" || !("code" in error) || error.code !== "EBUSY")
       throw error
     Bun.gc(true)
     await Bun.sleep(100)
     return remove(dir, retries - 1)
   }
+}
+
+async function makeWritable(file: string): Promise<void> {
+  const info = await fs.lstat(file).catch(() => undefined)
+  if (!info || info.isSymbolicLink()) return
+  await fs.chmod(file, info.isDirectory() ? 0o700 : 0o600).catch(() => undefined)
+  if (!info.isDirectory()) return
+  await Promise.all((await fs.readdir(file)).map((entry) => makeWritable(path.join(file, entry))))
 }

@@ -77,7 +77,8 @@ describe("foundation command registration", () => {
   })
 })
 
-describe("foundation command through the CLI", () => {
+// Foundation bootstrap is unsupported on win32 (docs/FOUNDATION_UPDATE.md).
+describe.skipIf(process.platform === "win32")("foundation command through the CLI", () => {
   test("status defaults to the current directory, reports missing and writes nothing", async () => {
     const root = await project()
     const before = await listing(root)
