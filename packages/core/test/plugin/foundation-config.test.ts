@@ -129,7 +129,8 @@ const changeRuntime = Effect.fn("foundationConfig.changeRuntime")(function* () {
   )
 })
 
-describe("Foundation v1 config keys on a real instance", () => {
+// Foundation bootstrap is unsupported on win32 (docs/FOUNDATION_UPDATE.md).
+describe.skipIf(process.platform === "win32")("Foundation v1 config keys on a real instance", () => {
   it.live("changing foundation_runtime while the instance runs reactivates the plugin with the new runtime", () =>
     Effect.gen(function* () {
       const state = yield* changeRuntime()

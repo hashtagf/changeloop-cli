@@ -105,6 +105,11 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
+      - name: Install ripgrep (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: choco install ripgrep -y --no-progress
+
       - name: Configure git identity
         run: |
           git config --global user.email "bot@opencode.ai"
@@ -129,8 +134,10 @@ jobs:
         working-directory: packages/codemode
         run: bun run pack
 
+      # This fork does not publish @opencode/sdk, and @opencode/core depends on @opencode/foundation (Bun-only, private),
+      # which cannot be packed for workerd. Re-enable if the SDK is ever published from here.
       - name: Verify packed workerd SDK
-        if: runner.os == 'Linux'
+        if: false && runner.os == 'Linux'
         timeout-minutes: 15
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
