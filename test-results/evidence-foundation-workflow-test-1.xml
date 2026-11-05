@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="8" assertions="40" failures="0" skipped="0" time="1.14348">
+  <testsuite name="test/plugin/foundation.test.ts" file="test/plugin/foundation.test.ts" tests="8" assertions="40" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="foundation templates" file="test/plugin/foundation.test.ts" line="7" tests="3" assertions="32" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="template set covers exactly the eight loop commands" classname="foundation templates" time="0.000215" file="test/plugin/foundation.test.ts" line="8" assertions="1" />
+      <testcase name="every template carries the harness-missing guard and its Foundation source version" classname="foundation templates" time="0.000315" file="test/plugin/foundation.test.ts" line="12" assertions="24" />
+      <testcase name="argument-taking templates keep their $ARGUMENTS hint" classname="foundation templates" time="0.000025" file="test/plugin/foundation.test.ts" line="21" assertions="7" />
+    </testsuite>
+    <testsuite name="applyFoundationCommands" file="test/plugin/foundation.test.ts" line="28" tests="3" assertions="6" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="injects all eight loop commands into an empty config" classname="applyFoundationCommands" time="0.000043" file="test/plugin/foundation.test.ts" line="29" assertions="3" />
+      <testcase name="never overwrites a user-defined command with the same name" classname="applyFoundationCommands" time="0.00002" file="test/plugin/foundation.test.ts" line="39" assertions="2" />
+      <testcase name="foundation_workflow: false disables injection entirely and leaves other commands alone" classname="applyFoundationCommands" time="0.000013" file="test/plugin/foundation.test.ts" line="48" assertions="1" />
+    </testsuite>
+    <testsuite name="FoundationWorkflowPlugin config hook" file="test/plugin/foundation.test.ts" line="58" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="injects the loop commands at boot by default" classname="FoundationWorkflowPlugin config hook" time="0.000084" file="test/plugin/foundation.test.ts" line="65" assertions="1" />
+      <testcase name="respects the opt-out field" classname="FoundationWorkflowPlugin config hook" time="0.00019" file="test/plugin/foundation.test.ts" line="72" assertions="1" />
+    </testsuite>
+  </testsuite>
+</testsuites>

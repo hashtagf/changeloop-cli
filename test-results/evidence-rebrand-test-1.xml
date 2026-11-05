@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="104" assertions="212" failures="0" skipped="0" time="10.479457">
+  <testsuite name="test/brand.test.ts" file="test/brand.test.ts" tests="1" assertions="3" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="changeloop CLI brand surface" file="test/brand.test.ts" line="13" tests="1" assertions="3" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="help snapshots contain opencode only in allowlisted functional literals" classname="changeloop CLI brand surface" time="0.000457" file="test/brand.test.ts" line="14" assertions="3" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/bin.test.ts" file="test/bin.test.ts" tests="3" assertions="5" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="bin entries" file="test/bin.test.ts" line="10" tests="2" assertions="3" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="changeloop is published alongside the kept opencode bin, pointing at the same launcher" classname="bin entries" time="0.000017" file="test/bin.test.ts" line="11" assertions="2" />
+      <testcase name="the package name stays opencode" classname="bin entries" time="0.000007" file="test/bin.test.ts" line="16" assertions="1" />
+    </testsuite>
+    <testsuite name="changeloop entrypoint" file="test/bin.test.ts" line="21" tests="1" assertions="2" failures="0" skipped="0" time="0.373" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="runs --version exit 0 under the changeloop bin name" classname="changeloop entrypoint" time="0.373245" file="test/bin.test.ts" line="46" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/config/global-config.test.ts" file="test/config/global-config.test.ts" tests="3" assertions="8" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="global config discovery" file="test/config/global-config.test.ts" line="22" tests="3" assertions="8" failures="0" skipped="0" time="2.784" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="changeloop.json wins over opencode.json for the same key" classname="global config discovery" time="0.974561" file="test/config/global-config.test.ts" line="23" assertions="3" />
+      <testcase name="project changeloop.json and .changeloop directory win over legacy names" classname="global config discovery" time="0.926143" file="test/config/global-config.test.ts" line="41" assertions="3" />
+      <testcase name="a lone opencode.json still loads unchanged" classname="global config discovery" time="0.884609" file="test/config/global-config.test.ts" line="69" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/config/config.test.ts" file="test/config/config.test.ts" tests="96" assertions="156" failures="0" skipped="0" time="1.328" hostname="Hashtags-MacBook-Pro-3.local">
+    <testcase name="loads config with defaults when no files exist" classname="" time="0.105342" file="test/config/config.test.ts" line="290" assertions="1" />
+    <testcase name="falls back to generic username when system user info is unavailable" classname="" time="0.012725" file="test/config/config.test.ts" line="297" assertions="1" />
+    <testcase name="creates global jsonc config with schema when no global configs exist" classname="" time="0.014437" file="test/config/config.test.ts" line="311" assertions="1" />
+    <testcase name="does not create global config when OPENCODE_CONFIG_DIR is set" classname="" time="0.015492" file="test/config/config.test.ts" line="322" assertions="1" />
+    <testcase name="loads JSON config file" classname="" time="0.009909" file="test/config/config.test.ts" line="340" assertions="2" />
+    <testcase name="loads shell config field" classname="" time="0.011835" file="test/config/config.test.ts" line="350" assertions="1" />
+    <testcase name="updates config and preserves empty shell sentinel" classname="" time="0.006693" file="test/config/config.test.ts" line="358" assertions="1" />
+    <testcase name="updates global config and omits empty shell key in json" classname="" time="0.002048" file="test/config/config.test.ts" line="374" assertions="1" />
+    <testcase name="updates global config and omits empty shell key in jsonc" classname="" time="0.006964" file="test/config/config.test.ts" line="385" assertions="3" />
+    <testcase name="loads formatter boolean config" classname="" time="0.008192" file="test/config/config.test.ts" line="401" assertions="1" />
+    <testcase name="loads lsp boolean config" classname="" time="0.01252" file="test/config/config.test.ts" line="410" assertions="1" />
+    <testcase name="loads project config from Git Bash and MSYS2 paths on Windows" classname="" time="0.000674" file="test/config/config.test.ts" line="418" assertions="0" />
+    <testcase name="loads project config from Cygwin paths on Windows" classname="" time="0.0005" file="test/config/config.test.ts" line="427" assertions="0" />
+    <testcase name="ignores legacy tui keys in opencode config" classname="" time="0.008079" file="test/config/config.test.ts" line="435" assertions="3" />
+    <testcase name="loads JSONC config file" classname="" time="0.01292" file="test/config/config.test.ts" line="452" assertions="2" />
+    <testcase name="jsonc overrides json in the same directory" classname="" time="0.008921" file="test/config/config.test.ts" line="470" assertions="2" />
+    <testcase name="handles environment variable substitution" classname="" time="0.011957" file="test/config/config.test.ts" line="492" assertions="1" />
+    <testcase name="preserves env variables when adding $schema to config" classname="" time="0.00764" file="test/config/config.test.ts" line="508" assertions="4" />
+    <testcase name="handles file inclusion substitution" classname="" time="0.011589" file="test/config/config.test.ts" line="531" assertions="1" />
+    <testcase name="handles file inclusion with replacement tokens" classname="" time="0.008915" file="test/config/config.test.ts" line="544" assertions="1" />
+    <testcase name="resolves env templates in account config with account token" classname="" time="0.011973" file="test/config/config.test.ts" line="593" assertions="1" />
+    <testcase name="validates config schema and throws on invalid values" classname="" time="0.006661" file="test/config/config.test.ts" line="600" assertions="1" />
+    <testcase name="throws error for invalid JSON" classname="" time="0.00946" file="test/config/config.test.ts" line="612" assertions="1" />
+    <testcase name="handles agent configuration" classname="" time="0.008131" file="test/config/config.test.ts" line="621" assertions="1" />
+    <testcase name="treats agent variant as model-scoped setting (not provider option)" classname="" time="0.010314" file="test/config/config.test.ts" line="645" assertions="3" />
+    <testcase name="handles command configuration" classname="" time="0.008016" file="test/config/config.test.ts" line="669" assertions="1" />
+    <testcase name="migrates autoshare to share field" classname="" time="0.013736" file="test/config/config.test.ts" line="691" assertions="2" />
+    <testcase name="migrates mode field to agent field" classname="" time="0.007625" file="test/config/config.test.ts" line="704" assertions="1" />
+    <testcase name="accepts the deprecated reference field" classname="" time="0.011102" file="test/config/config.test.ts" line="727" assertions="1" />
+    <testcase name="loads config from .opencode directory" classname="" time="0.010419" file="test/config/config.test.ts" line="747" assertions="1" />
+    <testcase name="agent markdown permission config preserves user key order" classname="" time="0.012245" file="test/config/config.test.ts" line="769" assertions="1" />
+    <testcase name="loads agents from .opencode/agents (plural)" classname="" time="0.008621" file="test/config/config.test.ts" line="788" assertions="2" />
+    <testcase name="loads commands from .opencode/command (singular)" classname="" time="0.011857" file="test/config/config.test.ts" line="827" assertions="2" />
+    <testcase name="loads commands from .opencode/commands (plural)" classname="" time="0.00868" file="test/config/config.test.ts" line="860" assertions="2" />
+    <testcase name="updates config and writes to file" classname="" time="0.008025" file="test/config/config.test.ts" line="893" assertions="1" />
+    <testcase name="gets config directories" classname="" time="0.006856" file="test/config/config.test.ts" line="905" assertions="1" />
+    <testcase name="does not try to install dependencies in read-only OPENCODE_CONFIG_DIR" classname="" time="0.012024" file="test/config/config.test.ts" line="912" assertions="0" />
+    <testcase name="ignores an inaccessible OPENCODE_CONFIG_DIR" classname="" time="0.008546" file="test/config/config.test.ts" line="926" assertions="0" />
+    <testcase name="creates a missing OPENCODE_CONFIG_DIR" classname="" time="0.012477" file="test/config/config.test.ts" line="940" assertions="1" />
+    <testcase name="installs dependencies in writable OPENCODE_CONFIG_DIR" classname="" time="0.008136" file="test/config/config.test.ts" line="951" assertions="1" />
+    <testcase name="resolves scoped npm plugins in config" classname="" time="0.01458" file="test/config/config.test.ts" line="973" assertions="1" />
+    <testcase name="merges plugin arrays from global and local configs" classname="" time="0.014975" file="test/config/config.test.ts" line="1002" assertions="4" />
+    <testcase name="global config remains global when project config is disabled" classname="" time="0.007695" file="test/config/config.test.ts" line="1021" assertions="2" />
+    <testcase name="does not error when only custom agent is a subagent" classname="" time="0.012496" file="test/config/config.test.ts" line="1040" assertions="1" />
+    <testcase name="merges instructions arrays from global and local configs" classname="" time="0.009175" file="test/config/config.test.ts" line="1062" assertions="1" />
+    <testcase name="deduplicates duplicate instructions from global and local configs" classname="" time="0.012504" file="test/config/config.test.ts" line="1078" assertions="1" />
+    <testcase name="deduplicates duplicate plugins from global and local configs" classname="" time="0.009409" file="test/config/config.test.ts" line="1090" assertions="4" />
+    <testcase name="keeps plugin origins aligned with merged plugin list" classname="" time="0.013706" file="test/config/config.test.ts" line="1111" assertions="6" />
+    <testcase name="migrates legacy tools config to permissions - allow" classname="" time="0.010547" file="test/config/config.test.ts" line="1137" assertions="1" />
+    <testcase name="migrates legacy tools config to permissions - deny" classname="" time="0.00736" file="test/config/config.test.ts" line="1153" assertions="1" />
+    <testcase name="migrates legacy write tool to edit permission" classname="" time="0.011602" file="test/config/config.test.ts" line="1169" assertions="1" />
+    <testcase name="managed settings override user settings" classname="" time="0.010744" file="test/config/config.test.ts" line="1186" assertions="3" />
+    <testcase name="managed settings override project settings" classname="" time="0.013916" file="test/config/config.test.ts" line="1203" assertions="2" />
+    <testcase name="managed jsonc settings override managed json settings" classname="" time="0.021256" file="test/config/config.test.ts" line="1218" assertions="1" />
+    <testcase name="missing managed settings file is not an error" classname="" time="0.021274" file="test/config/config.test.ts" line="1229" assertions="1" />
+    <testcase name="migrates legacy edit tool to edit permission" classname="" time="0.012402" file="test/config/config.test.ts" line="1237" assertions="1" />
+    <testcase name="migrates legacy patch tool to edit permission" classname="" time="0.00756" file="test/config/config.test.ts" line="1250" assertions="1" />
+    <testcase name="migrates mixed legacy tools config" classname="" time="0.010345" file="test/config/config.test.ts" line="1263" assertions="1" />
+    <testcase name="merges legacy tools with existing permission config" classname="" time="0.00821" file="test/config/config.test.ts" line="1281" assertions="1" />
+    <testcase name="permission config preserves user key order" classname="" time="0.010562" file="test/config/config.test.ts" line="1297" assertions="1" />
+    <testcase name="config parser preserves permission order while ignoring unknown top-level keys" classname="" time="0.000551" file="test/config/config.test.ts" line="1334" assertions="2" />
+    <testcase name="project config can override MCP server enabled status" classname="" time="0.008284" file="test/config/config.test.ts" line="1354" assertions="2" />
+    <testcase name="MCP config deep merges preserving base config properties" classname="" time="0.011939" file="test/config/config.test.ts" line="1403" assertions="1" />
+    <testcase name="local .opencode config can override MCP from project config" classname="" time="0.009772" file="test/config/config.test.ts" line="1446" assertions="1" />
+    <testcase name="project config overrides remote well-known config" classname="" time="0.189651" file="test/config/config.test.ts" line="1487" assertions="2" />
+    <testcase name="wellknown URL with trailing slash is normalized" classname="" time="0.015335" file="test/config/config.test.ts" line="1507" assertions="1" />
+    <testcase name="remote well-known config can use FetchHttpClient layer" classname="" time="0.187994" file="test/config/config.test.ts" line="1514" assertions="2" />
+    <testcase name="wellknown remote_config supports templated env vars in headers" classname="" time="0.008018" file="test/config/config.test.ts" line="1572" assertions="4" />
+    <testcase name="wellknown remote_config url tokens and nested config override embedded config" classname="" time="0.010684" file="test/config/config.test.ts" line="1593" assertions="2" />
+    <testcase name="wellknown token env substitution does not mutate process env" classname="" time="0.189351" file="test/config/config.test.ts" line="1613" assertions="3" />
+    <testcase name="wellknown config null is treated as absent" classname="" time="0.008683" file="test/config/config.test.ts" line="1635" assertions="2" />
+    <testcase name="wellknown remote_config rejects non-object config responses" classname="" time="0.004698" file="test/config/config.test.ts" line="1648" assertions="2" />
+    <testcase name="wellknown remote_config surfaces an actionable auth error when the gateway returns an HTML login page" classname="" time="0.009403" file="test/config/config.test.ts" line="1662" assertions="4" />
+    <testsuite name="resolvePluginSpec" file="test/config/config.test.ts" line="1674" tests="5" assertions="5" failures="0" skipped="0" time="0.003" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="keeps package specs unchanged" classname="resolvePluginSpec" time="0.000976" file="test/config/config.test.ts" line="1675" assertions="2" />
+      <testcase name="resolves windows-style relative plugin directory specs" classname="resolvePluginSpec" time="0.000429" file="test/config/config.test.ts" line="1682" assertions="0" />
+      <testcase name="resolves relative file plugin paths to file urls" classname="resolvePluginSpec" time="0.001051" file="test/config/config.test.ts" line="1698" assertions="1" />
+      <testcase name="resolves plugin directory paths to directory urls" classname="resolvePluginSpec" time="0.001562" file="test/config/config.test.ts" line="1710" assertions="1" />
+      <testcase name="resolves plugin directories without package.json to index.ts" classname="resolvePluginSpec" time="0.001376" file="test/config/config.test.ts" line="1729" assertions="1" />
+    </testsuite>
+    <testsuite name="deduplicatePluginOrigins" file="test/config/config.test.ts" line="1744" tests="5" assertions="10" failures="0" skipped="0" time="0.013" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="removes duplicates keeping higher priority (later entries)" classname="deduplicatePluginOrigins" time="0.000462" file="test/config/config.test.ts" line="1754" assertions="5" />
+      <testcase name="keeps path plugins separate from package plugins" classname="deduplicatePluginOrigins" time="0.000447" file="test/config/config.test.ts" line="1766" assertions="1" />
+      <testcase name="deduplicates direct path plugins by exact spec" classname="deduplicatePluginOrigins" time="0.000305" file="test/config/config.test.ts" line="1774" assertions="1" />
+      <testcase name="preserves order of remaining plugins" classname="deduplicatePluginOrigins" time="0.00037" file="test/config/config.test.ts" line="1782" assertions="1" />
+      <testcase name="loads auto-discovered local plugins as file urls" classname="deduplicatePluginOrigins" time="0.013687" file="test/config/config.test.ts" line="1790" assertions="2" />
+    </testsuite>
+    <testsuite name="OPENCODE_DISABLE_PROJECT_CONFIG" file="test/config/config.test.ts" line="1808" tests="5" assertions="7" failures="0" skipped="0" time="0.036" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="skips project config files when flag is set" classname="OPENCODE_DISABLE_PROJECT_CONFIG" time="0.00613" file="test/config/config.test.ts" line="1810" assertions="2" />
+      <testcase name="skips project .opencode/ directories when flag is set" classname="OPENCODE_DISABLE_PROJECT_CONFIG" time="0.010293" file="test/config/config.test.ts" line="1824" assertions="1" />
+      <testcase name="still loads global config when flag is set" classname="OPENCODE_DISABLE_PROJECT_CONFIG" time="0.005757" file="test/config/config.test.ts" line="1840" assertions="2" />
+      <testcase name="skips relative instructions with warning when flag is set but no config dir" classname="OPENCODE_DISABLE_PROJECT_CONFIG" time="0.005453" file="test/config/config.test.ts" line="1853" assertions="1" />
+      <testcase name="OPENCODE_CONFIG_DIR still works when flag is set" classname="OPENCODE_DISABLE_PROJECT_CONFIG" time="0.010521" file="test/config/config.test.ts" line="1869" assertions="1" />
+    </testsuite>
+    <testsuite name="OPENCODE_PERMISSION env var" file="test/config/config.test.ts" line="1888" tests="1" assertions="1" failures="0" skipped="0" time="0.007" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="does not crash when OPENCODE_PERMISSION contains invalid JSON" classname="OPENCODE_PERMISSION env var" time="0.007713" file="test/config/config.test.ts" line="1889" assertions="1" />
+    </testsuite>
+    <testsuite name="OPENCODE_CONFIG_CONTENT token substitution" file="test/config/config.test.ts" line="1902" tests="2" assertions="2" failures="0" skipped="0" time="0.018" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT" classname="OPENCODE_CONFIG_CONTENT token substitution" time="0.011776" file="test/config/config.test.ts" line="1903" assertions="1" />
+      <testcase name="substitutes {file:} tokens in OPENCODE_CONFIG_CONTENT" classname="OPENCODE_CONFIG_CONTENT token substitution" time="0.007946" file="test/config/config.test.ts" line="1921" assertions="1" />
+    </testsuite>
+    <testcase name="parseManagedPlist strips MDM metadata keys" classname="" time="0.000616" file="test/config/config.test.ts" line="1942" assertions="5" />
+    <testcase name="parseManagedPlist parses server settings" classname="" time="0.000422" file="test/config/config.test.ts" line="1970" assertions="3" />
+    <testcase name="parseManagedPlist parses permission rules" classname="" time="0.000574" file="test/config/config.test.ts" line="1990" assertions="6" />
+    <testcase name="parseManagedPlist parses enabled_providers" classname="" time="0.000389" file="test/config/config.test.ts" line="2020" assertions="1" />
+    <testcase name="parseManagedPlist handles empty config" classname="" time="0.000389" file="test/config/config.test.ts" line="2037" assertions="1" />
+  </testsuite>
+  <testsuite name="test/cli/help/help-snapshots.test.ts" file="test/cli/help/help-snapshots.test.ts" tests="1" assertions="40" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="changeloop CLI help-text snapshots" file="test/cli/help/help-snapshots.test.ts" line="93" tests="1" assertions="40" failures="0" skipped="0" time="4.681" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="every documented command emits stable help text" classname="changeloop CLI help-text snapshots" time="4.681221" file="test/cli/help/help-snapshots.test.ts" line="98" assertions="40" />
+    </testsuite>
+  </testsuite>
+</testsuites>

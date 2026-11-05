@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="2" assertions="4" failures="0" skipped="0" time="0.447774">
+  <testsuite name="test/config/foundation-workflow.test.ts" file="test/config/foundation-workflow.test.ts" tests="2" assertions="4" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="foundation_workflow config" file="test/config/foundation-workflow.test.ts" line="16" tests="2" assertions="4" failures="0" skipped="0" time="0.011" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="v1 decode preserves the foundation_workflow field" classname="foundation_workflow config" time="0.009268" file="test/config/foundation-workflow.test.ts" line="17" assertions="2" />
+      <testcase name="v1 to v2 migration of a document with foundation_workflow succeeds and drops the field" classname="foundation_workflow config" time="0.002764" file="test/config/foundation-workflow.test.ts" line="25" assertions="2" />
+    </testsuite>
+  </testsuite>
+</testsuites>

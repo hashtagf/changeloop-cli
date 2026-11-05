@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="35" assertions="103" failures="0" skipped="0" time="0.64106">
+  <testsuite name="test/flag.test.ts" file="test/flag.test.ts" tests="7" assertions="7" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="truthy env var aliasing" file="test/flag.test.ts" line="19" tests="3" assertions="3" failures="0" skipped="0" time="0.001" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="CHANGELOOP_* wins when both variants are set" classname="truthy env var aliasing" time="0.001755" file="test/flag.test.ts" line="20" assertions="1" />
+      <testcase name="falls back to OPENCODE_* when only it is set" classname="truthy env var aliasing" time="0.000015" file="test/flag.test.ts" line="26" assertions="1" />
+      <testcase name="is false when neither variant is set" classname="truthy env var aliasing" time="0.000007" file="test/flag.test.ts" line="31" assertions="1" />
+    </testsuite>
+    <testsuite name="Flag getters honor the same aliasing" file="test/flag.test.ts" line="36" tests="4" assertions="4" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="OPENCODE_CLIENT prefers CHANGELOOP_CLIENT" classname="Flag getters honor the same aliasing" time="0.000016" file="test/flag.test.ts" line="37" assertions="1" />
+      <testcase name="OPENCODE_CLIENT falls back to OPENCODE_CLIENT when CHANGELOOP_CLIENT is unset" classname="Flag getters honor the same aliasing" time="0.000008" file="test/flag.test.ts" line="43" assertions="1" />
+      <testcase name="OPENCODE_CONFIG_DIR prefers CHANGELOOP_CONFIG_DIR" classname="Flag getters honor the same aliasing" time="0.000011" file="test/flag.test.ts" line="48" assertions="1" />
+      <testcase name="OPENCODE_PERMISSION falls back to OPENCODE_PERMISSION when unaliased" classname="Flag getters honor the same aliasing" time="0.000012" file="test/flag.test.ts" line="54" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/global.test.ts" file="test/global.test.ts" tests="8" assertions="9" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="global paths" file="test/global.test.ts" line="7" tests="2" assertions="3" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="tmp path is under the system temp directory" classname="global paths" time="0.000053" file="test/global.test.ts" line="8" assertions="2" />
+      <testcase name="tmp path is created on module load" classname="global paths" time="0.000582" file="test/global.test.ts" line="13" assertions="1" />
+    </testsuite>
+    <testsuite name="test-home environment aliasing" file="test/global.test.ts" line="18" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="CHANGELOOP_TEST_HOME wins when both are set" classname="test-home environment aliasing" time="0.000028" file="test/global.test.ts" line="31" assertions="1" />
+      <testcase name="OPENCODE_TEST_HOME still works when the changeloop variant is unset" classname="test-home environment aliasing" time="0.000012" file="test/global.test.ts" line="37" assertions="1" />
+    </testsuite>
+    <testsuite name="resolveAppPath legacy fallback" file="test/global.test.ts" line="44" tests="4" assertions="4" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="prefers the changeloop path when it exists" classname="resolveAppPath legacy fallback" time="0.000019" file="test/global.test.ts" line="47" assertions="1" />
+      <testcase name="falls back to the legacy opencode path when only it exists" classname="resolveAppPath legacy fallback" time="0.000014" file="test/global.test.ts" line="52" assertions="1" />
+      <testcase name="prefers the changeloop path when both exist" classname="resolveAppPath legacy fallback" time="0.000014" file="test/global.test.ts" line="57" assertions="1" />
+      <testcase name="defaults to the changeloop path when neither exists" classname="resolveAppPath legacy fallback" time="0.000012" file="test/global.test.ts" line="61" assertions="1" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/bin.test.ts" file="test/bin.test.ts" tests="1" assertions="2" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="bin entries" file="test/bin.test.ts" line="7" tests="1" assertions="2" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="changeloop is published alongside the kept opencode bin, pointing at the same launcher" classname="bin entries" time="0.000023" file="test/bin.test.ts" line="8" assertions="2" />
+    </testsuite>
+  </testsuite>
+  <testsuite name="test/config/config.test.ts" file="test/config/config.test.ts" tests="19" assertions="85" failures="0" skipped="0" time="0" hostname="Hashtags-MacBook-Pro-3.local">
+    <testsuite name="Config" file="test/config/config.test.ts" line="54" tests="19" assertions="85" failures="0" skipped="0" time="0.282" hostname="Hashtags-MacBook-Pro-3.local">
+      <testcase name="returns the latest defined scalar from priority-ordered documents" classname="Config" time="0.007146" file="test/config/config.test.ts" line="55" assertions="2" />
+      <testcase name="detects v1 configuration from any v1-only top-level key" classname="Config" time="0.000461" file="test/config/config.test.ts" line="69" assertions="5" />
+      <testcase name="migrates arbitrary v1 configuration into valid v2 configuration" classname="Config" time="0.237821" file="test/config/config.test.ts" line="79" assertions="0" />
+      <testcase name="migrates v1 provider setup options into AISDK settings" classname="Config" time="0.000977" file="test/config/config.test.ts" line="90" assertions="2" />
+      <testcase name="migrates v1 command configuration" classname="Config" time="0.000262" file="test/config/config.test.ts" line="118" assertions="1" />
+      <testcase name="returns an empty configuration when directory files do not exist" classname="Config" time="0.007997" file="test/config/config.test.ts" line="146" assertions="1" />
+      <testcase name="loads opencode JSON and JSONC files from lowest to highest priority" classname="Config" time="0.004101" file="test/config/config.test.ts" line="164" assertions="7" />
+      <testcase name="prefers changeloop.json over opencode.json in the same directory" classname="Config" time="0.001639" file="test/config/config.test.ts" line="212" assertions="1" />
+      <testcase name="still loads a project with only opencode.json" classname="Config" time="0.001662" file="test/config/config.test.ts" line="237" assertions="1" />
+      <testcase name="does not load legacy config.json files" classname="Config" time="0.001722" file="test/config/config.test.ts" line="259" assertions="1" />
+      <testcase name="accepts $schema metadata without writing it into config files" classname="Config" time="0.002062" file="test/config/config.test.ts" line="281" assertions="4" />
+      <testcase name="loads supported scalar and resource configuration" classname="Config" time="0.004813" file="test/config/config.test.ts" line="314" assertions="32" />
+      <testcase name="migrates the deprecated reference key into references" classname="Config" time="0.002359" file="test/config/config.test.ts" line="502" assertions="2" />
+      <testcase name="migrates v1 configuration when a v1-only key is present" classname="Config" time="0.004233" file="test/config/config.test.ts" line="538" assertions="17" />
+      <testcase name="ignores an invalid file while loading valid config values" classname="Config" time="0.001615" file="test/config/config.test.ts" line="716" assertions="1" />
+      <testcase name="loads policy statements in reverse config order" classname="Config" time="0.001964" file="test/config/config.test.ts" line="740" assertions="1" />
+      <testcase name="discovers .changeloop directories and applies them after .opencode at the same level" classname="Config" time="0.003006" file="test/config/config.test.ts" line="774" assertions="2" />
+      <testcase name="discovers a lone .changeloop directory" classname="Config" time="0.001825" file="test/config/config.test.ts" line="822" assertions="2" />
+      <testcase name="loads global, ancestor, and .opencode configuration up to the project boundary" classname="Config" time="0.006505" file="test/config/config.test.ts" line="863" assertions="3" />
+    </testsuite>
+  </testsuite>
+</testsuites>

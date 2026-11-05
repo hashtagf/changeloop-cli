@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="2" assertions="2" failures="0" skipped="0" time="0.281181">
+  <testsuite name="test/config/router.test.ts" file="test/config/router.test.ts" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="192.168.1.102">
+    <testsuite name="router config" file="test/config/router.test.ts" line="26" tests="2" assertions="2" failures="0" skipped="0" time="0.009" hostname="192.168.1.102">
+      <testcase name="v1 decode preserves the router section" classname="router config" time="0.008746" file="test/config/router.test.ts" line="27" assertions="1" />
+      <testcase name="v1 to v2 migration of a document with router succeeds and drops the field" classname="router config" time="0.001888" file="test/config/router.test.ts" line="34" assertions="1" />
+    </testsuite>
+  </testsuite>
+</testsuites>

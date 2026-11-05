@@ -76,6 +76,7 @@
   },
   "permissions": {
     "allow": [
+      "Bash(*)",
       "Bash(claude-foundation *)",
       "Bash(.foundation/bin/claude-foundation *)",
       "Bash(node .claude/harness/foundation.mjs *)",

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="11" assertions="22" failures="0" skipped="0" time="1.291271">
+  <testsuite name="test/plugin/router.test.ts" file="test/plugin/router.test.ts" tests="11" assertions="22" failures="0" skipped="0" time="0" hostname="192.168.1.102">
+    <testsuite name="resolveRouting" file="test/plugin/router.test.ts" line="20" tests="5" assertions="12" failures="0" skipped="0" time="0.001" hostname="192.168.1.102">
+      <testcase name="pins the first available candidate per agent and the small-model slot" classname="resolveRouting" time="0.00016" file="test/plugin/router.test.ts" line="21" assertions="3" />
+      <testcase name="skips to a later candidate when the first provider is unavailable" classname="resolveRouting" time="0.001718" file="test/plugin/router.test.ts" line="31" assertions="2" />
+      <testcase name="warns and pins nothing when no candidate is available" classname="resolveRouting" time="0.000045" file="test/plugin/router.test.ts" line="37" assertions="3" />
+      <testcase name="never overwrites an existing explicit pin" classname="resolveRouting" time="0.00002" file="test/plugin/router.test.ts" line="44" assertions="2" />
+      <testcase name="treats a tier name without candidates or a bare model id as unresolvable" classname="resolveRouting" time="0.000016" file="test/plugin/router.test.ts" line="54" assertions="2" />
+    </testsuite>
+    <testsuite name="envKeyProviders" file="test/plugin/router.test.ts" line="61" tests="2" assertions="2" failures="0" skipped="0" time="0" hostname="192.168.1.102">
+      <testcase name="selects only providers whose API-key env var is set" classname="envKeyProviders" time="0.000062" file="test/plugin/router.test.ts" line="68" assertions="1" />
+      <testcase name="selects nothing when no env var is set" classname="envKeyProviders" time="0.000011" file="test/plugin/router.test.ts" line="73" assertions="1" />
+    </testsuite>
+    <testsuite name="ModelRouterPlugin config hook" file="test/plugin/router.test.ts" line="78" tests="4" assertions="8" failures="0" skipped="0" time="0.001" hostname="192.168.1.102">
+      <testcase name="is a no-op without a router table" classname="ModelRouterPlugin config hook" time="0.000763" file="test/plugin/router.test.ts" line="95" assertions="1" />
+      <testcase name="pins mapped agents from configured providers and respects explicit pins" classname="ModelRouterPlugin config hook" time="0.000731" file="test/plugin/router.test.ts" line="102" assertions="4" />
+      <testcase name="pins from an env-key provider using the compiled snapshot on a clean cache (no auth, no cfg.provider)" classname="ModelRouterPlugin config hook" time="0.000092" file="test/plugin/router.test.ts" line="116" assertions="1" />
+      <testcase name="leaves slots unset when no candidate is available" classname="ModelRouterPlugin config hook" time="0.001013" file="test/plugin/router.test.ts" line="132" assertions="2" />
+    </testsuite>
+  </testsuite>
+</testsuites>
